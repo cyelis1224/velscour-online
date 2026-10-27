@@ -404,7 +404,7 @@ export function gameModeScreen(charInfo, fresh = false, onBack = () => {}) {
     <h3 class="gamemode-card-name">ONLINE MULTIPLAYER</h3>
     <div class="gamemode-card-tag">BATTLE.NET LOBBY</div>
     <p class="gamemode-card-desc">Enter the tavern lobby to socialize, whisper other adventurers, and create or join cooperative party rooms.</p>
-    <button class="btn big gamemode-action-btn gamemode-btn-online">Enter Tavern Lobby</button>
+    <button class="btn big gamemode-action-btn gamemode-btn-online">Enter Lobby</button>
   `;
   const launchMP = () => {
     sfx('ui');
