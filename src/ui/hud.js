@@ -132,6 +132,7 @@ export const HUD = {
       <div><b>DPS</b>: what your skill bar deals to one foe per second at your current stats: crits, attack and cast speed, cooldowns, mana and minions.</div>
       <div><b>Avg DPS · 30s</b>: the damage you and your minions really dealt over the last 30 seconds, divided by 30. The bars show each second.</div>
       <div><b>Player Deaths</b> and <b>Total Monsters Killed</b>: this hero's lifetime counts.</div>`);
+    this.applyVisibilitySettings();
   },
 
   /** The minimap sits in the ring's open middle (a little oval); the ring overhangs it on every side. */
@@ -261,7 +262,13 @@ export const HUD = {
     const ready = madnessReady(), on = madnessOn();
     set('mad', Math.round(clamp(c.madness || 0, 0, 1) * 1000) / 10, (v) => { $('#mad-fill').style.width = v + '%'; });
     set('madst', ready ? 'full' : on ? 'on' : '', (v) => {
-      $('#madness').className = v;
+      const madTrack = $('#mad-track');
+      if (madTrack) {
+        madTrack.classList.toggle('full', v === 'full');
+        madTrack.classList.toggle('on', v === 'on');
+      }
+      const mad = $('#madness');
+      if (mad) mad.className = v;
       $('#madness-btn').classList.toggle('hidden', v !== 'full');
       if (v === 'full') { sfx('levelup', 0.4); UI.log('MADNESS is full: press the MADNESS button (G) to unleash it.', '#ff6090'); }
     });
@@ -269,7 +276,11 @@ export const HUD = {
     const sReady = smiteReady(), sArmed = smiteArmed();
     set('smite', Math.round(clamp(c.smite || 0, 0, 1) * 1000) / 10, (v) => { $('#smite-fill').style.width = v + '%'; });
     set('smitest', sArmed ? 'armed' : sReady ? 'full' : '', (v) => {
-      $('#smite-track').className = v;
+      const smiteTrack = $('#smite-track');
+      if (smiteTrack) {
+        smiteTrack.classList.toggle('full', v === 'full');
+        smiteTrack.classList.toggle('armed', v === 'armed');
+      }
       $('#smite-btn').classList.toggle('hidden', !v);
       $('#smite-btn').classList.toggle('armed', v === 'armed');
       $('#smite-btn').textContent = v === 'armed' ? 'AIMING…' : 'SMITE';
@@ -382,6 +393,12 @@ export const HUD = {
   updateStats(dt) {
     const p = G.player, c = G.char;
     if (Meter.char !== c) { Meter.char = c; Meter.reset(); this.sheetT = 0; }
+    const stats = $('#hero-stats');
+    if (stats) stats.classList.toggle('hidden', G.settings.showHeroStats === false);
+    if (G.settings.showHeroStats === false) {
+      this.updateTarget();
+      return;
+    }
     this.statT = (this.statT || 0) - dt;
     if (this.statT > 0) return;
     this.statT = 0.1;
@@ -412,6 +429,12 @@ export const HUD = {
   /** The target window: the hovered / attacked / last-hit monster's picture and name; it stays up, greyed, once slain. */
   updateTarget() {
     const p = G.player, w = G.world, box = $('#target-box');
+    if (!box) return;
+    box.classList.toggle('no-pic', G.settings.showTargetSprite === false);
+    if (G.settings.showTargetBox === false) {
+      box.classList.add('hidden');
+      return;
+    }
     if (this.tbWorld !== w) { this.tbWorld = w; this.tb = null; if (G.lastHit && !w.creatures.includes(G.lastHit)) G.lastHit = null; }
     const live = (m) => m && !m.dead && m.team === 'enemy' && m.targetable !== false;
     const at = p.attackTarget && p.attackTarget.target;
@@ -421,12 +444,13 @@ export const HUD = {
     set('tbOn', !!t, (v) => box.classList.toggle('hidden', !v));
     if (!t) return;
     const dead = !!t.dead || t.hp <= 0;
-    set('tbCls', (dead ? 'dead ' : '') + (this.tbBig ? 'big ' : '') + 'r-' + (t.rank || 'normal'), (v) => { box.className = v; });
+    const noPic = G.settings.showTargetSprite === false;
+    set('tbCls', (dead ? 'dead ' : '') + (this.tbBig ? 'big ' : '') + (noPic ? 'no-pic ' : '') + 'r-' + (t.rank || 'normal'), (v) => { box.className = v; });
     set('tbName', t.name || '???', (v) => { $('#tb-name').textContent = v; box.title = v; });
     set('tbHp', dead ? 0 : Math.ceil(clamp(t.hp / t.maxHp, 0, 1) * 100), (v) => { $('#tb-fill').style.width = v + '%'; });
     const rank = { champion: 'Champion', unique: 'Unique', boss: 'Boss' }[t.rank] || '';
     set('tbSub', dead ? 'Slain' : [t.level ? 'Level ' + t.level : '', rank].filter(Boolean).join(' · '), (v) => { $('#tb-sub').textContent = v; });
-    if (dead) return; // keep the last living picture
+    if (dead || noPic) return; // keep the last living picture or skip if sprite disabled
     const img = t.spriteImage && t.spriteImage();
     if (!img || !img.width || (this.tbImg === img && this.tbFor === t)) return;
     this.tbImg = img; this.tbFor = t;
@@ -468,8 +492,20 @@ export const HUD = {
     later(at + dur + 0.9, () => box.classList.add('hidden'));
   },
 
+  applyVisibilitySettings() {
+    const stats = $('#hero-stats');
+    if (stats) stats.classList.toggle('hidden', G.settings.showHeroStats === false);
+    const box = $('#target-box');
+    if (box) {
+      box.classList.toggle('no-pic', G.settings.showTargetSprite === false);
+      if (G.settings.showTargetBox === false) {
+        box.classList.add('hidden');
+      }
+    }
+  },
+
   setArea(name, sub) { $('#area-name').textContent = name; $('#area-sub').textContent = sub || ''; },
-  show(v) { $('#hud').classList.toggle('hidden', !v); if (v) this.layoutMobile(); },
+  show(v) { $('#hud').classList.toggle('hidden', !v); if (v) { this.layoutMobile(); this.applyVisibilitySettings(); } },
 };
 
 function slotTip(map) {

@@ -62,7 +62,17 @@ export const UI = {
     if (!this.panels.size) { this.selected = null; this.hideTip(); }
     this.onPanelsChanged();
   },
-  closeAll() { for (const k of [...this.panels.keys()]) this.closePanel(k); },
+  closeAll() {
+    for (const k of [...this.panels.keys()]) this.closePanel(k);
+    this.closeAllDialogs();
+  },
+  closeAllDialogs() {
+    if (this.screensEl) {
+      const screens = this.screensEl.querySelectorAll('.screen');
+      screens.forEach((s) => s.remove());
+    }
+    this.modalCount = 0;
+  },
   isOpen(name) { return this.panels.has(name); },
   anyOpen() { return this.panels.size > 0; },
   refresh() {
@@ -74,13 +84,27 @@ export const UI = {
   },
   onPanelsChanged() { if (this.hud) this.hud.refreshStatic(); },
 
-  // ------------------------------------------------------------- messages
-  log(html, color) {
-    const d = el('div', '', html);
-    if (color) d.style.color = color;
-    this.logEl.appendChild(d);
-    while (this.logEl.children.length > 6) this.logEl.firstChild.remove();
-    setTimeout(() => d.remove(), 6200);
+  log(html, color, skipChat = false) {
+    if (!skipChat && G.gameChat) {
+      G.gameChat.addSystemLog(html, color);
+    }
+    if (this.logEl) {
+      const d = el('div', '', html);
+      if (color) d.style.color = color;
+      this.logEl.appendChild(d);
+      while (this.logEl.children.length > 6) this.logEl.firstChild.remove();
+      setTimeout(() => d.remove(), 6200);
+    }
+  },
+
+  logParty(from, text) {
+    const formatted = `<span style="color:#60c8ff;font-weight:600">[Party] ${escapeHtml(from)}:</span> <span style="color:#e6f0fa">${escapeHtml(text)}</span>`;
+    this.log(formatted, null, true);
+  },
+
+  logWhisper(from, text) {
+    const formatted = `<span style="color:#ff80df;font-weight:600">[Whisper] ${escapeHtml(from)}:</span> <span style="color:#fae6f5">${escapeHtml(text)}</span>`;
+    this.log(formatted, null, true);
   },
   centerMsg(title, sub = '', dur = 2.6) {
     this.msgEl.innerHTML = `${escapeHtml(title)}${sub ? `<small>${escapeHtml(sub)}</small>` : ''}`;

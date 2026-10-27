@@ -15,6 +15,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=Alegreya+Sans:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/lobby.css">
+<link rel="stylesheet" href="css/chat.css">
 </head>
 <body>
 <div id="app">
@@ -51,7 +53,7 @@
           <button class="hbtn" data-act="skills" title="Skill Tree (K)"><img src="assets/ui/btn_skills.webp" alt="Skills" draggable="false"><b id="sp-badge" class="badge hidden"></b></button>
           <button class="hbtn" data-act="book" title="Skill Book (B)"><img src="assets/ui/btn_book.webp" alt="Book" draggable="false"></button>
           <button class="hbtn" data-act="quest" title="Quest Log (Q)"><img src="assets/ui/btn_quest.webp" alt="Quest" draggable="false"></button>
-          <button class="hbtn" data-act="auto" id="auto-btn" title="Auto-play (P): the hero plays on autopilot"><img src="assets/ui/btn_auto.webp" alt="Auto" draggable="false"></button>
+          <button class="hbtn" data-act="auto" id="auto-btn" title="Auto-play (Alt+P): the hero plays on autopilot"><img src="assets/ui/btn_auto.webp" alt="Auto" draggable="false"></button>
           <button class="hbtn" data-act="menu" title="Menu (Esc)"><img src="assets/ui/btn_menu.webp" alt="Menu" draggable="false"></button>
         </div>
         <!-- the spectator's dials: auto-play's stance, the Greed lever, sealed treasures waiting in the bag -->
@@ -84,8 +86,18 @@
       <div class="orb-text" id="mana-text"></div>
       <div id="xp-text"></div>
       <div id="hud-slots"></div>
-      <div id="madness"><button id="madness-btn" class="hidden" title="Unleash MADNESS (G): double damage and double speed for 30 seconds">MADNESS</button><button id="smite-btn" class="hidden" title="SMITE (F): arm it, then click or tap where the heavens should strike">SMITE</button><div id="mad-track"><div id="mad-fill"></div><span id="mad-text">Madness</span></div><div id="smite-track"><div id="smite-fill"></div><span id="smite-text">Smite</span></div></div>
-      <div id="barbarian-rage" class="hidden" aria-label="Barbarian Rage"><div id="barbarian-rage-fill"></div><span id="barbarian-rage-text">Rage 0%</span></div>
+      <div id="gauge-box">
+        <div id="gauge-buttons">
+          <button id="madness-btn" class="hidden" title="Unleash MADNESS (G): double damage and double speed for 30 seconds">MADNESS</button>
+          <button id="smite-btn" class="hidden" title="SMITE (F): arm it, then click or tap where the heavens should strike">SMITE</button>
+        </div>
+        <div id="gauge-container">
+          <div id="barbarian-rage" class="class-gauge gauge-rage hidden" aria-label="Barbarian Rage"><div id="barbarian-rage-fill" class="gauge-fill"></div><span id="barbarian-rage-text" class="gauge-text">Rage 0%</span></div>
+          <div id="mad-track" class="class-gauge gauge-madness" aria-label="Madness"><div id="mad-fill" class="gauge-fill"></div><span id="mad-text" class="gauge-text">Madness</span></div>
+          <div id="smite-track" class="class-gauge gauge-smite" aria-label="Smite"><div id="smite-fill" class="gauge-fill"></div><span id="smite-text" class="gauge-text">Smite</span></div>
+        </div>
+      </div>
+      <div id="madness" class="hidden" style="display:none" aria-hidden="true"></div>
     </div>
   </div>
 

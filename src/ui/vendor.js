@@ -4,7 +4,7 @@ import { el, fmtInt, escapeHtml, randi, pick, chance } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { UI, draggable, droppable } from './ui.js';
 import { itemCell, itemTooltip, rarityClass } from './itemui.js';
-import { getItem, changed, renderInventory } from './inventory.js';
+import { getItem, changed, renderInventory, openDropGoldDialog } from './inventory.js';
 import { addToBag } from '../game/player.js';
 import {
   rollItem, rollGem, makeGem, itemValue, itemName, itemColor, upgradeCost, socketCost, enchantCost, unsocketCost,
@@ -58,7 +58,13 @@ export const Vendor = {
     const c = G.char;
     body.innerHTML = '';
     body.appendChild(el('div', 'vendor-greet', `“${escapeHtml(v.greet)}”`));
-    body.appendChild(el('div', 'row', `<span class="gold-text">◉ ${fmtInt(c.gold)} gold</span><span class="dim" style="font-size:12px">· Sell: right-click an item in your bag or drag it here</span>`));
+    const goldRow = el('div', 'row');
+    const goldSpan = el('span', 'gold-text gold-clickable', `◉ ${fmtInt(c.gold)} gold`);
+    goldSpan.title = 'Click to drop gold on the floor';
+    goldSpan.onclick = () => { sfx('ui'); openDropGoldDialog(); };
+    goldRow.appendChild(goldSpan);
+    goldRow.appendChild(el('span', 'dim', '· Sell: right-click an item in your bag or drag it here'));
+    body.appendChild(goldRow);
     droppable(body, (data) => (data.type === 'item' ? this.sell(data) : false), (data) => data.type === 'item');
     switch (this.active) {
       case 'weapons': this.shopGrid(body, this.stock.weapons); break;

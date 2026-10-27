@@ -329,7 +329,7 @@ function famUpdate(p, s, dt) {
   for (const k in F.cd) F.cd[k] -= dt;
   if (s.swing > 0) { F.act = null; F.trail.length = 0; return; }
   // its own skills, when it is free and there is something to cut
-  if (!(F.act && F.act.pet) && F.gcd <= 0) {
+  if (!p.isRemotePlayer && !(F.act && F.act.pet) && F.gcd <= 0) {
     const ready = PET.filter((q) => (F.cd[q.id] || 0) <= 0).sort(() => Math.random() - 0.5);
     let go = null;
     if (ready.length && foesNear(p, p.x, p.y, 6).length) for (const q of ready) { const tg = q.pick(p); if (tg) { go = [q, tg]; break; } }
@@ -402,10 +402,10 @@ export default {
     s.gap -= dt; s.flash = Math.max(0, s.flash - dt * 2); s.swing = Math.max(0, s.swing - dt);
     const L = look(p);
     if (s.band !== L.band) {   // a new skin every 10 levels: reforged with a twirl
-      if (s.band !== undefined) { s.flash = 0.5; floatText(p.x, p.y, 110, 'Runeblade reforged: ' + L.name, L.glow, 14, { life: 2.2, vz: 14 }); sfx('cold', 0.6); }
+      if (s.band !== undefined && p === G.player) { s.flash = 0.5; floatText(p.x, p.y, 110, 'Runeblade reforged: ' + L.name, L.glow, 14, { life: 2.2, vz: 14 }); sfx('cold', 0.6); }
       s.band = L.band; preloadRuneblade(L.skin);
     }
-    if (s.runes.length >= RUNES && s.swing <= 0 && (s.wait = (s.wait || 0) - dt) <= 0) { s.wait = 0.2; if (crowd(p, 4.5)) this.fire(p, s); }
+    if (!p.isRemotePlayer && s.runes.length >= RUNES && s.swing <= 0 && (s.wait = (s.wait || 0) - dt) <= 0) { s.wait = 0.2; if (crowd(p, 4.5)) this.fire(p, s); }
     famUpdate(p, s, dt);
   },
   fill: (s) => s.runes.length / RUNES,

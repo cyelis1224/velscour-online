@@ -223,21 +223,23 @@ class VelscourFight {
     this.phase = 2; this.p2t = 0; this.gate = 0.8;
     this.rise();
     UI.centerMsg('THE FOUR SEALS', 'Break the seals before they make him stronger', 3.2);
-    UI.log('Velscour rises over his throne, beyond harm. <b>Four seals</b> feed him; their Wardens hold them. Each seal left after two minutes makes him stronger.', '#ffd0a0');
+    this.walls = new FlameWalls(this);
+    w.addHazard(this.walls);
+    sfx('roar'); sfx('summon');
+    if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
     for (const [x, y, n] of SEALS) {
       const [sx, sy] = w.map.nudge(x, y, 0.45);
       const seal = this.crystal(sx, sy, { vk: 'seal', name: `Seal of the ${n}`, color: '#b080ff', hp: 0.03, h: 54,
         tick: (c, dt) => { if ((c.beamT = (c.beamT || 0) - dt) <= 0) { c.beamT = 0.15; addEffect(new Bolt(c.x, c.y, 50, m.x, m.y, 110, '#b080ff', 0.14, 2)); }
           c.ward = c.warden && !c.warden.dead ? 0.25 : 1; } });
+      seal.netId = `vel_seal_${n.toLowerCase()}`;
       const [gx, gy] = w.map.randomNear(sx, sy, 2.2);
       const warden = makeMonster(w, pick(['demon', 'knight', 'gargoyle']), w.biome, m.level, 'unique', gx, gy);
+      warden.netId = `vel_warden_${n.toLowerCase()}`;
       warden.awake = true; warden.aggro = this.p; warden.name = `Warden of the ${n}`;
       w.add(warden); seal.warden = warden;
       addEffect(new Ring(sx, sy, 0.2, 2.5, 0.8, '#b080ff', 5));
     }
-    this.walls = new FlameWalls(this);
-    w.addHazard(this.walls);
-    sfx('roar'); sfx('summon');
   }
   p2(dt) {
     this.p2t += dt;
@@ -341,13 +343,15 @@ class VelscourFight {
     this.dark0 = w.darkK || 0; w.darkK = 0.93; w.night = true;
     UI.centerMsg('INTO THE ABYSS', 'Break the Heart Shards — stay near the lanterns', 3.4);
     UI.log('The floor gives way to the dark. Three <b style="color:#ff3050">Heart Shards</b> drift in it: each one you break tears at Velscour. Stay near a <b style="color:#ffe08a">Soul Lantern</b>: the dark itself hurts.', '#ffc0c0');
+    this.cd = { shades: 3 };
+    if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
     for (let i = 0; i < 3; i++) {
       const a0 = (i / 3) * TAU, R = 7;
       const sh = this.crystal(C.x + Math.cos(a0) * R, C.y + Math.sin(a0) * R * 0.8, { vk: 'shard', name: 'Heart Shard', color: '#ff3050', hp: 0.035, h: 40, fly: true,
         tick: (c, dt) => { c.a = (c.a ?? a0) + dt * 0.12; const tx = C.x + Math.cos(c.a) * R, ty = C.y + Math.sin(c.a) * R * 0.8; if (w.map.walkable(tx, ty)) { c.x = tx; c.y = ty; } } });
+      sh.netId = `vel_shard_${i}`;
       sh.onDeath = () => { if (m.dead) return; const cut = m.maxHp * 0.05; m.hp = Math.max(m.maxHp * 0.3, m.hp - cut); this.lastHp = m.hp; addEffect(new Column(sh.x, sh.y, '#ff3050', 1, 60, 300)); floatText(sh.x, sh.y, 80, '-5% VELSCOUR', '#ff6080', 16, { life: 1.6 }); sfx('explode'); };
     }
-    this.cd = { shades: 3 };
   }
   p4(dt) {
     const w = this.world, p = this.p;
@@ -355,8 +359,11 @@ class VelscourFight {
     for (const [x, y] of LANTERNS) addLight(x, y, 5, 1, 30, '#ffe08a');
     addLight(p.x, p.y, 2.2, 0.6);
     this.tick('shades', dt, 7, () => {
+      if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
       for (let i = 0; i < 2; i++) { const a = rand(TAU); const [x, y] = w.map.nudge(C.x + Math.cos(a) * 11, C.y + Math.sin(a) * 9, 0.4); if (!w.map.walkable(x, y)) continue;
-        const s = makeMonster(w, pick(['wraith', 'wraith', 'imp']), w.biome, this.m.level - 3, 'normal', x, y); s.awake = true; s.aggro = p; s.maxHp *= 0.45; s.hp = s.maxHp; s.name = 'Abyssal Shade'; w.add(s); }
+        const s = makeMonster(w, pick(['wraith', 'wraith', 'imp']), w.biome, this.m.level - 3, 'normal', x, y);
+        s.netId = `vel_shade_${Math.floor(this.p4t)}_${i}`;
+        s.awake = true; s.aggro = p; s.maxHp *= 0.45; s.hp = s.maxHp; s.name = 'Abyssal Shade'; w.add(s); }
     });
     // the dark: away from a lantern it hurts, more the longer the hero stays out
     const nearL = LANTERNS.some(([x, y]) => dist(p.x, p.y, x, y) < 4.5);
@@ -431,10 +438,13 @@ class VelscourFight {
     this.hold = true; m.invuln = 1e9; m.targetable = false;
     UI.centerMsg('BOUND TO THE OBELISKS', 'Break the four obelisks!', 3);
     UI.log('Velscour chains himself to the four obelisks and drinks their strength. Break them all.', '#ffd0a0');
-    for (const [ox, oy] of OBELISKS) {
+    if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
+    for (let i = 0; i < OBELISKS.length; i++) {
+      const [ox, oy] = OBELISKS[i];
       const [x, y] = w.map.nudge(ox + 0.5 + Math.sign(C.x - ox) * 1.2, oy + 0.5 + Math.sign(C.y - oy) * 1.2, 0.45);
-      this.crystal(x, y, { vk: 'obelisk', name: 'Bound Obelisk', color: '#d0d0d0', hp: 0.02, h: 50,
+      const ob = this.crystal(x, y, { vk: 'obelisk', name: 'Bound Obelisk', color: '#d0d0d0', hp: 0.02, h: 50,
         tick: (c, dt) => { if ((c.beamT = (c.beamT || 0) - dt) <= 0) { c.beamT = 0.2; addEffect(new Bolt(c.x, c.y, 50, m.x, m.y, 120, '#e0e0e0', 0.2, 2)); } } });
+      ob.netId = `vel_obelisk_${i}`;
     }
   }
   p6(dt) {

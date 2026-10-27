@@ -1,6 +1,7 @@
 // Monster traits (hunters, tanks, bullet-hell casters, phasers, burrowers), ambush waves that arrive mid-level
 // (dropping from the sky, teleporting in, crawling out of the ground or out of the walls), and the MADNESS meter.
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { rand, chance, TAU, pick, shuffle, clamp } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { camera } from '../core/view.js';
@@ -36,9 +37,10 @@ export function applyTrait(m, key) {
 }
 
 /** A pack's trait (or null): more often deeper. Hunters are capped per level. */
-export function rollTrait(world, depth, force = false) {
-  if (!force && !chance(Math.min(0.55, 0.22 + depth * 0.004))) return null;
-  const k = pick(['hunter', 'tank', 'tank', 'gunner', 'gunner', 'phaser', 'burrower']);
+export function rollTrait(world, depth, force = false, rnd = Math.random) {
+  if (!force && rnd() >= Math.min(0.55, 0.22 + depth * 0.004)) return null;
+  const list = ['hunter', 'tank', 'tank', 'gunner', 'gunner', 'phaser', 'burrower'];
+  const k = list[Math.floor(rnd() * list.length)];
   if (k === 'hunter') { if ((world.hunters = (world.hunters || 0) + 1) > 2) return 'tank'; }
   return k;
 }
@@ -137,6 +139,7 @@ export function enter(m, kind, from) {
  * first moment. Not in BOSS ROOMs or Velscour's arena, and never while a guardian fight is on.
  */
 export function ambushTick(w, dt) {
+  if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
   const p = w.player;
   if (w.kind !== 'dungeon' || w.raid || w.breach || !p || p.dead || !w.roster || !w.roster.length) return;
   if (w.boss && w.boss.awake && !w.boss.dead) return;
@@ -153,6 +156,8 @@ export function ambush(w, kind = pick(ENTRY), n = 0) {
   const arch = pick(w.roster);
   n = n || Math.min(7, 2 + Math.floor(rand(0, 3) + depth / 25));
   const trait = chance(0.45) ? pick(['tank', 'gunner', 'phaser', 'burrower']) : null;
+  const batchId = Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 5);
+  const batch = [];
   let made = 0;
   for (let i = 0; i < n; i++) {
     let x, y, from = null;
@@ -167,18 +172,40 @@ export function ambush(w, kind = pick(ENTRY), n = 0) {
     }
     const rank = i === 0 && chance(0.2 + depth * 0.003) ? 'champion' : 'normal';
     const m = makeMonster(w, arch, w.biome, lvl + (rank === 'normal' ? 0 : 1), rank, x, y, 0);
+    m.netId = `ambush_${batchId}_${i}`;
+    m.enteringKind = kind;
+    m.enteringFrom = from;
     if (i === 0 && trait) applyTrait(m, trait);
     m.awake = true; m.hunter = true; m.ambusher = true;
     w.add(m);
     const delay = i * rand(0.12, 0.3);
     if (delay > 0) { m.targetable = false; m.alpha = 0; let d = delay; m.entering = (dt) => { if ((d -= dt) <= 0) enter(m, kind, from); }; }
     else enter(m, kind, from);
+    batch.push({
+      netId: m.netId,
+      idx: m.idx,
+      x: Math.round(x * 100) / 100,
+      y: Math.round(y * 100) / 100,
+      from,
+      arch,
+      lvl: m.level,
+      rank,
+      trait: i === 0 ? trait : null,
+      delay,
+    });
     made++;
   }
   if (made) {
     const msg = { drop: 'They fall from above!', teleport: 'Something tears through the veil!', burrow: 'The ground splits open!', wall: 'The walls come alive!' }[kind];
     floatText(p.x, p.y, 90, msg, '#ff8060', 14, { life: 1.8 });
     sfx('roar', 0.5);
+    if (G.room && net.connected && G.game?.isDungeonAuthority(w.depth)) {
+      net.sendAmbushSpawn({
+        kind,
+        depth: w.depth || 0,
+        monsters: batch,
+      });
+    }
   }
   return made;
 }

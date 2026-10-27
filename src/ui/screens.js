@@ -15,6 +15,8 @@ import { creditsScreen } from './credits.js';
 import { RARITY } from '../data/items.js';
 import { FILTER_ROWS, lootFilter } from '../game/lootfilter.js';
 import { Cloud } from '../game/cloud.js';
+import { initTitleUpdater, checkForUpdates, showUpdateDialog, CLIENT_VERSION, getClientVersion, hardReload } from './updater.js';
+export { hardReload };
 
 let current = null;
 
@@ -38,6 +40,24 @@ export function titleScreen() {
   const s = el('div', 'screen');
   s.classList.add('title-screen');
   s.innerHTML = `<img class="title-logo intro" src="assets/ui/logo.webp" alt="VELSCOUR"><div class="title-tag">A world built upon something that should have stayed dead.</div>`;
+
+  // Update button in top right corner - ONLY shown when an update is available from server
+  const updateBtn = el('button', 'title-update-btn hidden');
+  updateBtn.id = 'title-update-btn';
+  updateBtn.dataset.legacyId = 'title-reload-btn';
+  updateBtn.title = 'New Client Update Available';
+  updateBtn.setAttribute('aria-label', 'New Client Update Available');
+  updateBtn.innerHTML = `
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="7 10 12 15 17 10" />
+      <line x1="12" y1="15" x2="12" y2="3" />
+    </svg>
+    <span class="title-update-label">Update Available</span>
+  `;
+  s.appendChild(updateBtn);
+  initTitleUpdater(updateBtn);
+
   const menu = el('div', 'title-menu');
   const add = (label, fn, cls = 'btn big') => { const b = el('button', cls, label); b.onclick = () => { if (!s.classList.contains('title-ready')) return; initAudio(); sfx('ui'); goFullscreen(); fn(); }; menu.appendChild(b); return b; };
   // rebuilt when the cloud brings heroes in while the title is up
@@ -48,7 +68,7 @@ export function titleScreen() {
     if (last) add(`Continue<br><span style="font-size:13px;color:#a8977c">${escapeHtml(last.name)} · Lv ${last.level} ${CLASSES[last.classId].name} · Depth ${last.depth}</span>`, async () => {
       await Cloud.settle();
       const c = listSaves()[0];
-      if (c) G.game.loadChar(c);
+      if (c) gameModeScreen(c, false, titleScreen);
     });
     add(`Heroes <span style="font-size:13px;color:#a8977c">· ${used}/${CLASS_IDS.length}</span>`, () => classSelect(last ? last.classId : 'paladin'));
     add('Settings', settingsDialog, 'btn');
@@ -292,8 +312,8 @@ export function classSelect(sel = 'paladin', back = titleScreen) {
     sfx('ui');
     await Cloud.settle();
     const h = heroesByClass()[sel];   // fresh: the cloud may have brought this class's hero in
-    if (h) G.game.loadChar(h);
-    else G.game.newChar(sel, name.value.trim() || CLASSES[sel].name);
+    if (h) gameModeScreen(h, false, () => classSelect(sel, back));
+    else gameModeScreen({ classId: sel, name: name.value.trim() || CLASSES[sel].name }, true, () => classSelect(sel, back));
   };
   go.onclick = start;
   name.onkeydown = (e) => { if (e.key === 'Enter') start(); };
@@ -303,6 +323,121 @@ export function classSelect(sel = 'paladin', back = titleScreen) {
   show(s);
   s.refresh = () => classSelect(sel, back);
 }
+
+/** Game mode select screen: choose between Single Player (offline/solo) and Online (Diablo II Battle.net tavern lobby). */
+export function gameModeScreen(charInfo, fresh = false, onBack = () => {}) {
+  const C = CLASSES[charInfo.classId] || { name: 'Hero' };
+  const s = el('div', 'screen gamemode-screen');
+
+  // Hero plaque / summary at the top
+  const heroBox = el('div', 'gamemode-hero');
+  const anim = heroCanvas(charInfo.classId, 'gamemode-hero-cv');
+  heroBox.appendChild(anim.canvas);
+  excitable(heroBox, anim);
+  if (charInfo.equip) {
+    savedGearPreview(charInfo.classId, charInfo.equip.body, charInfo.equip.head).then(art => {
+      if (art && s.isConnected) anim.setArt(art);
+    });
+  }
+
+  const heroInfo = el('div', 'gamemode-hero-info');
+  heroInfo.innerHTML = `
+    <h2 class="gamemode-hero-name">${escapeHtml(charInfo.name || C.name)}</h2>
+    <div class="gamemode-hero-stats">
+      <span class="gamemode-class">Level ${charInfo.level || 1} ${escapeHtml(C.name)}</span>
+      <span class="gamemode-dot">·</span>
+      <span class="gamemode-depth">Depth ${charInfo.depth || 1}</span>
+      <span class="gamemode-dot">·</span>
+      <span class="gamemode-gold">${fmtInt(charInfo.gold || 0)} Gold</span>
+    </div>
+  `;
+  heroBox.appendChild(heroInfo);
+  s.appendChild(heroBox);
+
+  s.appendChild(el('h1', 'gamemode-title', 'CHOOSE GAME MODE'));
+  s.appendChild(el('p', 'gamemode-subtitle', 'Select your path into the depths of Velscour'));
+
+  const grid = el('div', 'gamemode-grid');
+
+  // Single Player Card
+  const spCard = el('div', 'gamemode-card gamemode-card-sp');
+  spCard.setAttribute('tabindex', '0');
+  spCard.setAttribute('role', 'button');
+  spCard.setAttribute('aria-label', 'Play Single Player');
+  spCard.innerHTML = `
+    <div class="gamemode-card-glow"></div>
+    <div class="gamemode-card-icon-wrap">
+      <svg class="gamemode-card-icon" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.5 17.5L3 6V3h3l11.5 11.5"/>
+        <path d="m13 19 6-6"/>
+        <path d="M16 16l4 4"/>
+        <path d="M19 21l2-2"/>
+      </svg>
+    </div>
+    <h3 class="gamemode-card-name">SINGLE PLAYER</h3>
+    <div class="gamemode-card-tag">SOLO EXPEDITION</div>
+    <p class="gamemode-card-desc">Venture into the abyss in a private world. Disconnected from multiplayer servers, with no lobby chat, whispers, or remote players.</p>
+    <button class="btn big gamemode-action-btn">Enter World</button>
+  `;
+  const launchSP = () => {
+    sfx('ui');
+    G.game.startSinglePlayer(charInfo, fresh);
+  };
+  spCard.onclick = launchSP;
+  spCard.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launchSP(); } };
+  grid.appendChild(spCard);
+
+  // Online Multiplayer Card
+  const mpCard = el('div', 'gamemode-card gamemode-card-mp');
+  mpCard.setAttribute('tabindex', '0');
+  mpCard.setAttribute('role', 'button');
+  mpCard.setAttribute('aria-label', 'Enter Online Multiplayer');
+  mpCard.innerHTML = `
+    <div class="gamemode-card-glow"></div>
+    <div class="gamemode-card-icon-wrap">
+      <svg class="gamemode-card-icon" viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+        <path d="M2 12h20"/>
+      </svg>
+    </div>
+    <h3 class="gamemode-card-name">ONLINE MULTIPLAYER</h3>
+    <div class="gamemode-card-tag">BATTLE.NET LOBBY</div>
+    <p class="gamemode-card-desc">Enter the tavern lobby to socialize, whisper other adventurers, and create or join cooperative party rooms.</p>
+    <button class="btn big gamemode-action-btn gamemode-btn-online">Enter Tavern Lobby</button>
+  `;
+  const launchMP = () => {
+    sfx('ui');
+    G.game.selectAndEnterLobby(charInfo, fresh, () => gameModeScreen(charInfo, fresh, onBack));
+  };
+  mpCard.onclick = launchMP;
+  mpCard.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); launchMP(); } };
+  grid.appendChild(mpCard);
+
+  s.appendChild(grid);
+
+  const row = el('div', 'gamemode-bottom-row');
+  const backBtn = el('button', 'btn', 'Back');
+  backBtn.onclick = () => {
+    sfx('ui');
+    onBack();
+  };
+  row.appendChild(backBtn);
+  s.appendChild(row);
+
+  const escHandler = (e) => {
+    if (e.key === 'Escape' && s.isConnected) {
+      window.removeEventListener('keydown', escHandler);
+      sfx('ui');
+      onBack();
+    }
+  };
+  window.addEventListener('keydown', escHandler);
+
+  show(s);
+  s.refresh = () => gameModeScreen(charInfo, fresh, onBack);
+}
+
 
 /** o.where / o.note replace the "Depth N" line and the descent note (the Eternal Breach). */
 export function deathScreen(depth, killer, onReturn, o = {}) {
@@ -330,6 +465,7 @@ export function victoryScreen(onContinue) {
 export function settingsDialog() {
   const st = G.settings;
   const html = `<div class="settings-grid">
+    <label>Game version</label><div style="display:flex;gap:8px;align-items:center;"><span style="color:#ffd860;font-family:var(--font-head);font-size:12px;font-weight:700;">v${getClientVersion()}</span><button class="btn small" data-check-update>Check for Updates</button></div>
     <label>Cloud save (Google account)</label><button class="btn small" data-cloud></button>
     <label>Hero backups</label><button class="btn small" data-backups>View</button>
     <label>Sound effects</label><input type="range" min="0" max="1" step="0.05" value="${st.sfx}" data-k="sfx">
@@ -344,6 +480,9 @@ export function settingsDialog() {
     <label title="Off: a bar shows only for a moment over a monster you hit, and never over bosses">Life bars over every enemy (bosses too)</label><input type="checkbox" data-k="lifeBars" ${st.lifeBars !== false ? 'checked' : ''}>
     <label title="A line along the foot of the dungeon's walls, drawn over every spell (not over creatures)">Outline wall bases</label><input type="checkbox" data-k="wallLines" ${st.wallLines ? 'checked' : ''}>
     <label title="Off: a Sky Battle cut scene you have already watched once plays at 20x">Don't skip cutscenes</label><input type="checkbox" data-k="noSkipCine" ${st.noSkipCine ? 'checked' : ''}>
+    <label>Hero stats plaque (Battle Ledger)</label><input type="checkbox" data-k="showHeroStats" ${st.showHeroStats !== false ? 'checked' : ''}>
+    <label>Target info box</label><input type="checkbox" data-k="showTargetBox" ${st.showTargetBox !== false ? 'checked' : ''}>
+    <label>Target portrait sprite</label><input type="checkbox" data-k="showTargetSprite" ${st.showTargetSprite !== false ? 'checked' : ''}>
     <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
     <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
     <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
@@ -355,10 +494,30 @@ export function settingsDialog() {
     <label title="Off: auto-play leaves your attribute points (Strength, Dexterity, Vitality, Energy) for you to spend">Auto attribute point assignment (auto-play)</label><input type="checkbox" data-k="autoStatPoints" ${st.autoStatPoints !== false ? 'checked' : ''}>
     <label title="Off: auto-play never equips, sells, buys, stashes, sockets, upgrades or enchants gear; in town it only buys potions. A full bag doesn't stop it: it keeps playing and leaves new gear on the ground. Locked items (the lock in the item's panel) are never touched either way">Auto-play manages gear (equip, sell, buy, upgrade)</label><input type="checkbox" data-k="autoGear" ${st.autoGear !== false ? 'checked' : ''}>
   </div>`;
-  const d = UI.dialog({ title: 'Settings', html, buttons: [{ label: 'Done', fn: () => { camera.computeZoom(); saveSettings(); } }] });
+  const d = UI.dialog({ title: 'Settings', html, buttons: [{ label: 'Done', fn: () => { camera.computeZoom(); if (UI.hud) UI.hud.applyVisibilitySettings(); saveSettings(); } }] });
   d.box.querySelector('[data-k=gore]').value = String(st.gore);
   d.box.querySelector('[data-k=fpsCap]').value = String(st.fpsCap || 0);
   d.box.querySelector('[data-backups]').onclick = () => { sfx('ui'); backupsDialog(); };
+  const ub = d.box.querySelector('[data-check-update]');
+  if (ub) {
+    ub.onclick = async () => {
+      sfx('ui');
+      ub.disabled = true;
+      ub.textContent = 'Checking…';
+      const info = await checkForUpdates({ force: true });
+      ub.disabled = false;
+      ub.textContent = 'Check for Updates';
+      if (info && info.hasUpdate) {
+        showUpdateDialog(info);
+      } else {
+        UI.dialog({
+          title: 'Velscour Updater',
+          html: `<p style="text-align:center;padding:12px 0;line-height:1.5;">You are running the latest version of Velscour (<strong>v${getClientVersion()}</strong>).</p>`,
+          buttons: [{ label: 'OK' }]
+        });
+      }
+    };
+  }
   const cb = d.box.querySelector('[data-cloud]');
   cloudRow = () => {
     if (!cb.isConnected) { cloudRow = null; return; }
@@ -373,7 +532,12 @@ export function settingsDialog() {
     sfx('ui');
     if (Cloud.signedIn) { cloudDialog(() => cloudRow && cloudRow()); return; }
     cb.textContent = 'Signing in…';
-    Cloud.signIn().then(() => { if (cloudRow) cloudRow(); if (G.mode !== 'game') conflictDialogs(); }).catch((e) => {
+    Cloud.signIn().then(() => {
+      console.log('[Cloud] Sign in succeeded. Current user:', Cloud.user);
+      if (cloudRow) cloudRow();
+      if (G.mode !== 'game') conflictDialogs();
+    }).catch((e) => {
+      console.error('[Cloud] Sign in failed:', e);
       if (cloudRow) cloudRow();
       if (String(e && e.code) === 'auth/popup-blocked' && !cb.dataset.again) { cb.dataset.again = 1; cb.textContent = 'Tap again to sign in'; return; }
       const msg = cloudErr(e);
@@ -387,6 +551,7 @@ export function settingsDialog() {
       const k = inp.dataset.k;
       st[k] = inp.type === 'checkbox' ? inp.checked : inp.tagName === 'SELECT' ? Number(inp.value) : Number(inp.value);
       if (k === 'mobileSkillBar' && UI.hud) UI.hud.layoutMobile();
+      if ((k === 'showHeroStats' || k === 'showTargetBox' || k === 'showTargetSprite') && UI.hud) UI.hud.applyVisibilitySettings();
       applyVolumes();
       saveSettings();
     };
@@ -424,7 +589,7 @@ export function helpDialog() {
     <div><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> potions</div>
     <div><kbd>I</kbd> inventory · <kbd>K</kbd> skill tree · <kbd>B</kbd> skill book · <kbd>Q</kbd> quest log</div>
     <div><kbd>Tab</kbd>/<kbd>M</kbd> map · <kbd>Esc</kbd> menu · wheel zoom</div>
-    <div><kbd>P</kbd> or the <b>Auto</b> button: auto-play (the hero fights, loots, shops and delves on autopilot)</div>
+    <div><kbd>Alt</kbd>+<kbd>P</kbd> or the <b>Auto</b> button: auto-play (the hero fights, loots, shops and delves on autopilot)</div>
     <div><kbd>G</kbd> MADNESS · <kbd>F</kbd> SMITE, then click where it should strike (both fill as you fight)</div>
     <div><b style="color:#ffe2a0">While the hero plays</b></div>
     <div>Click or tap <b style="color:#ffd040">gilded critters</b> before they get away (follow the red arrows): each is worth a big sum of experience (a Golden Scarab, a pile of gold). Auto-play leaves them to you.</div>
@@ -455,7 +620,7 @@ export function pauseMenu() {
     buttons: [
       { label: 'Resume' },
       { label: 'Settings', fn: settingsDialog },
-      { label: 'Help', fn: helpDialog },
+      { label: 'How to Play', fn: helpDialog },
       { label: 'Save & Quit', cls: 'red', fn: () => G.game.quitToTitle() },
     ],
   });

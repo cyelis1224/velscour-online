@@ -63,7 +63,7 @@ export function startTownLife(world, t, c, visit) {
   const named = (re) => t.props.filter((p) => p.kind === 'scatter' && p.spr && re.test(p.spr.name || ''));
   const doorOf = (b) => (b.sx ? [b.x0 + 3.6, b.y0 + 1.5] : [b.x0 + 1.5, b.y0 + 3.6]);
   const homes = t.buildings.filter((b) => !b.vendor);
-  const near = (x, y, r) => { const p = map.randomNear(x, y, r); return p || [x, y]; };
+  const near = (x, y, r) => { const p = map.randomNear(x, y, r, () => rng.next()); return p || [x, y]; };
   const free = (x, y) => map.walkable(x, y) && map.circleFree(x, y, 0.3);
   const roads = [];
   for (let y = 2; y < map.h - 2; y += 2) for (let x = 2; x < map.w - 2; x += 2) if (free(x + 0.5, y + 0.5) && dist(x, y, C.x, C.y) < 20) roads.push([x + 0.5, y + 0.5]);
@@ -75,12 +75,12 @@ export function startTownLife(world, t, c, visit) {
   d.spots = spots;
   const vendorFront = (v) => { const dx = C.x - v.x, dy = C.y - v.y, l = Math.hypot(dx, dy) || 1; return near(v.x + (dx / l) * 1.3, v.y + (dy / l) * 1.3, 0.6); };
   const randomSpot = () => {
-    const r = Math.random();
-    if (r < 0.25) return near(C.x + rand(-4, 4), C.y + rand(-4, 4), 1.5);
-    if (r < 0.45 && d.vendors.length) return vendorFront(pick(d.vendors));
-    if (r < 0.6 && spots.benches.length) { const b = pick(spots.benches); return near(b.x, b.y, 1.2); }
-    if (r < 0.7 && homes.length) { const [x, y] = doorOf(pick(homes)); return near(x, y, 1.5); }
-    return pick(roads) || [C.x, C.y + 2];
+    const r = rng.next();
+    if (r < 0.25) return near(C.x + (rng.next() * 8 - 4), C.y + (rng.next() * 8 - 4), 1.5);
+    if (r < 0.45 && d.vendors.length) return vendorFront(rng.pick(d.vendors));
+    if (r < 0.6 && spots.benches.length) { const b = rng.pick(spots.benches); return near(b.x, b.y, 1.2); }
+    if (r < 0.7 && homes.length) { const [x, y] = doorOf(rng.pick(homes)); return near(x, y, 1.5); }
+    return rng.pick(roads) || [C.x, C.y + 2];
   };
   d.randomSpot = randomSpot;
 
@@ -89,14 +89,14 @@ export function startTownLife(world, t, c, visit) {
     if (typeof name !== 'string' || opts.kind) { const p = { x, y, ...opts }; world.props.push(p); return p; }
     const spr = townObject(name);
     if (!spr) return null;
-    const p = { kind: 'scatter', x, y, spr, k, flip: opts.flip ?? chance(0.5) };
+    const p = { kind: 'scatter', x, y, spr, k, flip: opts.flip ?? rng.chance(0.5) };
     world.props.push(p);
     return p;
   };
   d.addProp = addProp;
   const clearing = (cx, cy, r, need = 2.2) => {
     for (let i = 0; i < 40; i++) {
-      const x = Math.floor(cx + rand(-r, r)) + 0.5, y = Math.floor(cy + rand(-r, r)) + 0.5;
+      const x = Math.floor(cx + (rng.next() * 2 * r - r)) + 0.5, y = Math.floor(cy + (rng.next() * 2 * r - r)) + 0.5;
       let ok = true;
       for (let yy = -1; yy <= 1 && ok; yy++) for (let xx = -1; xx <= 1 && ok; xx++) if (!free(x + xx * need / 2, y + yy * need / 2)) ok = false;
       if (ok && dist(x, y, t.portal.x, t.portal.y) > 3 && !d.setPieces.some((s) => dist(s.x, s.y, x, y) < 5)) return [x, y];
@@ -112,10 +112,10 @@ export function startTownLife(world, t, c, visit) {
       guard: v.guard, merchant: v.merchant, old: v.old, caster: v.caster, healer: v.healer,
       sprite: 'townsfolk', townsfolkSpriteId: v.spriteId, spriteId: v.spriteId, townsfolkId: v.id, frameCount: v.frame.count, pal: null,
       idleH: v.child ? 150 : undefined,
-      x, y, reach: 1.6, flip: chance(0.5), animT: rand(0, 6), walkT: 0, idleSeed: randi(0, 9), walking: false, running: false,
+      x, y, reach: 1.6, flip: rng.chance(0.5), animT: rng.next() * 6, walkT: 0, idleSeed: rng.int(0, 9), walking: false, running: false,
       talkText: '', talkT: 0, talkAge: 0, emotion: null, emotionT: 0, emoteClock: 0, icon: null, iconT: 0, iconAge: 0,
-      path: null, goal: null, speed: v.child ? 1.3 : 1.05, busy: null, nextT: rand(0.5, 6), hidden: false, alpha: 1,
-      home: homes.length ? pick(homes) : null, barkT: rand(10, 25), stuckT: 0,
+      path: null, goal: null, speed: v.child ? 1.3 : 1.05, busy: null, nextT: 0.5 + rng.next() * 5.5, hidden: false, alpha: 1,
+      home: homes.length ? rng.pick(homes) : null, barkT: 10 + rng.next() * 15, stuckT: 0,
       use() { d.greet(a, true); },
       update(dt) { d.tickAgent(a, dt); },
       ...opts,

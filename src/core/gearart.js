@@ -82,22 +82,37 @@ async function loadClassGear(cls) {
   return { cls, meta, armor: pixels(a), amask: channel(am), helmetHelms };
 }
 
+const classGearCache = new Map();
+
 /** Load a class's gear art. Resolves to its meta, or null if the class has none (it then keeps its old sprite). */
 export async function loadGearArt(cls) {
-  if (S.cls === cls) return S.meta;
+  if (classGearCache.has(cls)) {
+    const data = classGearCache.get(cls);
+    if (!S.cls || S.cls === cls) Object.assign(S, data);
+    return data.meta;
+  }
   try {
     if (!S.list) S.list = await fetch(BASE + 'classes.json' + V).then((r) => (r.ok ? r.json() : []));
-    if (!S.list.includes(cls)) { Object.assign(S, { cls, meta: null }); return null; }
-    Object.assign(S, await loadClassGear(cls));
-    looks.clear(); icons.clear(); recolouredHelms.clear();
-    return S.meta;
+    if (!S.list.includes(cls)) {
+      classGearCache.set(cls, { cls, meta: null });
+      if (!S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
+      return null;
+    }
+    const data = await loadClassGear(cls);
+    classGearCache.set(cls, data);
+    if (!S.cls || S.cls === cls) {
+      Object.assign(S, data);
+      looks.clear(); icons.clear(); recolouredHelms.clear();
+    }
+    return data.meta;
   } catch (e) {
     console.warn('gear art unavailable for', cls, e);
-    Object.assign(S, { cls, meta: null });
+    classGearCache.set(cls, { cls, meta: null });
+    if (!S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
     return null;
   }
 }
-export const gearMeta = (cls) => (S.cls === cls ? S.meta : null);
+export const gearMeta = (cls) => (S.cls === cls && S.meta ? S.meta : classGearCache.get(cls)?.meta || null);
 
 // ------------------------------------------------------------------ looks of items
 const rarityName = (r) => RARITY[r].name.toLowerCase();
@@ -118,7 +133,7 @@ function fxFor(rarity) {
  * first use from the item's rarity and level and kept on the item (so saves keep it); null without gear art.
  */
 export function itemLook(item, src = S) {
-  if (!item || item.type !== 'gear' || (item.slot !== 'body' && item.slot !== 'head') || !src.meta) return null;
+  if (!item || (item.slot !== 'body' && item.slot !== 'head') || !src.meta) return null;
   if (item.slot === 'head') {
     const designs = src.helmetHelms?.meta.designs;
     if (!designs?.length) return null;
@@ -269,31 +284,33 @@ function toCanvas(px, w, h) {
 // ------------------------------------------------------------------ the hero
 const looks = new Map();
 /** The hero's full-frame canvas wearing `body` and the new class-matched head overlay. */
-export function heroLook(cls, body, head, src = S, outCache = looks) {
-  if (src.cls !== cls || !src.meta) return null;
-  const bl = body ? itemLook(body, src) : [1, 0, -1], hl = head ? itemLook(head, src) : null;
+export function heroLook(cls, body, head, src = null, outCache = looks) {
+  const actualSrc = (src && src.cls === cls) ? src : (S.cls === cls && S.meta ? S : classGearCache.get(cls));
+  if (!actualSrc || !actualSrc.meta || actualSrc.cls !== cls) return null;
+  const bl = (body && itemLook(body, actualSrc)) || [1, 0, -1];
+  const hl = head ? itemLook(head, actualSrc) : null;
   const set = head ? helmetSet(head) : 'common';
-  const key = bl[0] + '|' + bl[1] + '|' + (hl ? set + '|' + hl[0] + '|' + hl[1] : '-');
+  const key = cls + '|' + bl[0] + '|' + bl[1] + '|' + (hl ? set + '|' + hl[0] + '|' + hl[1] : '-');
   let c = outCache.get(key);
   if (c) return c;
-  const { meta } = src, [fw, fh] = meta.frame;
+  const { meta } = actualSrc, [fw, fh] = meta.frame;
   c = makeCanvas(fw * HD, fh * HD);
   const x = c.getContext('2d');
   x.imageSmoothingEnabled = false;
-  x.drawImage(toCanvas(armorPixels(bl[0], bl[1], src), fw, fh), 0, 0, fw * HD, fh * HD);
+  x.drawImage(toCanvas(armorPixels(bl[0], bl[1], actualSrc), fw, fh), 0, 0, fw * HD, fh * HD);
   x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
   x.scale(HD, HD);
   c._res = HD;
   if (hl) {
-    const { px: hp, box } = helmetPixels(cls, hl[0], hl[1], set, src);
-    const place = helmetPlacement(meta, box, hl[0], set, src), [x0,y0,x1,y1] = box;
+    const { px: hp, box } = helmetPixels(cls, hl[0], hl[1], set, actualSrc);
+    const place = helmetPlacement(meta, box, hl[0], set, actualSrc), [x0,y0,x1,y1] = box;
     const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
     const [hdx, hdy] = meta.armor.head?.[bl[0] - 1] || [0, 0]; // the helmet follows this armor's head
     x.save(); x.translate(place.center[0] + hdx, place.center[1] + hdy); x.rotate(place.rotation * Math.PI / 180);
-    x.scale(place.dw / src[set + 'Helms'].meta.frame[0], place.dh / src[set + 'Helms'].meta.frame[1]);
-    x.drawImage(toCanvas(hp, ...src[set + 'Helms'].meta.frame), -cx, -cy); x.restore();
+    x.scale(place.dw / actualSrc[set + 'Helms'].meta.frame[0], place.dh / actualSrc[set + 'Helms'].meta.frame[1]);
+    x.drawImage(toCanvas(hp, ...actualSrc[set + 'Helms'].meta.frame), -cx, -cy); x.restore();
   }
-  if (outCache.size >= 8) outCache.delete(outCache.keys().next().value);
+  if (outCache.size >= 16) outCache.delete(outCache.keys().next().value);
   outCache.set(key, c);
   return c;
 }

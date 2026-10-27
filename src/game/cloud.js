@@ -35,8 +35,18 @@ function firebaseBackend() {
       await au.authStateReady();
     },
     user() { const u = au.currentUser; return u && { uid: u.uid, name: u.displayName || '', email: u.email || '' }; },
-    async signIn() { await auth.signInWithPopup(au, new auth.GoogleAuthProvider()); return this.user(); },
-    signOut() { return auth.signOut(au); },
+    async signIn() {
+      console.log('[Cloud] Initiating Google Sign-In...');
+      const provider = new auth.GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const cred = await auth.signInWithPopup(au, provider);
+      console.log('[Cloud] Google Sign-In finished, user:', cred && cred.user);
+      const u = (cred && cred.user) || au.currentUser;
+      return u && { uid: u.uid, name: u.displayName || '', email: u.email || '' };
+    },
+    signOut() {
+      return auth.signOut(au);
+    },
     async list(uid) {
       const out = {};
       (await fs.getDocs(fs.collection(db, 'users', uid, 'heroes'))).forEach((d) => { out[d.id] = fromDoc(d.data()); });

@@ -26,7 +26,7 @@ export const stat = (cls, k) => {
  */
 export function power(p) {
   const b = SKILLS[p.classId + '.0.0'];
-  const basic = b ? avg(p.skillDamage(b, Math.max(1, p.skillLevel(b)))) : 10;
+  const basic = (b && typeof p.skillDamage === 'function') ? avg(p.skillDamage(b, Math.max(1, typeof p.skillLevel === 'function' ? p.skillLevel(b) : 1))) : 10;
   return Math.max(basic, (p.sig && p.sig.pow) || 0);
 }
 /** The hits a signature deals: tagged so they never charge the signature again. */

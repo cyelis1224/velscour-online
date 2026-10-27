@@ -1,0 +1,83 @@
+{
+  "name": "velscour",
+  "version": "1.0.4",
+  "description": "*A world built upon something that should have stayed dead.*",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server.js",
+    "desktop": "electron .",
+    "dist": "electron-builder",
+    "dist:linux": "electron-builder --linux AppImage",
+    "dist:win": "electron-builder --win portable",
+    "dist:mac": "electron-builder --mac dmg",
+    "mobile:prepare": "node tools/build_www.js && npx cap sync android",
+    "mobile:build": "node tools/build_www.js && npx cap sync android && cd android && ./gradlew assembleDebug",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.velscour.game",
+    "productName": "Velscour",
+    "directories": {
+      "output": "dist/desktop"
+    },
+    "files": [
+      "assets/**/*",
+      "css/**/*",
+      "src/**/*",
+      "index.html",
+      "server.js",
+      "manifest.webmanifest",
+      "package.json",
+      "electron/**/*",
+      "!android/**/*",
+      "!www/**/*",
+      "!dist/**/*",
+      "!tools/tests/**/*"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game",
+      "icon": "assets/ui/icon.png"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "icon": "assets/ui/icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.games",
+      "icon": "assets/ui/icon.png"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Agilancer/velscour.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Agilancer/velscour/issues"
+  },
+  "homepage": "https://github.com/Agilancer/velscour#readme",
+  "dependencies": {
+    "@capacitor-firebase/authentication": "^8.5.2",
+    "@capacitor/core": "^8.5.3",
+    "playwright": "^1.64.1",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0"
+  }
+}

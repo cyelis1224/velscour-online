@@ -6,6 +6,7 @@ const GAME_KEYS = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 
 export const input = {
   keys: new Set(),
   pressed: new Set(),
+  alt: false,
   mouse: { x: 0, y: 0, left: false, right: false, leftPressed: false, rightPressed: false, inside: true },
   joy: { active: false, id: -1, ox: 0, oy: 0, x: 0, y: 0, vx: 0, vy: 0 },
   worldTouch: null, // { id, x, y, pressed }
@@ -25,6 +26,7 @@ export const input = {
   },
   reset() {
     this.keys.clear(); this.pressed.clear();
+    this.alt = false;
     this.mouse.left = this.mouse.right = false;
     this.endJoy();
     this.worldTouch = null;
@@ -43,12 +45,16 @@ function isTyping(e) {
 
 export function initInput(canvas) {
   window.addEventListener('keydown', (e) => {
+    input.alt = e.altKey;
     if (isTyping(e)) return;
-    if (GAME_KEYS.has(e.code) && G.mode === 'game') e.preventDefault();
+    if ((GAME_KEYS.has(e.code) || (e.altKey && e.code === 'KeyP')) && G.mode === 'game') e.preventDefault();
     if (!e.repeat) input.pressed.add(e.code);
     input.keys.add(e.code);
   });
-  window.addEventListener('keyup', (e) => { input.keys.delete(e.code); });
+  window.addEventListener('keyup', (e) => {
+    input.alt = e.altKey;
+    input.keys.delete(e.code);
+  });
   window.addEventListener('blur', () => input.reset());
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   document.addEventListener('contextmenu', (e) => { if (G.mode === 'game') e.preventDefault(); });

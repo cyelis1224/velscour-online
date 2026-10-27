@@ -3,7 +3,7 @@ import { G } from '../state.js';
 import { input } from '../core/input.js';
 import { camera } from '../core/view.js';
 import { sfx, playMusic, stopMusic, setAmbience, stopAmbience, footsteps } from '../core/audio.js';
-import { rand, pick, randi, escapeHtml, dist, makeCanvas, fmtInt, swapKey } from '../core/util.js';
+import { rand, pick, randi, escapeHtml, dist, dist2, RNG, makeCanvas, fmtInt, swapKey, hexToRgb } from '../core/util.js';
 import { biomeTileSet, loadBiomeArt, mixedTileSet, keepTileSets } from '../core/assets.js';
 import { loadArtFor, enemyImage, markArtCaches, trimArtCaches } from '../core/enemyart.js';
 import { loadClassArt } from '../core/classart.js';
@@ -57,14 +57,15 @@ import { World } from './world.js';
 import { Player } from './player.js';
 import { makeMonster, makeElite, Monster } from './monster.js';
 import { clearRims } from './creature.js';
-import { applyTrait, rollTrait, ambushTick, madnessTick, unleashMadness } from './mayhem.js';
+import { applyTrait, rollTrait, ambushTick, madnessTick, unleashMadness, enter } from './mayhem.js';
+import { hit, kill } from './combat.js';
 import { makeRaidBoss } from './raid.js';
-import { dropChest } from './loot.js';
+import { dropChest, GroundItem } from './loot.js';
 import { renderWorld, drawMinimap, preloadTownSheets, releaseTownSheets } from './render.js';
 import { controls } from './controls.js';
 import { Auto } from './autoplay.js';
 import { writeSave, newCharData, migrate } from './save.js';
-import { clearVfx, floatText, sparkle, addEffect, Ring } from '../gfx/vfx.js';
+import { clearVfx, floatText, sparkle, addEffect, Ring, Bolt, Column } from '../gfx/vfx.js';
 import { Meter } from './dpsmeter.js';
 import { UI } from '../ui/ui.js';
 import { HUD } from '../ui/hud.js';
@@ -78,7 +79,12 @@ import { toggleQuest } from '../ui/quest.js';
 import { setupVelscour } from './velscour.js';
 import { loadVelscourThrone } from '../gfx/velscourthrone.js';
 import { offerCommissions, setupCommissions, commissionClear, wantedBiomes, LINE_BY_ID, commState } from './commissions.js';
-import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu, helpDialog } from '../ui/screens.js';
+import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu } from '../ui/screens.js';
+import { openLobby } from '../ui/lobby.js';
+import { net } from '../net/network.js';
+import { RemotePlayer } from '../net/remoteplayer.js';
+import { drawAutomapPartyRoster } from '../ui/partyroster.js';
+import { GameChat } from '../ui/chat.js';
 
 const PICK_WAIT = 8; // seconds auto-play gives the player to choose a portal down (portalChoice)
 
@@ -154,6 +160,8 @@ function releaseLevelArt(biome) {
 }
 
 let hudCine = false;
+let netSyncT = 0;
+let monSyncT = 0;
 /** A world during a cut scene: the scene's actors (leaps, scripted walks), townsfolk, effects and the director move;
  * nobody fights and nobody takes input. */
 function cineTick(w, dt) {
@@ -165,8 +173,463 @@ function cineTick(w, dt) {
   updateVfx(dt, w);
 }
 
+let netListenersAttached = false;
+function attachNetListeners() {
+  if (netListenersAttached) return;
+  netListenersAttached = true;
+
+  net.on('player_joined_room', (p) => {
+    if (G.world && p.id !== net.myId && !G.remotePlayers?.has(p.id)) {
+      const rp = new RemotePlayer(p);
+      let sx = G.player.x + 1, sy = G.player.y + 1;
+      if (G.world.kind === 'town' && townCache?.portal) {
+        const P = townCache.portal, C = townCache.center, l = Math.hypot(C.x - P.x, C.y - P.y) || 1;
+        sx = P.x + ((C.x - P.x) / l) * 3.2;
+        sy = P.y + ((C.y - P.y) / l) * 3.2;
+      } else if (G.world.portals?.[0]) {
+        sx = G.world.portals[0].x;
+        sy = G.world.portals[0].y;
+      }
+      rp.x = sx; rp.y = sy;
+      rp.targetX = sx; rp.targetY = sy;
+      G.world.add(rp);
+      if (!G.remotePlayers) G.remotePlayers = new Map();
+      G.remotePlayers.set(p.id, rp);
+      UI.log(`<b style="color:#7ab8ff">${escapeHtml(p.name)}</b> (Lv ${p.level} ${CLASSES[p.classId]?.name || ''}) joined the room.`, '#ffd860');
+      sfx('portal');
+    }
+  });
+
+  net.on('player_left_room', (data) => {
+    if (G.remotePlayers?.has(data.playerId)) {
+      const rp = G.remotePlayers.get(data.playerId);
+      rp.destroy();
+      if (G.world) {
+        const idx = G.world.creatures.indexOf(rp);
+        if (idx !== -1) G.world.creatures.splice(idx, 1);
+      }
+      G.remotePlayers.delete(data.playerId);
+      UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName)}</b> left the room.`, '#a8977c');
+    }
+  });
+
+  net.on('game_player_state', (state) => {
+    if (!G.world || state.id === net.myId) return;
+    if (!G.remotePlayers) G.remotePlayers = new Map();
+    let rp = G.remotePlayers.get(state.id);
+    if (!rp) {
+      rp = new RemotePlayer({ id: state.id, name: state.name || 'Hero', classId: state.classId || 'paladin', level: state.level || 1, gear: state.gear });
+      G.remotePlayers.set(state.id, rp);
+    }
+    rp._lastState = state;
+    rp.worldKind = state.worldKind;
+    rp.depth = state.depth;
+
+    const remoteKind = state.worldKind || 'town';
+    const myKind = G.world?.kind || 'town';
+    const sameWorld = (remoteKind === myKind) && (myKind !== 'dungeon' || state.depth === G.world.depth);
+    if (sameWorld) {
+      if (rp.world !== G.world || !G.world.creatures.includes(rp)) {
+        rp.x = typeof state.x === 'number' ? state.x : rp.x;
+        rp.y = typeof state.y === 'number' ? state.y : rp.y;
+        rp.targetX = rp.x;
+        rp.targetY = rp.y;
+        G.world.add(rp);
+      }
+      rp.updateFromNetwork(state);
+      if (Array.isArray(state.summons)) {
+        rp.syncSummons(state.summons);
+      }
+    } else {
+      if (rp.world === G.world || G.world.creatures.includes(rp)) {
+        G.world.remove(rp);
+        rp.destroySummons();
+        rp.destroySig();
+      }
+      if (typeof state.hp === 'number') rp.hp = state.hp;
+      if (typeof state.maxHp === 'number') rp.maxHp = state.maxHp;
+      if (typeof state.mana === 'number') rp.mana = state.mana;
+      if (typeof state.maxMana === 'number') rp.maxMana = state.maxMana;
+      rp.dead = (rp.hp <= 0);
+    }
+  });
+
+  net.on('game_skill_cast', (data) => {
+    if (!G.world || data.playerId === net.myId) return;
+    const rp = G.remotePlayers?.get(data.playerId);
+    if (rp && rp.world === G.world && G.world.creatures.includes(rp)) {
+      rp.onCastSkill(data.skillId, data.x, data.y);
+    }
+  });
+
+  net.on('game_monster_hit', (data) => {
+    if (!G.world || data.sourceId === net.myId) return;
+    if (data.worldKind && data.worldKind !== G.world.kind) return;
+    if (data.depth && data.depth !== G.world.depth) return;
+    if (G.world.creatures) {
+      let m = null;
+      if (data.netId) {
+        m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && c.netId === data.netId);
+      }
+      if (!m && data.monsterIdx) {
+        m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && c.idx === data.monsterIdx);
+      }
+      if (!m && data.x != null && data.y != null) {
+        m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && Math.hypot(c.x - data.x, c.y - data.y) < 2.0);
+      }
+      if (m) {
+        const rp = G.remotePlayers?.get(data.sourceId) || null;
+        hit(rp, m, data.dmg, data.elem || 'phys', { fromNetwork: true, crit: !!data.isCrit });
+        if (data.killed && !m.dead) {
+          kill(m, rp, { el: data.elem || 'phys', crit: !!data.isCrit });
+        }
+      }
+    }
+  });
+
+  net.on('game_ambush_spawn', (data) => {
+    if (!G.world || !G.world.creatures) return;
+    if (data.depth != null && data.depth !== G.world.depth) return;
+    if (game.isDungeonAuthority(G.world.depth)) return;
+
+    for (const mon of data.monsters || []) {
+      let existing = G.world.creatures.find(c => c.team === 'enemy' && (c.netId === mon.netId || (mon.idx && c.idx === mon.idx)));
+      if (existing) continue;
+
+      const m = makeMonster(G.world, mon.arch || 'ghoul', G.world.biome, mon.lvl || 1, mon.rank || 'normal', mon.x, mon.y, 0, mon.look);
+      m.netId = mon.netId;
+      if (mon.idx) m.idx = mon.idx;
+      m.fromNetwork = true;
+      if (mon.trait) applyTrait(m, mon.trait);
+      m.awake = true; m.hunter = true; m.ambusher = true;
+      G.world.add(m);
+
+      if (mon.delay > 0) {
+        m.targetable = false; m.alpha = 0; let d = mon.delay;
+        m.entering = (dt) => { if ((d -= dt) <= 0) enter(m, data.kind, mon.from); };
+      } else {
+        enter(m, data.kind, mon.from);
+      }
+    }
+
+    const msg = {
+      drop: 'They fall from above!',
+      teleport: 'Something tears through the veil!',
+      burrow: 'The ground splits open!',
+      wall: 'The walls come alive!'
+    }[data.kind];
+    if (msg && G.world.player) {
+      floatText(G.world.player.x, G.world.player.y, 90, msg, '#ff8060', 14, { life: 1.8 });
+      sfx('roar', 0.5);
+    }
+  });
+
+  net.on('game_monster_spawn', (data) => {
+    if (!G.world || !G.world.creatures) return;
+    if (data.worldKind && data.worldKind !== G.world.kind) return;
+    if (data.depth != null && data.depth !== G.world.depth) return;
+    if (game.isDungeonAuthority(G.world.depth)) return;
+
+    let existing = G.world.creatures.find(c => c.team === 'enemy' && (c.netId === data.netId || (data.idx && c.idx === data.idx)));
+    if (existing) return;
+
+    let m = null;
+    if (data.isWard || data.vk) {
+      const color = data.color || data.aura || '#b080ff';
+      const rgb = hexToRgb(color);
+      m = new Monster({
+        x: data.x, y: data.y, team: 'enemy', ai: data.ai || 'ward',
+        static: data.static ?? true, fly: !!data.fly, sprite: data.sprite || 'crystal',
+        art: data.art || 'va_crystal', artH: data.artH || 42,
+        swap: { tint: [...rgb, 0.75] },
+        pal: { a: color, c: color, w: '#ffffff', m: '#4a4650' },
+        px: 3, r: 0.45,
+        maxHp: data.maxHp || 100, hp: data.hp || data.maxHp || 100,
+        level: data.level || 1, dmg: data.dmg || 10, xp: 0,
+        name: data.name || (data.isWard ? 'Warding Crystal' : 'Crystal'),
+        rank: data.rank || 'champion', aura: color, awake: true,
+        el: data.el || 'fire', res: {}, goreType: 'spark', atkCd: 3, isWard: !!data.isWard,
+      });
+      m.vk = data.vk;
+      m.isWard = !!data.isWard;
+      if (data.isWard && G.world.raid) {
+        G.world.raid.wards.push(m);
+        m.wardTick = (dt) => {
+          m.moving = false;
+          const bm = G.world.boss;
+          if (bm && bm.dead) { m.dead = true; return; }
+          if ((m.beamT = (m.beamT || 0) - dt) <= 0) {
+            m.beamT = 0.12;
+            if (bm) addEffect(new Bolt(m.x, m.y, 44, bm.x, bm.y, 70, color, 0.13, 2));
+          }
+        };
+      }
+      if (data.vk && G.world.velscour) {
+        G.world.velscour.parts.push(m);
+        if (data.vk === 'shard') {
+          const bm = G.world.boss;
+          m.onDeath = () => {
+            if (!bm || bm.dead) return;
+            const cut = bm.maxHp * 0.05;
+            bm.hp = Math.max(bm.maxHp * 0.3, bm.hp - cut);
+            if (G.world.velscour) G.world.velscour.lastHp = bm.hp;
+            addEffect(new Column(m.x, m.y, '#ff3050', 1, 60, 300));
+            floatText(m.x, m.y, 80, '-5% VELSCOUR', '#ff6080', 16, { life: 1.6 });
+            sfx('explode');
+          };
+        }
+      }
+    } else {
+      m = makeMonster(G.world, data.arch || 'ghoul', G.world.biome, data.level || 1, data.rank || 'normal', data.x, data.y, 0, data.look);
+      if (data.name) m.name = data.name;
+      if (data.maxHp) { m.maxHp = data.maxHp; m.hp = data.hp ?? data.maxHp; }
+      if (data.dmg) m.dmg = data.dmg;
+      if (data.scale) m.scale = data.scale;
+      m.awake = true;
+      if (data.traits) {
+        for (const tr of (Array.isArray(data.traits) ? data.traits : [data.traits])) {
+          applyTrait(m, tr);
+        }
+      }
+      if (G.world.raid && (data.name?.includes('Royal Guard') || data.arch?.includes('colossus') || data.isRaidAdd)) {
+        G.world.raid.minions.push(m);
+      }
+    }
+
+    m.netId = data.netId;
+    if (data.idx) m.idx = data.idx;
+    m.fromNetwork = true;
+    G.world.add(m);
+
+    if (data.enteringKind) {
+      enter(m, data.enteringKind, data.enteringFrom);
+    }
+  });
+
+  net.on('game_monsters_state', (data) => {
+    if (!G.world || !G.world.creatures || G.world.kind !== 'dungeon') return;
+    if (data.depth && data.depth !== G.world.depth) return;
+    if (game.isDungeonAuthority(G.world.depth)) return;
+    for (const s of data.monsters || []) {
+      let m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && (c.netId === s.id || c.idx === s.id));
+      if (!m && s.id && s.hp > 0 && (s.arch || s.isWard || s.vk)) {
+        net.emit('game_monster_spawn', {
+          netId: s.id,
+          worldKind: G.world.kind,
+          depth: G.world.depth,
+          x: s.x,
+          y: s.y,
+          hp: s.hp,
+          maxHp: s.maxHp || s.hp,
+          level: s.lvl || 1,
+          rank: s.rank || 'normal',
+          arch: s.arch,
+          name: s.name,
+          isWard: s.isWard,
+          vk: s.vk,
+          static: s.static,
+          fly: s.fly,
+          color: s.color,
+        });
+        m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && (c.netId === s.id || c.idx === s.id));
+      }
+      if (m) {
+        if (s.hp <= 0) {
+          if (!m.dead) kill(m, null, { el: 'phys' });
+        } else {
+          m.hp = Math.min(m.maxHp, s.hp);
+          if (s.a) m.awake = true;
+          if (s.f !== undefined) m.facing = s.f;
+          const d2 = dist2(m.x, m.y, s.x, s.y);
+          if (d2 > 9) {
+            m.x = s.x;
+            m.y = s.y;
+          } else if (d2 > 0.04) {
+            m.x += (s.x - m.x) * 0.4;
+            m.y += (s.y - m.y) * 0.4;
+          }
+        }
+      }
+    }
+  });
+
+  net.on('room_depth_sync', (data) => {
+    if (G.room) {
+      if (typeof data.depth === 'number' && data.depth > 0) {
+        G.room.depth = data.depth;
+        if (G.char && (G.world?.kind === 'town' || G.char.depth < data.depth)) {
+          G.char.depth = data.depth;
+        }
+      }
+      if (data.biome) {
+        G.room.biome = data.biome;
+        if (G.char && G.world?.kind === 'town') {
+          G.char.nextBiome = data.biome;
+        }
+      }
+      if (data.seed) G.room.dungeonSeed = data.seed;
+      if (data.mixId !== undefined) G.room.mixId = data.mixId;
+      if (net.currentRoom) {
+        net.currentRoom.depth = G.room.depth;
+        net.currentRoom.biome = G.room.biome;
+        net.currentRoom.dungeonSeed = G.room.dungeonSeed;
+        net.currentRoom.mixId = G.room.mixId;
+      }
+    }
+    // If local player had the exit portal choice dialog open on previous floor, refresh it with the selected choice!
+    if (G.world?.kind === 'dungeon' && data.depth === G.world.depth + 1 && document.querySelector('.portal-choice')) {
+      UI.closeAllDialogs();
+      game.pick = null;
+      game.portalChoice(G.world);
+    }
+    if (G.world?.kind === 'town' && data.depth) {
+      UI.log(`Portal in town updated to Depth ${data.depth}!`, '#ffd860');
+    }
+  });
+
+  net.on('game_town_transition', (data) => {
+    if (G.room && data && typeof data.depth === 'number') {
+      G.room.depth = data.depth;
+    }
+  });
+
+  net.on('game_dungeon_transition', (data) => {
+    if (G.room && data) {
+      if (typeof data.depth === 'number') G.room.depth = data.depth;
+      if (data.biome) G.room.biome = data.biome;
+      if (data.seed) G.room.dungeonSeed = data.seed;
+      if (data.mixId) G.room.mixId = data.mixId;
+    }
+  });
+
+  net.on('game_loot_spawn', (data) => {
+    if (!G.world || !G.world.loot) return;
+    if (data.worldKind && G.world.kind !== data.worldKind) return;
+    if (data.worldKind === 'dungeon' && data.depth != null && G.world.depth !== data.depth) return;
+    if (G.world.loot.some(l => l.lootId && l.lootId === data.lootId)) return;
+
+    const g = new GroundItem(data.x, data.y, data.kind, {
+      item: data.item,
+      amount: data.amount,
+      lootId: data.lootId,
+      droppedBy: data.droppedBy,
+    });
+    g.t = 0.4;
+    g.vx = 0; g.vy = 0; g.vz = 0;
+    G.world.addLoot(g);
+    if (data.droppedBy) {
+      UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.droppedBy)}</b> dropped <span style="color:${g.color}">${g.label}</span>`, '#a8977c');
+    }
+  });
+
+  net.on('game_loot_pickup', (data) => {
+    if (!G.world || !G.world.loot) return;
+    const idx = G.world.loot.findIndex(l => l.lootId && l.lootId === data.lootId);
+    if (idx !== -1) {
+      const g = G.world.loot[idx];
+      G.world.loot.splice(idx, 1);
+      if (G.player && G.player.lootTarget === g) {
+        G.player.lootTarget = null;
+      }
+      sparkle(g.x, g.y, 16, g.color || '#ffd34a', 12, 0.4);
+      if (data.pickerName && data.pickerId !== net.myId) {
+        UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.pickerName)}</b> picked up <span style="color:${g.color}">${g.label}</span>`, '#a8977c');
+      }
+    }
+  });
+
+  net.on('game_ground_loot_sync', (data) => {
+    if (!G.world || !G.world.loot) return;
+    for (const item of data.loot || []) {
+      if (item.worldKind && G.world.kind !== item.worldKind) continue;
+      if (item.worldKind === 'dungeon' && item.depth != null && G.world.depth !== item.depth) continue;
+      if (G.world.loot.some(l => l.lootId && l.lootId === item.lootId)) continue;
+      const g = new GroundItem(item.x, item.y, item.kind, {
+        item: item.item,
+        amount: item.amount,
+        lootId: item.lootId,
+        droppedBy: item.droppedBy,
+      });
+      g.t = 0.4;
+      g.vx = 0; g.vy = 0; g.vz = 0;
+      G.world.addLoot(g);
+    }
+  });
+
+  net.on('game_loot_pickup_reject', (data) => {
+    if (G.char && G.char.bag) {
+      const idx = G.char.bag.findIndex(b => b && b._lootId === data.lootId);
+      if (idx !== -1) {
+        G.char.bag[idx] = null;
+        if (G.player) G.player.recompute();
+        UI.refresh();
+        UI.log('Someone else already grabbed that item!', '#ff8080');
+      }
+    }
+  });
+}
+
 export const game = {
   // ------------------------------------------------------------ characters
+  // Start Single Player directly without connecting to lobby or multiplayer server
+  async startSinglePlayer(charInfo, fresh = false) {
+    if (net && (net.connected || net.ws || net.simulated)) {
+      net.disconnect();
+    }
+    G.room = null;
+    G.remotePlayers = null;
+    const classId = charInfo.classId;
+    await this.loadClassPack(classId);
+    const c = fresh ? newCharData(classId, charInfo.name) : migrate(charInfo);
+    G.selectedChar = c;
+    this.startChar(c, fresh, null);
+  },
+
+  // Enter the Diablo II Battle.net lobby instead of immediately going solo
+  async selectAndEnterLobby(charInfo, fresh = false, onBack = () => {}) {
+    const classId = charInfo.classId;
+    await this.loadClassPack(classId);
+    const c = fresh ? newCharData(classId, charInfo.name) : migrate(charInfo);
+    G.selectedChar = c;
+    openLobby(c, onBack);
+  },
+
+  startMultiplayerGame(c, room) {
+    G.room = room;
+    G.remotePlayers = new Map();
+    attachNetListeners();
+
+    // Preserve the permanent town seed for the room
+    const townSeed = room.townSeed || room.seed;
+    if (townSeed) {
+      G.room.townSeed = townSeed;
+      c.townSeed = townSeed;
+    }
+
+    if (room.depth > 0) {
+      G.room.depth = room.depth;
+    }
+    if (room.dungeonSeed) {
+      G.room.dungeonSeed = room.dungeonSeed;
+    }
+
+    this.startChar(c, false, room);
+
+    // Spawn other players already in the room
+    if (room.players && G.world) {
+      for (const p of room.players) {
+        if (p.id !== net.myId && !G.remotePlayers.has(p.id)) {
+          const rp = new RemotePlayer(p);
+          const [sx, sy] = G.world.map ? (G.world.map.randomNear(G.player.x, G.player.y, 2) || [G.player.x + 1, G.player.y + 1]) : [G.player.x + 1, G.player.y + 1];
+          rp.x = sx; rp.y = sy;
+          rp.targetX = sx; rp.targetY = sy;
+          G.world.add(rp);
+          G.remotePlayers.set(p.id, rp);
+        }
+      }
+    }
+  },
+
   // async: the class's art pack (if it has one) loads first, because it names the class's catalog items
   async newChar(classId, name) {
     await this.loadClassPack(classId);
@@ -186,7 +649,7 @@ export const game = {
     setClassItems(classId, meta);
   },
 
-  startChar(c, fresh) {
+  startChar(c, fresh, room = null) {
     hideScreen();
     if (Auto.on) Auto.toggle(false);
     G.char = c;
@@ -199,10 +662,16 @@ export const game = {
     p.hp = p.maxHp; p.mana = p.maxMana;
     G.mode = 'game';
     HUD.show(true);
+    if (room) {
+      GameChat.init();
+      GameChat.show();
+    } else {
+      GameChat.hide();
+    }
     if (G.touch) TouchUI.show(true);
     UI.refresh();
     Vendor.restock();
-    this.enterTown();
+    this.enterTown(true);
     if (fresh) {
       setTimeout(() => {
         UI.centerMsg('HERRINGTON HOLLOW', 'The last town above the abyss', 3.5);
@@ -221,17 +690,49 @@ export const game = {
     saveT = 0;
   },
 
-  quitToTitle() {
+  quitToTitle(toLobby = !!G.room) {
     if (Auto.on) Auto.toggle(false);
+    if (G.room) {
+      net.leaveRoom();
+      net.disconnect();
+      G.room = null;
+      if (G.remotePlayers) {
+        for (const rp of G.remotePlayers.values()) rp.destroySummons();
+      }
+      G.remotePlayers = null;
+    }
     this.autosave();
+    const c = G.char;
     UI.closeAll();
     G.world = null; G.player = null; G.char = null;
     setClassItems(null);
-    HUD.show(false); TouchUI.show(false);
-    G.mode = 'title';
+    HUD.show(false); TouchUI.show(false); GameChat.hide();
     clearVfx();
     stopMusic(); stopAmbience();
-    titleScreen();
+    if (toLobby && c) {
+      this.selectAndEnterLobby(c, false, () => titleScreen());
+    } else {
+      G.mode = 'title';
+      titleScreen();
+    }
+  },
+
+  isDungeonAuthority(depth) {
+    if (!G.room || !G.world || G.world.kind !== 'dungeon' || G.world.depth !== depth) return false;
+    const myId = net.myId;
+    if (!myId) return true;
+    const hostId = G.room.hostId || G.room.players?.[0]?.id;
+    if (hostId === myId) return true;
+    let lowestId = myId;
+    if (G.remotePlayers) {
+      for (const [id, rp] of G.remotePlayers.entries()) {
+        const st = rp._lastState;
+        if (st && st.worldKind === 'dungeon' && st.depth === depth) {
+          if (id < lowestId) lowestId = id;
+        }
+      }
+    }
+    return lowestId === myId;
   },
 
   // ------------------------------------------------------------ worlds
@@ -249,11 +750,30 @@ export const game = {
     p.channel = null; p.path = null; p.moveTarget = null; p.attackTarget = null; p.interact = null; p.lootTarget = null;
     p.status = {}; p.dead = false; p.kbx = p.kby = 0; p.castLock = 0;
     world.player = p;
+    world._generatingDungeon = false;
     world.add(p);
     for (const s of keep) {
       const [x, y] = world.map.randomNear(p.x, p.y, 1.5);
       s.x = x; s.y = y; s.world = world; s.aggro = null; s.foe = null; s.nav = null; s.fol = null;
       world.add(s);
+    }
+    if (G.remotePlayers) {
+      for (const rp of G.remotePlayers.values()) {
+        rp.destroySummons();
+        rp.destroySig();
+        const rpState = rp._lastState;
+        const remoteKind = rpState?.worldKind || 'town';
+        const sameWorld = (!rpState && world.kind === 'town') || (rpState && remoteKind === world.kind && (world.kind !== 'dungeon' || rpState.depth === world.depth));
+        if (sameWorld) {
+          const rx = (rpState && typeof rpState.x === 'number') ? rpState.x : (world.map.randomNear(p.x, p.y, 1.8)?.[0] || p.x + 1);
+          const ry = (rpState && typeof rpState.y === 'number') ? rpState.y : (world.map.randomNear(p.x, p.y, 1.8)?.[1] || p.y + 1);
+          rp.x = rx; rp.y = ry; rp.targetX = rx; rp.targetY = ry;
+          rp.world = world;
+          world.add(rp);
+        } else {
+          rp.world = null;
+        }
+      }
     }
     G.world = world;
     Cine.abort(); // a cut scene belongs to the world it played in
@@ -264,20 +784,30 @@ export const game = {
     camera.follow(p.x, p.y, 0, true);
     world.map.reveal(p.x, p.y, 12);
     preloadBarFx(p, SKILLS);
+    if (G.room && net.connected) {
+      net.sendLootRequest(world.kind, world.depth || 0);
+    }
   },
 
-  enterTown() {
+  enterTown(fromNetwork = false) {
     const old = G.world;
     const c = G.char;
     const tileset = biomeTileSet(TOWN_BIOME);
     keepTileSets(null); // the last dungeon's recoloured set: rebuilt behind the loading screen if we go back
     if (!townTiles) townTiles = makeTownTiles();
     // every hero has a town of their own: the layout is rolled from c.townSeed
+    if (G.room) {
+      const townSeed = G.room.townSeed || G.room.seed;
+      if (townSeed) {
+        G.room.townSeed = townSeed;
+        c.townSeed = townSeed;
+      }
+    }
     if (!townCache || townCache.seed !== c.townSeed) townCache = generateTown(tileset, c.townSeed);
     const t = townCache;
     t.map.seen.fill(0);
     const world = new World('town', { map: t.map, tileset, biome: TOWN_BIOME, depth: 0, townTiles, buildings: t.buildings, props: t.props, wallHangings: t.wallHangings });
-    world.raining = rollTownWeather();
+    world.raining = G.room ? ((G.room.seed % 4) === 0) : rollTownWeather();
     world.npcs = t.npcs.map((n) => ({ vendor: n.vendor, x: n.x, y: n.y, reach: 1.8, flip: n.flip, use: () => Vendor.open(n.vendor.id) }));
     // the storage chest, beside the well
     {
@@ -289,18 +819,21 @@ export const game = {
       if (!t.map.walkable(rx, ry) || Math.hypot(rx - x, ry - y) < 1.5) [rx, ry] = t.map.randomNear(t.start[0] - 1, t.start[1], 2.5);
       world.npcs.push({ stash: true, reliquary: true, name: 'The Reliquary', x: rx, y: ry, reach: 1.6, flip: false, use: () => G.ui.reliquary.open() });
     }
-    c.townVisitCount = (c.townVisitCount || 0) + 1;
+    const visitSeed = G.room ? (G.room.seed >>> 0) : ((c.townVisitCount = (c.townVisitCount || 0) + 1));
     offerCommissions(c); // Town Commissions (game/commissions.js)
     // the townsfolk, visiting adventurers, little set pieces and (about one visit in four) a special event
-    const life = startTownLife(world, t, c, c.townVisitCount);
+    const life = startTownLife(world, t, c, visitSeed);
     void preloadTownSheets(life.agents.map((a) => a.townsfolkSpriteId));
     world.portals = [{
-      x: t.portal.x, y: t.portal.y, active: true, color: '#ff5020', reach: 1.7,
-      get label() { return `Portal — Depth ${G.char.depth}`; },
+      x: t.portal.x, y: t.portal.y, active: true, color: '#ff5020', reach: 2.2,
+      get label() {
+        const d = (G.room && G.room.depth != null) ? G.room.depth : G.char.depth;
+        return `Portal — Depth ${d || 1}`;
+      },
       use: () => this.confirmDungeon(),
     }];
     // THE ETERNAL BREACH's purple portal (game.confirmBreach, docs/ETERNAL_BREACH.md)
-    if (t.breach) world.portals.push({ x: t.breach.x, y: t.breach.y, active: true, breach: true, color: '#a040ff', reach: 1.7, label: 'THE ETERNAL BREACH', use: () => this.confirmBreach() });
+    if (t.breach) world.portals.push({ x: t.breach.x, y: t.breach.y, active: true, breach: true, color: '#a040ff', reach: 2.2, label: 'THE ETERNAL BREACH', use: () => this.confirmBreach() });
     // the hero steps out of the portal, a little way down its road toward the square
     const P = t.portal, C = t.center, l = Math.hypot(C.x - P.x, C.y - P.y) || 1;
     let arrive = [P.x + ((C.x - P.x) / l) * 3.2, P.y + ((C.y - P.y) / l) * 3.2];
@@ -327,13 +860,81 @@ export const game = {
     this.autosave();
   },
 
+  getPlayersAwayFromPortal(portal) {
+    if (!G.room || !net.connected) return [];
+    if (!portal) return [];
+    const maxDist = Math.max(portal.reach || 2.2, 3.0);
+    const px = portal.x, py = portal.y;
+    const away = [];
+
+    // Check local player
+    if (G.player && dist(G.player.x, G.player.y, px, py) > maxDist) {
+      away.push(G.char?.name || G.player.name || 'You');
+    }
+
+    // Check room roster
+    const checked = new Set();
+    const roomPlayers = net.currentRoom?.players || G.room?.players || [];
+    for (const p of roomPlayers) {
+      if (p.id === net.myId) continue;
+      checked.add(p.id);
+      const rp = G.remotePlayers?.get(p.id);
+      if (!rp) {
+        away.push(p.name || 'Party Member');
+      } else if (dist(rp.x, rp.y, px, py) > maxDist) {
+        away.push(rp.name || p.name || 'Party Member');
+      }
+    }
+
+    // Check active remote players in G.remotePlayers
+    if (G.remotePlayers) {
+      for (const [id, rp] of G.remotePlayers.entries()) {
+        if (checked.has(id)) continue;
+        if (dist(rp.x, rp.y, px, py) > maxDist) {
+          away.push(rp.name || 'Party Member');
+        }
+      }
+    }
+
+    return [...new Set(away)];
+  },
+
+  getSharedRoomBiome(room, depth, fallbackBiomeId = null) {
+    if (depth === FINAL_DEPTH) return BIOME_BY_ID.throne;
+    if (room && room.biome && room.biome !== 'town' && BIOME_BY_ID[room.biome]) {
+      return BIOME_BY_ID[room.biome];
+    }
+    if (room) {
+      const pool = BIOMES.filter((b) => !b.overworld && !b.beta && b.id !== 'throne');
+      const s = room.seed || room.townSeed || 1;
+      const idx = Math.abs(((s * 31 + depth * 7919) ^ 0x5bd1e995) | 0);
+      return pool[idx % pool.length] || BIOME_BY_ID.catacombs;
+    }
+    return BIOME_BY_ID[fallbackBiomeId] || BIOME_BY_ID.catacombs;
+  },
+
+  getSharedRoomDungeonSeed(room, depth) {
+    if (room && room.dungeonSeed && room.depth === depth) {
+      return room.dungeonSeed;
+    }
+    const s = room?.seed || room?.townSeed || 1;
+    return (((s * 31 + depth * 7919) ^ 0x41c64e6d) >>> 0) || 1234567;
+  },
+
   confirmDungeon() {
+    const portal = G.world?.portals?.find((p) => !p.breach) || G.world?.portals?.[0];
     const c = G.char;
-    const biome = BIOME_BY_ID[c.depth === FINAL_DEPTH ? 'throne' : c.nextBiome] || BIOME_BY_ID.catacombs;
+    const depth = (G.room && G.room.depth != null) ? G.room.depth : c.depth;
+    const biome = this.getSharedRoomBiome(G.room, depth, c.nextBiome);
     UI.dialog({
-      title: `Depth ${c.depth}`,
+      title: `Depth ${depth}`,
       html: `<p>The portal hums. Beyond lies <b style="color:#ffb070">${escapeHtml(biome.name)}</b>.</p><p class="dim">${biome.id === 'sea_of_sand' ? 'Follow the cliff maze and clear every marked scenario area to open the exit.' : biome.id === 'mountainside' ? 'Climb the switchback trail to the summit and defeat its Warden. Ledges a hop high can be climbed; taller cliffs cannot.' : biome.id === 'skyship' ? "Step out onto the heroes' airship. Hold the deck against the Air Pirates' boarding waves, their captains and their flagship; victory turns the gate into the exit." : biome.id === 'dark_forest' ? 'Find your way through the woods and labyrinths to the Heart of the Forest. Its trial opens the way on; the glades along the trails hold trials of their own, and their rewards.' : biome.tower ? 'Climb the spiral stair to the roof. Three waves of bosses hold it, and then their master comes on an airship.' : biome.cave ? 'Follow the passages and caverns to the underground lake. At the foot of its waterfall a passage climbs a long, spiralling shaft to the top of the falls, where its masters wait.' : biome.overworld ? 'Activate the scenario shrine and complete its trial to open the exit.' : 'Find the exit. It is sealed until its guardian is slain.'}${c.depth === FINAL_DEPTH ? '<br><b style="color:#ff4020">Demon Lord Velscour awaits.</b>' : !biome.overworld && isRaidDepth(c.depth) ? '<br><b style="color:#ff6030">A BOSS ROOM lies at the end of this depth.</b>' : ''}</p>`,
-      buttons: [{ label: 'Not yet' }, { label: 'Enter', cls: 'red', fn: () => this.enterDungeon() }],
+      buttons: [
+        { label: 'Not yet' },
+        { label: 'Enter', cls: 'red', fn: () => {
+          this.enterDungeon();
+        } },
+      ],
     });
   },
 
@@ -460,12 +1061,27 @@ export const game = {
     return Promise.resolve();
   },
 
-  enterDungeon() {
+  enterDungeon(fromNetwork = false) {
+    if (this._enteringDungeon) return;
+    this._enteringDungeon = true;
     const c = G.char;
-    const depth = c.depth;
+    const depth = (G.room && G.room.depth != null) ? G.room.depth : c.depth;
+    c.depth = depth;
     if (depth !== FINAL_DEPTH && (!c.nextBiome || c.nextBiome === 'throne')) c.nextBiome = drawBiome(c, depth);
-    const biome = BIOME_BY_ID[depth === FINAL_DEPTH ? 'throne' : c.nextBiome] || BIOME_BY_ID.catacombs;
-    const mix = mixPartner(biome); // a like-coloured biome whose tiles this level borrows, or null
+    const biome = this.getSharedRoomBiome(G.room, depth, c.nextBiome);
+    let dungeonSeed = G.room ? this.getSharedRoomDungeonSeed(G.room, depth) : (Math.floor(Math.random() * 1e9) + 1);
+    if (G.room) {
+      const isNew = (!G.room.dungeonSeed || G.room.depth !== depth || G.room.biome !== biome.id);
+      G.room.dungeonSeed = dungeonSeed;
+      G.room.depth = depth;
+      G.room.biome = biome.id;
+      if (net.connected && !fromNetwork && isNew) {
+        const mix = mixPartner(biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next());
+        G.room.mixId = mix ? mix.id : null;
+        net.sendRoomDepthUpdate(depth, biome.id, dungeonSeed, G.room.mixId);
+      }
+    }
+    const mix = G.room ? (G.room.mixId ? BIOME_BY_ID[G.room.mixId] : (dungeonSeed ? mixPartner(biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next()) : null)) : mixPartner(biome);
     const loading = document.getElementById('loading');
     document.getElementById('loading-text').textContent = `Descending to Depth ${depth} — ${biome.name}…`;
     loading.classList.remove('hidden');
@@ -480,29 +1096,37 @@ export const game = {
         await loadArtFor([...w.creatures.map((m) => m.art), ...(w.looks ? w.looks.ids() : [])], true).catch((e) => console.warn(e));
         await warmLevelArt(w);
         releaseLevelArt(biome);
-      } finally { loading.classList.add('hidden'); }
+      } finally {
+        loading.classList.add('hidden');
+        this._enteringDungeon = false;
+      }
     }, 40);
   },
 
   buildDungeon(depth, biome, mix = null) {
     const c = G.char;
+    c.depth = depth;
+    if (G.room) G.room.depth = depth;
     if (biome.tower && !tower3dReady()) { UI.log('Clouds hide the Serpentine Tower today (three.js could not be loaded).', '#a0a0a0'); biome = BIOME_BY_ID.overworld; }
     if (biome.cave && !cave3dReady()) { UI.log("A rockfall seals the Depth's Edge Caverns today (three.js could not be loaded).", '#a0a0a0'); biome = BIOME_BY_ID.overworld; }
     const old = G.world;
     const forest = biome.id === 'dark_forest';
-    const tileset = forest ? biomeTileSet(biome) : biome.overworld ? biomeTileSet(TOWN_BIOME) : mix ? mixedTileSet(biome, mix, Math.random() < 0.5) : biomeTileSet(biome);
-    keepTileSets(tileset);
     c.seaOfSandRuns ||= {}; c.darkForestRuns ||= {};
     // the two overworlds that save their progress per depth rebuild the same map after a town trip
     const kept = biome.id === 'sea_of_sand' ? c.seaOfSandRuns[depth] : forest ? c.darkForestRuns[depth] : null;
-    const seed = kept ? kept.seed : (Math.random() * 1e9) | 0;
+    const seed = (G.room && G.room.dungeonSeed) ? G.room.dungeonSeed : (kept ? kept.seed : (G.room?.seed ? (G.room.seed + depth * 7919) | 0 : (Math.random() * 1e9) | 0));
+    const tileset = forest ? biomeTileSet(biome) : biome.overworld ? biomeTileSet(TOWN_BIOME) : mix ? mixedTileSet(biome, mix, G.room ? ((seed % 2) === 0) : Math.random() < 0.5) : biomeTileSet(biome);
+    keepTileSets(tileset);
     const sky = biome.id === 'skyship';
+    const towerVar = G.room ? (seed % 3) : G.towerVariant;
+    const caveVar = G.room ? (seed % CAVE_VARIANTS.length) : (G.caveVariant ?? G.caveNext);
     const gen = forest ? generateDarkForest(depth, biome, tileset, seed) : biome.id === 'mountainside' ? generateMountain(depth, biome, seed)
       : sky ? generateSkyship(depth, biome, seed, castle3dState())
-      : biome.tower ? generateTower(depth, biome, seed, G.towerVariant)
-      : biome.cave ? generateCaverns(depth, biome, seed, G.caveVariant ?? G.caveNext)
+      : biome.tower ? generateTower(depth, biome, seed, towerVar)
+      : biome.cave ? generateCaverns(depth, biome, seed, caveVar)
       : biome.overworld ? generateOverworld(depth, biome, seed) : generateDungeon(depth, biome, tileset, seed);
     const world = new World('dungeon', { map: gen.map, tileset, biome, depth, props: gen.props, torches: gen.torches, wallHangings: gen.wallHangings, looks: gen.looks, townTiles: gen.townTiles || null, buildings: gen.buildings || [] });
+    world._generatingDungeon = true;
     if (gen.layoutId) { world.layoutId = gen.layoutId; world.layoutName = gen.layoutName; }
     world.rooms = gen.rooms || [];
     world.chests = gen.chests.map((ch) => ({
@@ -529,32 +1153,43 @@ export const game = {
     // monsters
     const lvl = depthLevel(depth);
     world.practice = biome.id === 'throne' && depth !== FINAL_DEPTH; // "final boss" from the skull: Velscour at this depth
-    for (const s of greedPacks(gen.spawns, greedOf(c))) { // the Greed lever: bigger packs, champion leaders (game/greed.js)
+    const monRng = G.room ? new RNG(seed ^ 0x5bf03641) : null;
+    const rndVal = () => (monRng ? monRng.next() : Math.random());
+    let monsterSeq = 1;
+    const spawns = greedPacks(gen.spawns, G.room ? 0 : greedOf(c)); // the Greed lever: bigger packs, champion leaders (game/greed.js)
+    for (let si = 0; si < spawns.length; si++) {
+      const s = spawns[si];
       if (s.rank === 'raid') {
         const m = makeRaidBoss(world, gen.raid, depth, lvl + 3);
+        m.netId = `raid_${si}`;
+        m.idx = monsterSeq++;
         world.add(m);
         world.boss = m;
         world.raid = m.raid;
         continue;
       }
       if (s.rank === 'boss') {
-        const m = makeMonster(world, s.arch, biome, lvl + 2, 'boss', s.x, s.y, 0, s.look);
+        const m = makeMonster(world, s.arch, biome, lvl + 2, 'boss', s.x, s.y, 0, s.look, rndVal);
+        m.netId = `boss_${si}`;
+        m.idx = monsterSeq++;
         world.add(m);
         world.boss = m;
         if (m.isVelscour) setupVelscour(world, m, gen); // his five-phase last stand (game/velscour.js)
         continue;
       }
       const n = s.n;
-      const variant = Math.random() < Math.min(0.5, 0.2 + depth * 0.005) ? 1 : 0;
-      const trait = rollTrait(world, depth) || (s.trait ? rollTrait(world, depth, true) : null);
+      const variant = rndVal() < Math.min(0.5, 0.2 + depth * 0.005) ? 1 : 0;
+      const trait = rollTrait(world, depth, false, rndVal) || (s.trait ? rollTrait(world, depth, true, rndVal) : null);
       for (let i = 0; i < n; i++) {
-        const [x, y] = i === 0 ? [s.x, s.y] : gen.map.randomNear(s.x, s.y, 1.6);
+        const [x, y] = i === 0 ? [s.x, s.y] : gen.map.randomNear(s.x, s.y, 1.6, rndVal);
         const rank = s.rank === 'unique' ? (i === 0 ? 'unique' : 'normal') : s.rank;
-        const m = makeMonster(world, s.arch, biome, lvl + (rank === 'normal' ? 0 : 1), rank, x, y, variant, s.look);
+        const m = makeMonster(world, s.arch, biome, lvl + (rank === 'normal' ? 0 : 1), rank, x, y, variant, s.look, rndVal);
+        m.netId = `m_${si}_${i}`;
+        m.idx = monsterSeq++;
         if (s.rank === 'unique' && i > 0) { m.affixes = []; m.name = m.name + ' Minion'; }
         // tanks and bullet-hell casters lead their pack; hunters, phasers and burrowers come as a pack
         if (trait && (i === 0 || ['hunter', 'phaser', 'burrower'].includes(trait))) applyTrait(m, trait);
-        if (s.champ && i === 0) makeElite(m, 'champion', depth, world);
+        if (s.champ && i === 0) makeElite(m, 'champion', depth, world, rndVal);
         world.add(m);
       }
     }
@@ -563,6 +1198,7 @@ export const game = {
     setupCommissions(world, gen.start); // this depth's Town Commission objectives (game/commissions.js)
     greedWorld(world, c); // the Greed lever and its Hoard multiply the omen's loot dials
     tickBlessing(c);
+    world._generatingDungeon = false;
     world.onBossAwake = (m) => {
       UI.centerMsg(m.name, m.isVelscour ? 'The Demon Lord rises' : m.raid ? `${m.title}${m.raid.mods.length ? ' · ' + m.raid.modText() : ''}` : 'Guardian of the Exit', 3);
       sfx('boss');
@@ -687,8 +1323,15 @@ export const game = {
   useTownPortal() {
     UI.dialog({
       title: 'Return to Town?',
-      html: `<p>You will return to Herrington Hollow. ${G.world?.breach ? `Floor ${G.world.breach.floor} of the Eternal Breach` : `Depth ${G.char.depth}`} will be re-forged when you come back.</p>`,
-      buttons: [{ label: 'Stay' }, { label: 'Return', fn: () => { sfx('portal'); this.enterTown(); } }],
+      html: `<p>You will return to Herrington Hollow. ${G.world?.breach ? `Floor ${G.world.breach.floor} of the Eternal Breach` : `Depth ${G.world?.depth || G.char.depth}`} will be re-forged when you come back.</p>`,
+      buttons: [{ label: 'Stay' }, { label: 'Return', fn: () => {
+        sfx('portal');
+        if (G.world && G.world.depth) {
+          G.char.depth = G.world.depth;
+          if (G.room) G.room.depth = G.world.depth;
+        }
+        this.enterTown();
+      } }],
     });
   },
 
@@ -708,6 +1351,37 @@ export const game = {
   portalChoice(world, opts = {}) {
     if (this.pick) return;
     const c = G.char, next = world.depth + 1;
+
+    // When one player makes a selection at the exit portal, make it the default choice so other players enter the same map
+    if (G.room && G.room.depth === next && G.room.biome && G.room.dungeonSeed) {
+      const chosenBiome = BIOME_BY_ID[G.room.biome] || BIOME_BY_ID.catacombs;
+      const go = (town) => {
+        this.pick = null;
+        c.depth = next;
+        c.nextBiome = chosenBiome.id;
+        takeBiome(c, chosenBiome.id);
+        if (Auto.on) Auto.transitT = 3;
+        if (town) {
+          if (opts.auto) UI.log('Auto-play heads back to town to trade.', '#8fe0ff');
+          sfx('portal');
+          this.enterTown();
+        } else {
+          this.enterDungeon();
+        }
+      };
+      UI.dialog({
+        title: `Depth ${world.depth} Cleared`,
+        html: `<p>A party member has chosen the way forward to Depth ${next}: <b style="color:#ffb070">${escapeHtml(chosenBiome.name)}</b>.</p><p class="dim">Descend to join the party or return to town.</p>`,
+        closable: false,
+        cls: 'portal-choice',
+        buttons: [
+          { label: 'Return to Town', fn: () => go(true) },
+          { label: `Descend to Depth ${next}`, cls: 'red', fn: () => go(false) },
+        ],
+      });
+      return;
+    }
+
     const ids = biomeChoices(c, next, 3);
     // a Town Commission waiting for a biome: its portal turns up among the three more often (game/commissions.js)
     const want = wantedBiomes(c).filter((id) => BIOME_BY_ID[id] && !ids.includes(id) && id !== c.lastBiome);
@@ -727,10 +1401,27 @@ export const game = {
       this.pick = null;
       const cd = cards[sel];
       c.depth = next; c.nextBiome = cd.id; takeBiome(c, cd.id);
+      let dungeonSeed = Math.floor(Math.random() * 1e9) + 1;
+      const mix = mixPartner(cd.biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next());
+      const mixId = mix ? mix.id : null;
+      if (G.room) {
+        G.room.depth = next;
+        G.room.biome = cd.id;
+        G.room.dungeonSeed = dungeonSeed;
+        G.room.mixId = mixId;
+        if (net.connected) {
+          net.sendRoomDepthUpdate(next, cd.id, dungeonSeed, mixId);
+        }
+      }
       if (cd.omen !== undefined) c.nextOmen = cd.omen || 'none'; else delete c.nextOmen;
       if (Auto.on) Auto.transitT = 3;
-      if (town) { if (opts.auto) UI.log('Auto-play heads back to town to trade.', '#8fe0ff'); sfx('portal'); this.enterTown(); }
-      else this.enterDungeon();
+      if (town) {
+        if (opts.auto) UI.log('Auto-play heads back to town to trade.', '#8fe0ff');
+        sfx('portal');
+        this.enterTown();
+      } else {
+        this.enterDungeon();
+      }
     };
     const d = UI.dialog({
       title: `Depth ${world.depth} Cleared`, html, closable: false, cls: 'portal-choice',
@@ -793,8 +1484,13 @@ export const game = {
     setTimeout(() => {
       deathScreen(depth, killer, () => {
         // back to the start of this five-depth block (BOSS ROOMs are checkpoints), a Defiance stack stronger
-        c.depth = blockStart(depth);
-        c.nextBiome = drawBiome(c, c.depth);
+        if (G.room) {
+          c.depth = G.room.depth || depth;
+          c.nextBiome = G.room.biome || c.nextBiome;
+        } else {
+          c.depth = blockStart(depth);
+          c.nextBiome = drawBiome(c, c.depth);
+        }
         const p = G.player;
         p.dead = false;
         p.buffs = [];
@@ -813,6 +1509,17 @@ export const game = {
 
   /** The purple portal: pick a floor (any up to one past the best beaten) and step in. */
   confirmBreach(floor) {
+    const portal = G.world?.portals?.find((p) => p.breach);
+    const away = this.getPlayersAwayFromPortal(portal);
+    if (away.length > 0) {
+      sfx('error');
+      UI.dialog({
+        title: 'Party Not Ready',
+        html: `<p>All players must gather at the breach portal to enter together.</p><p style="color:#ffd860;margin-top:10px;">Waiting for: <b>${away.map(escapeHtml).join(', ')}</b></p>`,
+        buttons: [{ label: 'OK' }],
+      });
+      return;
+    }
     const c = G.char, top = this.breachOpen(), pick = Math.min(top, Math.max(1, floor || top));
     const opt = (n) => {
       const L = breachLevel(n), won = c.breach?.cleared?.[n] || 0;
@@ -955,8 +1662,7 @@ export const game = {
       if (input.consume('KeyK') || input.consume('KeyT')) toggleTree();
       if (input.consume('KeyB')) toggleBook();
       if (input.consume('KeyQ')) toggleQuest();
-      if (input.consume('KeyH')) helpDialog();
-      if (input.consume('KeyP')) Auto.toggle();
+      if (input.consume('KeyP') && (input.alt || input.down('AltLeft') || input.down('AltRight'))) Auto.toggle();
       if (input.consume('KeyG')) unleashMadness();
       if (input.consume('KeyF')) toggleSmite();
       if (input.consume('Tab') || input.consume('KeyM')) G.showAutomap = !G.showAutomap;
@@ -992,13 +1698,142 @@ export const game = {
       if (G.world !== w) return;
       if (w.overworldScenario) w.overworldScenario.update(dt);
       if (w.map.c3struct && !w.map.sky) castle3dTick(w, dt);
-      ambushTick(w, dt);
+      if (!G.room || this.isDungeonAuthority(w?.depth)) {
+        ambushTick(w, dt);
+      }
       if (w.kind === 'town') townTick(w, dt); else if (!w.sky) happeningsTick(w, dt);
       madnessTick(dt);
       spectateTick(w, dt); // gilded critters, the SMITE reticle (game/spectate.js)
       footsteps(p, w.kind === 'town' ? 'dirt' : STEP_SURFACE[w.biome && w.biome.id] || 'stone');
       Meter.tick(dt);
       if (w.kind === 'dungeon' && G.char) G.char.sealT = (G.char.sealT ?? SEAL_GAP) + dt; // the sealed treasure clock (loot.js)
+      if (G.room && p && !p.dead) {
+        netSyncT += dt;
+        if (netSyncT >= 0.05) {
+          netSyncT = 0;
+          const mySummons = [];
+          if (w && w.creatures) {
+            for (const c of w.creatures) {
+              if (c.summon && c.owner === p && !c.dead) {
+                if (!c.summonId) c.summonId = `${net.myId || 'local'}_s_${Math.random().toString(36).substr(2, 9)}`;
+                mySummons.push({
+                  id: c.summonId,
+                  key: c.summonKey,
+                  name: c.name,
+                  x: Math.round(c.x * 100) / 100,
+                  y: Math.round(c.y * 100) / 100,
+                  vx: Math.round((c.vx || 0) * 100) / 100,
+                  vy: Math.round((c.vy || 0) * 100) / 100,
+                  facing: Math.round((c.facing || 0) * 100) / 100,
+                  moving: !!c.moving,
+                  animT: Math.round((c.animT || 0) * 100) / 100,
+                  attackAnimT: Math.round((c.attackAnimT || 0) * 100) / 100,
+                  lunge: Math.round((c.lunge || 0) * 100) / 100,
+                  flip: !!c.flip,
+                  hp: Math.round(c.hp),
+                  maxHp: Math.round(c.maxHp),
+                  scale: c.scale || 1,
+                  fly: !!c.fly,
+                  static: !!c.static,
+                  alpha: c.alpha !== undefined ? c.alpha : 1,
+                  aura: c.aura || null,
+                  summonEl: c.summonEl || null,
+                  art: c.art || null,
+                  artH: c.artH || null,
+                  artRef: c.artRef || null,
+                  swap: c.swap || null,
+                  sprite: c.sprite || null,
+                  pal: c.pal || null,
+                  px: c.px || null,
+                  classId: c.classId || null,
+                  slime: c.slime ? {
+                    kind: c.slime.kind,
+                    set: c.slime.set,
+                    h: c.slime.h,
+                    mini: !!c.slime.mini,
+                    anim: c.slime.anim,
+                    animT: Math.round((c.slime.animT || 0) * 100) / 100,
+                    z: Math.round((c.slime.z || 0) * 100) / 100,
+                    tilt: Math.round((c.slime.tilt || 0) * 100) / 100,
+                  } : null,
+                });
+              }
+            }
+          }
+          net.sendPlayerState({
+            name: G.char?.name || 'Hero',
+            classId: p.classId,
+            level: G.char?.level || 1,
+            gear: {
+              head: G.char?.equip?.head ? {
+                slot: 'head',
+                type: 'gear',
+                base: G.char.equip.head.base,
+                rarity: G.char.equip.head.rarity ?? 0,
+                ilvl: G.char.equip.head.ilvl ?? 1,
+                look: Array.isArray(G.char.equip.head.look) ? [...G.char.equip.head.look] : null,
+              } : null,
+              body: G.char?.equip?.body ? {
+                slot: 'body',
+                type: 'gear',
+                base: G.char.equip.body.base,
+                rarity: G.char.equip.body.rarity ?? 0,
+                ilvl: G.char.equip.body.ilvl ?? 1,
+                look: Array.isArray(G.char.equip.body.look) ? [...G.char.equip.body.look] : null,
+              } : null,
+            },
+            x: p.x,
+            y: p.y,
+            vx: p.vx || 0,
+            vy: p.vy || 0,
+            facing: p.facing || 0,
+            moving: !!p.moving,
+            animT: p.animT || 0,
+            flip: !!p.flip,
+            hp: Math.round(p.hp),
+            maxHp: Math.round(p.maxHp),
+            mana: Math.round(p.mana),
+            maxMana: Math.round(p.maxMana),
+            summons: mySummons,
+            worldKind: w?.kind || 'town',
+            depth: (w?.kind === 'dungeon' ? w.depth : 0) || 0,
+          });
+        }
+      }
+      if (G.room && w.kind === 'dungeon' && p && !p.dead) {
+        if (this.isDungeonAuthority(w.depth)) {
+          monSyncT += dt;
+          if (monSyncT >= 0.15) {
+            monSyncT = 0;
+            const monSync = [];
+            for (const m of w.creatures) {
+              if (m.team === 'enemy' && !m.dead && (m.awake || dist2(m.x, m.y, p.x, p.y) < 30 * 30)) {
+                monSync.push({
+                  id: m.netId || m.idx,
+                  x: Math.round(m.x * 100) / 100,
+                  y: Math.round(m.y * 100) / 100,
+                  hp: Math.round(m.hp),
+                  f: m.facing ? 1 : 0,
+                  a: m.awake ? 1 : 0,
+                  arch: m.arch,
+                  name: m.name,
+                  isWard: !!m.isWard,
+                  vk: m.vk,
+                  static: !!m.static,
+                  fly: !!m.fly,
+                  maxHp: Math.round(m.maxHp),
+                  lvl: m.level,
+                  rank: m.rank,
+                  color: m.aura || (m.pal ? m.pal.a : null),
+                });
+              }
+            }
+            if (monSync.length > 0) {
+              net.sendMonstersState(monSync, w.depth);
+            }
+          }
+        }
+      }
     } else {
       input.endFrame();
     }
@@ -1027,6 +1862,7 @@ export const game = {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 0.9; ctx.drawImage(automapCanvas, 0, 0); ctx.globalAlpha = 1;
+      drawAutomapPartyRoster(ctx, W, H);
     }
   },
 };

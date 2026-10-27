@@ -1,5 +1,6 @@
 // Damage resolution, status effects, deaths, gore.
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { rand, chance, clamp, angleTo, TAU, mixHex } from '../core/util.js';
 import { camera } from '../core/view.js';
 import { sfx } from '../core/audio.js';
@@ -45,59 +46,63 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
   const fromPlayer = owner && owner.isPlayer;
   if (fromPlayer && !tgt.isPlayer && G.char && G.char.madT > 0) dmg *= 2; // MADNESS (game/mayhem.js)
 
-  if (tgt.isPlayer) {
-    const st = tgt.st;
-    if (!o.dot && st.block > 0 && chance(Math.min(0.6, st.block / 100))) {
-      floatText(tgt.x, tgt.y, 40, 'Blocked', '#c0c8d0', 12);
-      sfx('block');
-      return 0;
-    }
-    if (el === 'phys') {
-      const lvl = (src && src.level) || G.world.depth || 1;
-      dmg *= 1 - st.armor / (st.armor + armorDiv(lvl));
-    }
-    const rk = PLAYER_RES[el];
-    const res = rk ? st.res[rk] : st.res.magic;
-    dmg *= 1 - clamp(res, -100, 75) / 100;
-    dmg *= 1 - clamp(st.reduce || 0, 0, 60) / 100;
-    if (tgt.raidTakenMul) dmg *= tgt.raidTakenMul; // raid mechanics (game/raidsigs.js): sunder stacks
-    if (src && src.curses && src.curses.weaken && src.curses.weaken.t > 0) dmg *= 1 - src.curses.weaken.amt / 100;
-    if (G.godMode) dmg = 0;
-    // thorns
-    if (src && !src.isPlayer && !o.dot && (st.thorns > 0 || st.legendary.thorns) && !src.dead) {
-      const th = st.thorns + (st.legendary.thorns ? dmg * 1.5 : 0);
-      if (th > 0) hit(tgt, src, th, 'phys', { dot: true, silent: false, crit: false, noArc: true });
-    }
-  } else {
-    // monster / summon
-    let res = (tgt.res && tgt.res[el === 'astral' ? 'arcane' : el]) || 0;
-    if (el === 'arcane' || el === 'astral') res *= 0.5;
-    dmg *= 1 - clamp(res, -1, 0.9);
-    if (el === 'holy' && (tgt.undead || tgt.demon)) dmg *= 1.5;
-    const C = tgt.curses;
-    if (C.amp && C.amp.t > 0) dmg *= 1 + C.amp.amt / 100;
-    if (C.mark && C.mark.t > 0) dmg *= 1 + C.mark.amt / 100;
-    if (tgt.status.shred && tgt.status.shred.t > 0) dmg *= 1 + tgt.status.shred.amt;
-    if (tgt.ward !== undefined) dmg *= tgt.ward; // a raid boss behind its warding crystals
-    if (src && src.curses && src.curses.weaken && src.curses.weaken.t > 0 && !fromPlayer) dmg *= 1 - src.curses.weaken.amt / 100;
-    if (tgt.reflect && src && src.isPlayer && !o.dot && !o.force) {
-      // a raid boss's riposte (game/raidsigs.js): the hero's own blow comes back (minions' don't)
-      hit(tgt, owner, Math.min(dmg * 0.4, owner.maxHp * 0.08), el, { force: true, crit: false, noArc: true });
-      floatText(tgt.x, tgt.y, 90, 'RIPOSTE', '#e0f0ff', 13);
-      return 0;
-    }
-    if (fromPlayer && owner.raidDmgMul) dmg *= owner.raidDmgMul;
-    if (fromPlayer) {
-      const st = owner.st;
-      if (tgt.rank === 'boss' && st.bossDmg) dmg *= 1 + st.bossDmg / 100;
-      if (src.isPlayer && !o.dot && o.crit !== false && chance(st.critChance / 100)) {
-        crit = true;
-        dmg *= 1 + st.critDmg / 100;
+  if (!o.force && !o.fromNetwork) {
+    if (tgt.isPlayer) {
+      const st = tgt.st;
+      if (!o.dot && st.block > 0 && chance(Math.min(0.6, st.block / 100))) {
+        floatText(tgt.x, tgt.y, 40, 'Blocked', '#c0c8d0', 12);
+        sfx('block');
+        return 0;
       }
+      if (el === 'phys') {
+        const lvl = (src && src.level) || G.world.depth || 1;
+        dmg *= 1 - st.armor / (st.armor + armorDiv(lvl));
+      }
+      const rk = PLAYER_RES[el];
+      const res = rk ? st.res[rk] : st.res.magic;
+      dmg *= 1 - clamp(res, -100, 75) / 100;
+      dmg *= 1 - clamp(st.reduce || 0, 0, 60) / 100;
+      if (tgt.raidTakenMul) dmg *= tgt.raidTakenMul; // raid mechanics (game/raidsigs.js): sunder stacks
+      if (src && src.curses && src.curses.weaken && src.curses.weaken.t > 0) dmg *= 1 - src.curses.weaken.amt / 100;
+      if (G.godMode) dmg = 0;
+      // thorns
+      if (src && !src.isPlayer && !o.dot && (st.thorns > 0 || st.legendary.thorns) && !src.dead) {
+        const th = st.thorns + (st.legendary.thorns ? dmg * 1.5 : 0);
+        if (th > 0) hit(tgt, src, th, 'phys', { dot: true, silent: false, crit: false, noArc: true });
+      }
+    } else {
+      // monster / summon
+      let res = (tgt.res && tgt.res[el === 'astral' ? 'arcane' : el]) || 0;
+      if (el === 'arcane' || el === 'astral') res *= 0.5;
+      dmg *= 1 - clamp(res, -1, 0.9);
+      if (el === 'holy' && (tgt.undead || tgt.demon)) dmg *= 1.5;
+      const C = tgt.curses;
+      if (C.amp && C.amp.t > 0) dmg *= 1 + C.amp.amt / 100;
+      if (C.mark && C.mark.t > 0) dmg *= 1 + C.mark.amt / 100;
+      if (tgt.status.shred && tgt.status.shred.t > 0) dmg *= 1 + tgt.status.shred.amt;
+      if (tgt.ward !== undefined) dmg *= tgt.ward; // a raid boss behind its warding crystals
+      if (src && src.curses && src.curses.weaken && src.curses.weaken.t > 0 && !fromPlayer) dmg *= 1 - src.curses.weaken.amt / 100;
+      if (tgt.reflect && src && src.isPlayer && !o.dot && !o.force) {
+        // a raid boss's riposte (game/raidsigs.js): the hero's own blow comes back (minions' don't)
+        hit(tgt, owner, Math.min(dmg * 0.4, owner.maxHp * 0.08), el, { force: true, crit: false, noArc: true });
+        floatText(tgt.x, tgt.y, 90, 'RIPOSTE', '#e0f0ff', 13);
+        return 0;
+      }
+      if (fromPlayer && owner && owner.raidDmgMul) dmg *= owner.raidDmgMul;
+      if (fromPlayer && owner && owner.st) {
+        const st = owner.st;
+        if (tgt.rank === 'boss' && st.bossDmg) dmg *= 1 + st.bossDmg / 100;
+        if (src.isPlayer && !o.dot && o.crit !== false && chance(st.critChance / 100)) {
+          crit = true;
+          dmg *= 1 + st.critDmg / 100;
+        }
+      }
+      if (tgt.rank === 'boss' && (o.freeze || o.stun)) { o = { ...o, freeze: false, stun: o.stun && chance(0.15) }; }
     }
-    if (tgt.rank === 'boss' && (o.freeze || o.stun)) { o = { ...o, freeze: false, stun: o.stun && chance(0.15) }; }
+    dmg = tgt.isPlayer && G.godMode ? 0 : Math.max(1, dmg * rand(0.92, 1.08));
+  } else if (o.fromNetwork && o.crit) {
+    crit = true;
   }
-  dmg = tgt.isPlayer && G.godMode ? 0 : Math.max(1, dmg * rand(0.92, 1.08));
   if (tgt.vel) dmg = tgt.vel.absorb(dmg); // Velscour's life gates and damage cap (game/velscour.js)
 
   const byHero = !tgt.isPlayer && tgt.team !== 'player' && (fromPlayer || (src && src.team === 'player'));
@@ -105,6 +110,9 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
   if (byHero && src && src.isPlayer && !o.dot) G.lastHit = tgt; // the HUD's target window
   if (byHero && src && src.isPlayer && o.sk && !o.dot) classHitFx(src, tgt, o.sk, el); // the class's own splash (gfx/classfx.js)
   tgt.hp -= dmg;
+  if (G.room && byHero && !o.fromNetwork && net.connected) {
+    net.sendMonsterHit(tgt.idx || 0, dmg, crit, el, tgt.x, tgt.y, tgt.netId, tgt.hp <= 0, G.world?.kind, G.world?.depth || 0);
+  }
   if (tgt.isPlayer && !o.dot && src && src !== tgt && tgt.st.procs && tgt.st.procs.length) relicProc(tgt, 'hurt', src, dmg);
   tgt.flash = 0.12;
   if (tgt.onDamaged && !o.dot) tgt.onDamaged(src, dmg);

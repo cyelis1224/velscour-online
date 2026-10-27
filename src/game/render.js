@@ -1246,7 +1246,27 @@ export function drawMinimap(world, dt, canvas, big = false) {
     if (m.dead || m === p) continue;
     const d = Math.hypot(m.x - p.x, m.y - p.y);
     if (m.team === 'enemy' && d < 14) dot(m.x, m.y, m.rank === 'boss' ? '#ff8000' : m.rank !== 'normal' ? '#ffb040' : '#ff3030', m.rank === 'boss' ? 4 : 2);
-    else if (m.team === 'player') dot(m.x, m.y, '#40ff60', 1.8);
+    else if (m.isRemotePlayer) {
+      dot(m.x, m.y, '#5a9aff', big ? 5.5 : 3.5);
+      if (big) {
+        const [sx, sy] = toS(m.x, m.y);
+        c.font = 'bold 11px "Cinzel", Georgia, serif';
+        c.fillStyle = '#000000';
+        c.textAlign = 'center';
+        c.fillText(m.name || 'Party', sx + 1, sy - 8);
+        c.fillStyle = '#7ab8ff';
+        c.fillText(m.name || 'Party', sx, sy - 9);
+      }
+    } else if (m.team === 'player') dot(m.x, m.y, '#40ff60', 1.8);
   }
   dot(p.x, p.y, '#ffffff', big ? 5 : 3.2);
+  if (big) {
+    const [sx, sy] = toS(p.x, p.y);
+    c.font = 'bold 11px "Cinzel", Georgia, serif';
+    c.fillStyle = '#000000';
+    c.textAlign = 'center';
+    c.fillText('You', sx + 1, sy - 8);
+    c.fillStyle = '#ffd860';
+    c.fillText('You', sx, sy - 9);
+  }
 }

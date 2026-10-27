@@ -168,7 +168,8 @@ async function boot() {
   };
   loadEnemyArt().then(redrawIcons).then(loadPetArt).then(redrawIcons).catch((e) => console.warn(e));
   // debug helpers for testing in the console
-  window.VELSCOUR = { G, game };
+  window.UI = UI;
+  window.VELSCOUR = { G, game, UI };
 }
 
 boot();

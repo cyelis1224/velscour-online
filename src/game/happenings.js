@@ -99,7 +99,7 @@ export function setupHappenings(world, start, gen) {
   // the portal the hero took showed this depth's omen (game.portalChoice): keep its word
   const c0 = G.char, told = c0 && c0.nextOmen !== undefined ? c0.nextOmen : undefined;
   if (c0) delete c0.nextOmen;
-  if (world.kind !== 'dungeon' || world.raid || gen.raid || depth >= FINAL_DEPTH || world.biome.overworld) return;
+  if (world.kind !== 'dungeon' || world.raid || gen.raid || depth >= FINAL_DEPTH || world.biome.overworld || G.room) return;
   const H = world.happen;
   setupScenario(world, start); // one of the biome's twenty optional set pieces (game/scenarios.js)
   // the omen

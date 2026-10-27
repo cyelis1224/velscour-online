@@ -762,22 +762,25 @@ class Raid {
     const [x, y] = w.map.nudge(A.cx, A.cy, bodyR(m));
     m.x = x; m.y = y; m.nav = null;
     explosionFx(x, y, 2.5, this.tpl.el === 'phys' ? 'fire' : this.tpl.el, 'eruption', { shake: 10 });
-    const n = 3 + (this.depth >= 30 ? 1 : 0) + (this.has('warded') ? 1 : 0);
     this.wards = [];
-    const a0 = rand(TAU);
-    for (let i = 0; i < n; i++) {
-      const a = a0 + (i / n) * TAU;
-      const [wx, wy] = w.map.nudge(A.cx + Math.cos(a) * 6.5, A.cy + Math.sin(a) * 5.5, 0.45);
-      this.wards.push(w.add(this.makeWard(wx, wy)));
-    }
     m.ward = 0.1;
     w.addHazard(new ShieldFx(m, this));
-    this.spawnAdds(this.pi + 1);
     this.gap = 3;
     const next = this.phases[this.pi + 1];
     UI.centerMsg(next.name.toUpperCase(), 'Break the warding crystals!', 3);
     UI.log(`${this.tpl.name} raises warding crystals: it takes 90% less damage until they break.`, '#a0d0ff');
     sfx('roar'); sfx('summon');
+    if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
+    const n = 3 + (this.depth >= 30 ? 1 : 0) + (this.has('warded') ? 1 : 0);
+    const a0 = rand(TAU);
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * TAU;
+      const [wx, wy] = w.map.nudge(A.cx + Math.cos(a) * 6.5, A.cy + Math.sin(a) * 5.5, 0.45);
+      const ward = this.makeWard(wx, wy);
+      ward.netId = `raid_ward_${this.pi}_${i}`;
+      this.wards.push(w.add(ward));
+    }
+    this.spawnAdds(this.pi + 1);
   }
   interTick(dt) {
     const m = this.m, I = this.inter;
@@ -833,6 +836,7 @@ class Raid {
 
   spawnAdds(wave = 1) {
     const m = this.m, w = m.world, A = this.arena, p = w.player;
+    if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
     const archs = this.tpl.adds.filter((a) => ARCH[a]);
     // fodder: monsters take seconds each now, so a wave is a few light ones (35% life), not ten that pile up
     const n = Math.min(7, 1 + wave + Math.floor(this.depth / 40) + (this.has('swarming') ? 2 : 0));
@@ -843,6 +847,7 @@ class Raid {
       const champ = chance(0.12 + this.depth * 0.003);
       const c = makeMonster(w, pick(archs), w.biome, m.level - 3 + (champ ? 1 : 0), champ ? 'champion' : 'normal', x, y);
       c.awake = true; c.aggro = p; c.raidAdd = true; c.maxHp *= 0.35; c.hp = c.maxHp;
+      c.netId = `raid_add_${this.pi}_${wave}_${i}`;
       if (this.has('volatile')) c.onDeath = () => w.addHazard(new Delayed({ world: w, src: m, x: c.x, y: c.y, r: 1.5, delay: 0.8, fx: 'explosion', el: this.tpl.el === 'phys' ? 'fire' : this.tpl.el, dmg: [c.dmg * 1.2, c.dmg * 1.6] }));
       w.add(c);
       addEffect(new Ring(x, y, 0.1, 1.2, 0.5, this.E.glow, 3));

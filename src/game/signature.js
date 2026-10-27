@@ -27,13 +27,14 @@ import gunner from './sigs/gunner.js';
 
 export const SIGNATURES = { paladin, ranger, wizard, necromancer, barbarian, dragoon, totem_master, death_knight, carrion_witch, slime_lord, boomerang_knight, lancer, dragon_knight, gunner };
 const NO_DMG = new Set(['buff', 'heal', 'summon']);
-const on = (p) => G.settings.signatures !== false && p.world && p.world.kind !== 'town' && !p.dead;
+export const on = (p) => G.settings.signatures !== false && p.world && !p.dead;
 
 /** The hero's signature state (null for the Bard and the Astronomer, whose gimmicks live in their own files). */
 export function sigOf(p) {
-  const M = SIGNATURES[p.classId];
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
   if (!M) return null;
-  if (!p.sig || p.sig.cls !== p.classId) p.sig = { cls: p.classId, s: M.init(p), pow: 0, world: null };
+  if (!p.sig || p.sig.cls !== M.id) p.sig = { cls: M.id, s: M.init(p), pow: 0, world: null };
   const S = p.sig;
   if (S.world !== p.world) { S.world = p.world; if (M.enter) M.enter(p, S.s); }
   return S;
@@ -41,27 +42,34 @@ export function sigOf(p) {
 
 export function sigCast(p, sk, L, tx, ty) {
   const S = sigOf(p);
-  if (!S || !on(p)) return;
+  if (!S || !on(p) || p.world.kind === 'town') return;
   if (!NO_DMG.has(sk.kind)) { const d = avg(p.skillDamage(sk, L)); S.pow = S.pow ? S.pow * 0.85 + d * 0.15 : d; }
-  const M = SIGNATURES[p.classId];
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
   if (M.cast) M.cast(p, S.s, sk, L, tx, ty);
 }
 /** A hit the hero himself dealt (Player.onHit); DoT ticks and the signature's own hits do not count. */
 export function sigHit(p, tgt, dmg, el, o) {
   if (o.dot || o.sig || !p.sig) return;
-  const S = sigOf(p), M = SIGNATURES[p.classId];
-  if (S && M.hit && on(p)) M.hit(p, S.s, tgt, dmg, el, o);
+  const S = sigOf(p);
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
+  if (S && M.hit && on(p) && p.world.kind !== 'town') M.hit(p, S.s, tgt, dmg, el, o);
 }
 /** A monster died to the hero or his minions (combat.kill). */
 export function sigKill(p, tgt, src) {
-  const S = p.sig && sigOf(p), M = SIGNATURES[p.classId];
-  if (S && M.kill && on(p) && tgt.team === 'enemy') M.kill(p, S.s, tgt, src);
+  const S = p.sig && sigOf(p);
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
+  if (S && M.kill && on(p) && p.world.kind !== 'town' && tgt.team === 'enemy') M.kill(p, S.s, tgt, src);
 }
 
 export function sigUpdate(p, dt) {
   const S = sigOf(p);
   if (!S || !p.world) return;
-  const M = SIGNATURES[p.classId];
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
+  if (!M) return;
   if (M.update && on(p)) M.update(p, S.s, dt);
   else p.sigScale = 1;
   if (M.draw && (!p._sigTop || !effects.includes(p._sigTop))) addEffect(p._sigTop = new SigLayer(p, M, 'draw'), 'top');
@@ -70,13 +78,20 @@ export function sigUpdate(p, dt) {
 }
 /** Fill the meter and pay off at once (tests, previews). */
 export function sigFire(p) {
+  if (p.world && p.world.kind === 'town') return;
   const S = sigOf(p);
-  if (S) SIGNATURES[p.classId].fire(p, S.s);
+  const cid = p.classId === 'deathknight' ? 'death_knight' : p.classId;
+  const M = SIGNATURES[cid] || SIGNATURES[p.classId];
+  if (S && M) M.fire(p, S.s);
 }
 
 class SigLayer {
   constructor(p, M, fn) { Object.assign(this, { p, M, fn, t: 0 }); }
-  update(dt) { this.t += dt; return G.player === this.p && this.p.sig && this.p.sig.cls === this.M.id; }
+  update(dt) {
+    this.t += dt;
+    const p = this.p;
+    return (G.player === p || p.isRemotePlayer) && !p.dead && p.world && p.sig && p.sig.cls === this.M.id;
+  }
   draw(ctx) {
     const p = this.p;
     if (!on(p) || p.ghostDraw) return;
@@ -88,7 +103,11 @@ class SigLayer {
 class SigBack {
   constructor(p, M) { Object.assign(this, { p, M, t: 0 }); }
   get depth() { return this.p.x + this.p.y + (this.p.fly ? 0.2 : 0) - 0.01; }
-  update(dt) { this.t += dt; return G.player === this.p && this.p.world === this.world && this.p.sig && this.p.sig.cls === this.M.id; }
+  update(dt) {
+    this.t += dt;
+    const p = this.p;
+    return (G.player === p || p.isRemotePlayer) && !p.dead && p.world === this.world && p.sig && p.sig.cls === this.M.id;
+  }
   draw(ctx) {
     const p = this.p;
     if (!on(p)) return;

@@ -1,5 +1,5 @@
-// The hero.
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { rand, chance, clamp, angleTo, dist, TAU } from '../core/util.js';
 import { sfx, levelUpFanfare } from '../core/audio.js';
 import { camera } from '../core/view.js';
@@ -334,18 +334,23 @@ export class Player extends Creature {
       case 'gold':
         c.gold += g.amount; sfx('gold');
         floatText(this.x, this.y, 46, `+${g.amount} gold`, '#ffd34a', 12);
+        if (G.room && g.lootId) net.sendLootPickup(g.lootId);
+        G.ui && G.ui.refresh();
         return true;
       case 'orb_hp': this.heal(this.maxHp * 0.15); sfx('orb'); return true;
       case 'orb_mp': this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.18); sfx('orb'); floatText(this.x, this.y, 46, '+mana', '#6a8aff', 11); return true;
       case 'potion':
         if ((c.potions[g.item.kind] || 0) >= 30) { if (g.t > 0.6 && !g.warned) { g.warned = true; floatText(this.x, this.y, 50, 'Potion belt full', '#ccc', 11); } return false; }
         c.potions[g.item.kind] = (c.potions[g.item.kind] || 0) + 1; sfx('pickup');
+        if (G.room && g.lootId) net.sendLootPickup(g.lootId);
         G.ui && G.ui.refresh();
         return true;
       case 'item': {
+        if (g.lootId) g.item._lootId = g.lootId;
         const ok = addToBag(c, g.item);
         if (!ok) { if (!g.warned) { g.warned = true; floatText(this.x, this.y, 50, 'Inventory full', '#ff8080', 12); sfx('error'); } return false; }
         sfx('pickup');
+        if (G.room && g.lootId) net.sendLootPickup(g.lootId);
         if (G.ui) { G.ui.log(`Picked up <span style="color:${g.color}">${g.label}</span>`); G.ui.refresh(); }
         return true;
       }
@@ -430,6 +435,7 @@ export class Player extends Creature {
     if (sk.id === 'barbarian.0.0') this.bashCastSerial++;
     const ok = castSkill(this, sk, L, tx, ty);
     if (ok === false) { this.mana += cost; this.cooldowns[sk.id] = 0; return false; }
+    if (G.room) net.sendSkillCast(sk.id, tx, ty, target?.id || null);
     if (rageCost(sk)) { this.rage -= rageCost(sk); this.char.rage = this.rage; }
     // Attacks build Rage; no passive regeneration. Hits award most of the resource.
     if (this.classId === 'barbarian' && sk.attack) this.gainRage(sk.id === 'barbarian.0.0' ? 3 : sk.kind === 'whirl' ? 0 : 0.7);

@@ -1164,6 +1164,7 @@ export const SCENARIOS = {
           const at = x.landAt(p, 1.5);   // a shard on a crag top held the Heart shut until it sank as a straggler (30 s)
           const m = x.track(x.monster('eye', at, 'champion', { art: eyes[Math.floor(x.rng.next() * eyes.length)].id, swap: null }));
           m.static = true; m.name = 'Heart Shard'; m.maxHp *= 1.4; m.hp = m.maxHp;
+          m.netId = `breach_shard_${x.shields.length}_${k}`;
           x.world.add(m); bringOne(x.world, x.o, m, 'rift', at, { rng: x.rng });
           return m;
         });

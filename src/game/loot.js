@@ -187,7 +187,7 @@ export function itemIcon(item, size = 48) {
   const pal = { m: mat, w: '#ffffff', b: item.icon === 'shield' ? '#5a2a1a' : '#5a3a20', g: item.rarity >= 3 ? '#ffd040' : '#b08a3a', c: item.rarity >= 2 ? RARITY_COLORS[item.rarity] : '#8a6a40', e: '#ff4040', k: '#101010' };
   if (item.icon === 'orb') { pal.c = mat; pal.e = '#c060ff'; }
   if (item.icon === 'staff' || item.icon === 'wand') { pal.c = ['#a0a0a0', '#60ff60', '#60a0ff', '#c060ff', '#ffa020', '#ff4058'][item.rarity]; pal.b = '#6a4a2a'; pal.e = '#ffffff'; }
-  c = replacementIcon('item_' + item.icon, size, mat) || pixelSprite(item.icon, pal, 4);
+  c = replacementIcon('item_' + item.icon, size, mat) || (item.icon ? pixelSprite(item.icon, pal, 4) : null);
   iconCache.set(key, c);
   return c;
 }

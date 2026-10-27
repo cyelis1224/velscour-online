@@ -24,7 +24,7 @@ import { SUMMONS } from '../data/summons.js';
 
 export const COLORS = { red: ['pouncer', 'berserker'], gold: ['bulwark', 'warden'], green: ['mender', 'druid'], blue: ['tide', 'frost'], purple: ['hexer', 'venom'], pink: ['idol', 'charmer'] };
 const HUES = Object.keys(COLORS);
-const TINT = { red: '#ff4a30', gold: '#ffc83a', green: '#5ee05a', blue: '#4aa8ff', purple: '#b060ff', pink: '#ff70c0' };
+export const TINT = { red: '#ff4a30', gold: '#ffc83a', green: '#5ee05a', blue: '#4aa8ff', purple: '#b060ff', pink: '#ff70c0' };
 const PALE = { red: '#ffc0a0', gold: '#fff0b0', green: '#c8ffb0', blue: '#c8ecff', purple: '#e8c8ff', pink: '#ffd0ec' };
 // hop: hops a second; hopH: how high (world px); aggro: goes for foes the Lord hasn't reached yet
 export const KINDS = {

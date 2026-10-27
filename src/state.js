@@ -35,6 +35,9 @@ export const G = {
     wallLines: false, // a line along the foot of the dungeon's walls, over the spells
     noSkipCine: false, // "Don't skip cutscenes": Sky Battle scenes already seen play at 1x, not 20x
     fpsCap: 0, // frame rate cap: 0 none, 30 (phones run cooler over a long session)
+    showHeroStats: true, // show/hide the #hero-stats div
+    showTargetBox: true, // show/hide the #target-box div
+    showTargetSprite: true, // choose if target-box shows the target sprite or not
   },
 };
 

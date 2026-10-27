@@ -76,41 +76,206 @@ button { font-family: var(--font-head); }
 .slot.flash { animation: slotflash .25s; }
 @keyframes slotflash { from { filter: brightness(2.2); } to { filter: brightness(1); } }
 
-/* Barbarian Rage: separate from MADNESS; full meter powers ten seconds of Whirlwind. */
-#barbarian-rage { position: absolute; bottom: 94%; left: 50%; transform: translateX(-50%);
-  width: 32%; height: 12px; z-index: 6; background: rgba(22,8,4,.86);
-  border: 1px solid #8e4920; border-radius: 5px; overflow: hidden; pointer-events: none;
-  box-shadow: 0 0 6px #120602; }
-#barbarian-rage-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#852510,#e06b20,#ffbe48); transition: width .12s; }
-#barbarian-rage-text { position: absolute; inset: 0; color: #fff4d2; text-align: center;
-  font: 700 9px/11px var(--font-head); text-shadow: 0 1px 3px #000; letter-spacing: 1px; }
-body.touch #barbarian-rage { width: 36%; height: 10px; }
-body.touch #barbarian-rage-text { font-size: 8px; line-height: 9px; }
+/* ==========================================================================
+   Class & Feature Gauges (.class-gauge) & Action Buttons
+   Unified container and styling for class-specific and feature meters (Rage,
+   Madness, Smite, etc.). Action buttons (Madness, Smite) sit NORTH of the
+   gauges in #gauge-buttons so they never overlap or render behind bars.
+   To tweak colors for any gauge, modify the CSS variables on its class/ID.
+   ========================================================================== */
 
-/* MADNESS: fills over ~10 minutes in the dungeon; the hero (never auto-play) unleashes it */
-#madness { position: absolute; left: 50%; bottom: 72%; transform: translateX(-50%); width: 34%; display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; z-index: 6; }
-#mad-track { position: relative; width: 100%; height: 9px; background: rgba(10,0,8,.8); border: 1px solid #5a1838; border-radius: 5px; overflow: hidden; box-shadow: 0 0 4px #000; }
-#mad-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #5a0a3a, #c0104a 60%, #ff3070); transition: width .3s; }
-#mad-text { position: absolute; inset: 0; text-align: center; font: 700 8px/9px var(--font-head); letter-spacing: 2px; color: #fff; text-transform: uppercase; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 3px #000; }
-#madness.full #mad-fill { background: linear-gradient(90deg, #ff2050, #ff80b0, #c020ff); animation: madglow .8s ease-in-out infinite; }
-#madness.on #mad-fill { background: linear-gradient(90deg, #c020ff, #ff2050); }
-#madness-btn { pointer-events: auto; cursor: pointer; padding: 6px 22px; border: 2px solid #ff3070; border-radius: 6px; background: radial-gradient(#7a0828, #2a0010); color: #fff; font: 700 18px var(--font-head); letter-spacing: 3px; text-shadow: 0 0 6px #ff2050, 0 0 2px #000; box-shadow: 0 0 14px #ff2050, inset 0 0 10px #ff2050; animation: madpulse 1s ease-in-out infinite; }
+#gauge-box {
+  position: absolute;
+  left: 50%;
+  bottom: 73%;
+  transform: translateX(-50%);
+  width: 34%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 6;
+}
+
+#gauge-buttons {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  width: 100%;
+}
+
+#gauge-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: none;
+}
+
+/* Base class for all class and feature gauges */
+.class-gauge {
+  position: relative;
+  width: 100%;
+  height: 11px;
+  background: var(--gauge-bg, rgba(14, 10, 8, 0.88));
+  border: 1px solid var(--gauge-border, #444444);
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.9), inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.class-gauge.hidden {
+  display: none !important;
+}
+
+.class-gauge .gauge-fill,
+.class-gauge #barbarian-rage-fill,
+.class-gauge #mad-fill,
+.class-gauge #smite-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gauge-fill, #888888);
+  transition: width 0.15s ease-out;
+}
+
+.class-gauge .gauge-text,
+.class-gauge #barbarian-rage-text,
+.class-gauge #mad-text,
+.class-gauge #smite-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 8.5px/10px var(--font-head);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gauge-text-color, #ffffff);
+  text-shadow: 0 0 2px #000, 0 0 3px #000, 0 1px 2px #000;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Gauge Color Tweaks:
+   Edit these CSS variables to tweak the colors of any gauge.
+   -------------------------------------------------------------------------- */
+
+/* 1. Barbarian Rage */
+#barbarian-rage,
+.gauge-rage {
+  --gauge-border: #8e4920;
+  --gauge-fill: linear-gradient(90deg, #852510, #e06b20, #ffbe48);
+  --gauge-text-color: #fff4d2;
+  --gauge-bg: rgba(22, 8, 4, 0.88);
+  box-shadow: 0 0 6px rgba(18, 6, 2, 0.8), inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* 2. Madness */
+#mad-track,
+.gauge-madness {
+  --gauge-border: #5a1838;
+  --gauge-fill: linear-gradient(90deg, #5a0a3a, #c0104a 60%, #ff3070);
+  --gauge-text-color: #ffffff;
+  --gauge-bg: rgba(10, 0, 8, 0.85);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.9), inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+#mad-track.full,
+.gauge-madness.full,
+#madness.full #mad-fill {
+  --gauge-fill: linear-gradient(90deg, #ff2050, #ff80b0, #c020ff);
+}
+#mad-track.full .gauge-fill,
+#mad-track.full #mad-fill,
+.gauge-madness.full .gauge-fill,
+#madness.full #mad-fill {
+  animation: madglow 0.8s ease-in-out infinite;
+}
+#mad-track.on,
+.gauge-madness.on,
+#madness.on #mad-fill {
+  --gauge-fill: linear-gradient(90deg, #c020ff, #ff2050);
+}
+
+/* 3. Smite */
+#smite-track,
+.gauge-smite {
+  --gauge-border: #6a5418;
+  --gauge-fill: linear-gradient(90deg, #6a4a08, #d0a020 60%, #ffe070);
+  --gauge-text-color: #fff8e0;
+  --gauge-bg: rgba(20, 14, 0, 0.85);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.9), inset 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+#smite-track.full,
+#smite-track.armed,
+.gauge-smite.full,
+.gauge-smite.armed {
+  --gauge-fill: linear-gradient(90deg, #ffd040, #fff6c0, #ffb020);
+}
+#smite-track.full .gauge-fill,
+#smite-track.full #smite-fill,
+#smite-track.armed .gauge-fill,
+#smite-track.armed #smite-fill,
+.gauge-smite.full .gauge-fill,
+.gauge-smite.armed .gauge-fill {
+  animation: madglow 0.8s ease-in-out infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Action Buttons (North of gauges)
+   -------------------------------------------------------------------------- */
+#madness-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 6px 22px;
+  border: 2px solid #ff3070;
+  border-radius: 6px;
+  background: radial-gradient(#7a0828, #2a0010);
+  color: #fff;
+  font: 700 18px var(--font-head);
+  letter-spacing: 3px;
+  text-shadow: 0 0 6px #ff2050, 0 0 2px #000;
+  box-shadow: 0 0 14px #ff2050, inset 0 0 10px #ff2050;
+  animation: madpulse 1s ease-in-out infinite;
+}
 #madness-btn:active { transform: scale(.95); }
 @keyframes madpulse { 50% { box-shadow: 0 0 26px #ff3070, inset 0 0 16px #ff80b0; transform: scale(1.06); } }
 @keyframes madglow { 50% { filter: brightness(1.5); } }
 body.touch #madness-btn { padding: 8px 26px; font-size: 20px; }
 
-/* SMITE: a second meter under MADNESS, filled by kills; the button arms it, the next tap/click aims it (game/smite.js) */
-#smite-track { position: relative; width: 100%; height: 9px; background: rgba(20,14,0,.8); border: 1px solid #6a5418; border-radius: 5px; overflow: hidden; box-shadow: 0 0 4px #000; }
-#smite-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #6a4a08, #d0a020 60%, #ffe070); transition: width .3s; }
-#smite-text { position: absolute; inset: 0; text-align: center; font: 700 8px/9px var(--font-head); letter-spacing: 2px; color: #fff8e0; text-transform: uppercase; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 0 3px #000; }
-#smite-track.full #smite-fill, #smite-track.armed #smite-fill { background: linear-gradient(90deg, #ffd040, #fff6c0, #ffb020); animation: madglow .8s ease-in-out infinite; }
-#smite-btn { pointer-events: auto; cursor: pointer; padding: 5px 20px; border: 2px solid #ffd040; border-radius: 6px; background: radial-gradient(#7a5808, #2a1a00); color: #fff; font: 700 16px var(--font-head); letter-spacing: 3px; text-shadow: 0 0 6px #ffb020, 0 0 2px #000; box-shadow: 0 0 14px #ffc030, inset 0 0 10px #ffc030; animation: smitepulse 1.2s ease-in-out infinite; }
+#smite-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  padding: 5px 20px;
+  border: 2px solid #ffd040;
+  border-radius: 6px;
+  background: radial-gradient(#7a5808, #2a1a00);
+  color: #fff;
+  font: 700 16px var(--font-head);
+  letter-spacing: 3px;
+  text-shadow: 0 0 6px #ffb020, 0 0 2px #000;
+  box-shadow: 0 0 14px #ffc030, inset 0 0 10px #ffc030;
+  animation: smitepulse 1.2s ease-in-out infinite;
+}
 #smite-btn.armed { background: radial-gradient(#fff0a0, #a07010); color: #2a1800; text-shadow: none; animation: smitepulse .5s ease-in-out infinite; }
 #smite-btn:active { transform: scale(.95); }
 @keyframes smitepulse { 50% { box-shadow: 0 0 26px #ffe070, inset 0 0 16px #fff0a0; transform: scale(1.05); } }
 body.touch #smite-btn { padding: 7px 22px; font-size: 17px; }
 canvas#game.aiming { cursor: crosshair !important; }
+
+body.touch #gauge-box { width: 38%; }
+body.touch .class-gauge { height: 10px; }
+body.touch .class-gauge .gauge-text,
+body.touch .class-gauge #barbarian-rage-text,
+body.touch .class-gauge #mad-text,
+body.touch .class-gauge #smite-text { font-size: 8px; line-height: 9px; }
 
 /* sealed treasures waiting in the bag (ui/sealed.js) */
 #sealed-btn { pointer-events: auto; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border: 1px solid #c8a050; border-radius: 14px; background: linear-gradient(#3a2408, #1a0e02); color: #ffdf8a; font: 700 11px var(--font-head); letter-spacing: 1.5px; box-shadow: 0 0 10px rgba(255,200,90,.45); animation: sealglow 2s ease-in-out infinite; }
@@ -167,8 +332,8 @@ body.touch .portal-choice h2 { font-size: 18px; margin-bottom: 2px; }
 body.touch .portal-choice p { margin: 2px 0 6px; }
 
 /* the spectator's dials: auto-play's stance and the Greed lever */
-#hud-btncol { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-#hud-dials { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; text-shadow: 0 0 4px #000; }
+#hud-btncol { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+#hud-dials { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; text-shadow: 0 0 4px #000; pointer-events: none; }
 #stance { display: inline-flex; pointer-events: auto; border: 1px solid #2a6a8a; border-radius: 4px; overflow: hidden; background: rgba(4,20,30,.75); }
 #stance button { padding: 2px 7px; border: 0; border-right: 1px solid #1a4a60; background: none; color: #6aa8c0; font: 700 10px var(--font-head); letter-spacing: .5px; cursor: pointer; }
 #stance button:last-child { border-right: 0; }
@@ -205,23 +370,23 @@ body.touch #sealed-btn i { width: 16px; height: 16px; }
 .buff { width: 30px; height: 30px; position: relative; border: 1px solid var(--gold-dim); border-radius: 3px; overflow: hidden; background: #000; }
 .buff canvas { width: 100%; height: 100%; }
 .buff span { position: absolute; bottom: 0; right: 1px; font: 700 10px var(--font-body); color: #fff; text-shadow: 0 0 2px #000; }
-#hud-top-right { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-#minimap-row { display: flex; align-items: center; }
+#hud-top-right { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; pointer-events: none; }
+#minimap-row { display: flex; align-items: center; pointer-events: none; }
 #velscour-skull { pointer-events: auto; display: grid; place-items: center; width: 38px; height: 42px; padding: 3px; border: 1px solid #765b38; border-radius: 5px; background: linear-gradient(#29180f, #0c0705); box-shadow: 0 2px 6px #000; cursor: pointer; }
 #velscour-skull img { display: block; width: 30px; height: 30px; object-fit: contain; image-rendering: pixelated; filter: drop-shadow(0 0 2px #000); }
 #velscour-skull:hover { border-color: var(--gold-bright); box-shadow: 0 0 10px rgba(255,170,70,.55); }
 #velscour-skull:active { transform: scale(.94); }
 /* the minimap fills the open middle of the ring art, which overhangs it by about a fifth on every side */
-#minimap-wrap { position: relative; width: 150px; aspect-ratio: 303 / 285.5; margin: 30px 32px 32px; }
-#minimap { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; background: rgba(0,0,0,.6); cursor: pointer; }
+#minimap-wrap { position: relative; width: 150px; aspect-ratio: 303 / 285.5; margin: 30px 32px 32px; pointer-events: none; }
+#minimap { position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; background: rgba(0,0,0,.6); cursor: pointer; pointer-events: auto; }
 #minimap-ring { position: absolute; width: 140%; pointer-events: none; filter: drop-shadow(0 2px 6px #000); }
-#hud-buttons { display: flex; gap: 0; }
-.hbtn { position: relative; width: 52px; height: 56px; border: 0; background: none; cursor: pointer; padding: 0; display: block; }
+#hud-buttons { display: flex; gap: 0; pointer-events: none; }
+.hbtn { position: relative; width: 52px; height: 56px; border: 0; background: none; cursor: pointer; padding: 0; display: block; pointer-events: auto; }
 .hbtn img { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 3px #000); transition: filter .12s, transform .12s; }
 .hbtn:hover img { filter: drop-shadow(0 0 5px rgba(255,190,90,.75)) brightness(1.15); }
 .hbtn:active img { transform: scale(.94); }
-.hbtn .badge { top: -2px; right: 0; }
-.badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #b0160f; color: #fff; font: 700 11px var(--font-body); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 6px #f22; animation: pulse 1.2s infinite; }
+.hbtn .badge { top: -2px; right: 0; pointer-events: none; }
+.badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #b0160f; color: #fff; font: 700 11px var(--font-body); display: flex; align-items: center; justify-content: center; box-shadow: 0 0 6px #f22; animation: pulse 1.2s infinite; pointer-events: none; }
 @keyframes pulse { 50% { transform: scale(1.15); } }
 #boss-bar { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(520px, 60vw); text-align: center; pointer-events: none; }
 #boss-name { font: 900 18px var(--font-head); color: #ff6a3a; text-shadow: 0 0 6px #000, 0 0 10px #a00; letter-spacing: 2px; }
@@ -255,6 +420,9 @@ body.touch #sealed-btn i { width: 16px; height: 16px; }
 #target-box { pointer-events: auto; cursor: zoom-in; -webkit-tap-highlight-color: transparent; user-select: none; display: flex; flex-direction: column; align-items: center; margin-top: 4px; width: 162px; box-sizing: border-box; padding: 5px 6px 5px;
   border: 1px solid #5c3a1c; border-radius: 3px; background: linear-gradient(180deg, rgba(34,10,6,.86), rgba(10,4,3,.86)); box-shadow: inset 0 0 10px #000, 0 0 0 1px rgba(0,0,0,.8), 0 2px 8px rgba(0,0,0,.7); }
 #target-box.hidden { display: none; }
+#target-box.no-pic #tb-pic { display: none !important; }
+#target-box.no-pic #tb-info { margin-top: 0; }
+#target-box.no-pic { cursor: default; }
 #tb-pic { flex: none; width: 96px; height: 96px; border: 1px solid #3a2412; border-radius: 2px; background: radial-gradient(circle at 50% 60%, #2a1810, #070302 75%); }
 #tb-info { width: 100%; margin-top: 4px; text-align: center; }
 #tb-name { font: 700 11px var(--font-head); color: #f0e0c0; letter-spacing: .5px; line-height: 1.15; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; text-shadow: 0 1px 0 #000; }
@@ -348,6 +516,29 @@ body.touch #sealed-btn i { width: 16px; height: 16px; }
 .tab { font: 700 13px var(--font-head); color: var(--text-dim); background: #1a110b; border: 1px solid var(--line); border-bottom: none; padding: 6px 12px; border-radius: 4px 4px 0 0; cursor: pointer; }
 .tab.active { color: var(--gold-bright); background: #33200f; }
 .gold-text { color: #ffd34a; font-weight: 700; }
+.gold-clickable {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gold-clickable:hover {
+  color: #fff4b8;
+  background: rgba(255, 211, 74, 0.15);
+  border-color: rgba(255, 211, 74, 0.4);
+  text-shadow: 0 0 8px rgba(255, 211, 74, 0.7);
+  box-shadow: 0 0 8px rgba(255, 211, 74, 0.2);
+  transform: translateY(-1px);
+}
+.gold-clickable:active {
+  transform: translateY(0);
+}
 .dim { color: var(--text-dim); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .col { display: flex; flex-direction: column; gap: 6px; }
@@ -464,6 +655,111 @@ body.touch .reliquary-panel .codex-cell { width: 34px; height: 34px; }
 .title-gate { position: absolute; z-index: 3; bottom: 18%; left: 0; right: 0; text-align: center; font: 400 16px var(--font-head); letter-spacing: 6px; color: #8a2a1c; text-transform: uppercase; pointer-events: none; opacity: 0; transition: opacity .6s; }
 .title-screen { overflow: hidden; justify-content: safe center; padding: max(4vh, env(safe-area-inset-top)) env(safe-area-inset-right) max(2vh, env(safe-area-inset-bottom)) env(safe-area-inset-left); }
 .title-screen .title-logo { flex: 0 1 auto; min-height: 0; margin-top: 3vh; }
+.title-reload-btn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  width: 36px;
+  height: 36px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(22, 16, 12, 0.85);
+  border: 1px solid rgba(160, 120, 60, 0.4);
+  border-radius: 4px;
+  color: #a8977c;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  padding: 0;
+}
+.title-reload-btn:hover {
+  color: #ffd860;
+  border-color: #ffd34a;
+  background: rgba(45, 34, 24, 0.95);
+  box-shadow: 0 0 10px rgba(255, 216, 96, 0.35);
+  transform: scale(1.05);
+}
+.title-reload-btn:active {
+  transform: scale(0.95);
+}
+.title-reload-btn svg {
+  display: block;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+}
+.title-reload-btn:hover svg {
+  transform: rotate(45deg);
+}
+.title-reload-btn.spinning svg {
+  animation: reloadSpin 0.7s linear infinite;
+}
+@keyframes reloadSpin {
+  100% { transform: rotate(360deg); }
+}
+
+.title-update-btn {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  height: 36px;
+  padding: 0 14px;
+  gap: 8px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(180deg, rgba(42, 28, 16, 0.95) 0%, rgba(20, 14, 10, 0.95) 100%);
+  border: 1px solid #ffd34a;
+  border-radius: 4px;
+  color: #ffd860;
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7), 0 0 14px rgba(255, 211, 74, 0.25);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  animation: titleUpdatePulse 2.4s ease-in-out infinite;
+}
+.title-update-btn.hidden {
+  display: none !important;
+}
+.title-update-btn:hover {
+  color: #fff4b8;
+  border-color: #ffe680;
+  background: linear-gradient(180deg, rgba(64, 42, 24, 0.98) 0%, rgba(32, 20, 14, 0.98) 100%);
+  box-shadow: 0 0 20px rgba(255, 216, 96, 0.6), inset 0 0 10px rgba(255, 216, 96, 0.2);
+  transform: scale(1.04);
+}
+.title-update-btn:active {
+  transform: scale(0.97);
+}
+.title-update-btn svg {
+  display: block;
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+@keyframes titleUpdatePulse {
+  0%, 100% {
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7), 0 0 10px rgba(255, 211, 74, 0.25);
+    border-color: rgba(255, 211, 74, 0.6);
+  }
+  50% {
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.8), 0 0 22px rgba(255, 211, 74, 0.6), inset 0 0 8px rgba(255, 211, 74, 0.2);
+    border-color: #ffd860;
+  }
+}
 .title-credits { position: absolute; z-index: 4; inset: 0; pointer-events: none; }
 .title-credits img { position: absolute; inset: 0; display: block; width: min(54vw, 720px); max-height: 32vh; margin: auto; object-fit: contain; opacity: 0; }
 .title-gated .title-gate { opacity: 1; animation: gate-pulse 2.6s ease-in-out infinite; }
@@ -651,9 +947,8 @@ body.touch.portrait #hud-top-right { right: max(5px, env(safe-area-inset-right))
 body.touch.portrait #minimap-wrap { width: 64px; margin: 4px 8px; }
 body.touch.portrait .hbtn { width: 32px; height: 34px; }
 body.touch.portrait #hud-buttons { max-width: 44vw; }
-body.touch.portrait #boss-bar { top: max(92px, calc(env(safe-area-inset-top) + 84px)); left: 50%; width: min(66vw, 320px); }
+body.touch.portrait #gauge-box,
 body.touch.portrait #madness { position: absolute; left: 50%; top: calc(max(154px, env(safe-area-inset-top) + 146px) - 100vh + var(--hud-w) * var(--hud-k)); bottom: auto; width: 42vw; }
-body.touch.portrait #barbarian-rage { position: absolute; left: 50%; top: calc(max(178px, env(safe-area-inset-top) + 170px) - 100vh + var(--hud-w) * var(--hud-k)); bottom: auto; width: 42vw; }
 body.touch.portrait #center-msg { top: 32%; }
 body.touch.portrait #log { left: 8px; right: 8px; top: auto; bottom: auto; height: min(13vh,100px); max-height: none; overflow: hidden; }
 body.touch.portrait #touch-buttons { z-index: 7; }

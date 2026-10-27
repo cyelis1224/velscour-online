@@ -56,7 +56,7 @@ export const TouchUI = {
     f.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.setPage(1 - this.page); });
     root.appendChild(f);
     this.madnessBtn = $('#madness-btn');
-    this.madnessHome = $('#madness');
+    this.madnessHome = $('#gauge-buttons') || $('#madness');
     this.madnessBtn.classList.add('touch-madness');
     this.smiteBtn = $('#smite-btn'); // SMITE (game/smite.js) moves with it in portrait
     this.smiteBtn.classList.add('touch-smite');

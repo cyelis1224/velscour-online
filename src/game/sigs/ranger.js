@@ -93,7 +93,7 @@ export default {
     s.gap -= dt; s.flash = Math.max(0, s.flash - dt * 2);
     const q = s.quarry;
     if (q && (q.dead || q.world !== p.world || Math.hypot(q.x - p.x, q.y - p.y) > 12)) s.quarry = null;
-    if ((s.look -= dt) <= 0 && !s.dive) { s.look = 0.6; const t = toughest(p, 9); if (t && (!s.quarry || (t.rank !== 'normal' && s.quarry.rank === 'normal'))) s.quarry = t; }
+    if (!p.isRemotePlayer && (s.look -= dt) <= 0 && !s.dive) { s.look = 0.6; const t = toughest(p, 9); if (t && (!s.quarry || (t.rank !== 'normal' && s.quarry.rank === 'normal'))) s.quarry = t; }
     if (!s.dive) { // wheel over the quarry, or over her
       const c = s.quarry || p, a = (s.ang += dt * 1.6), r = s.quarry ? 1.1 : 1.5;
       const tx = c.x + Math.cos(a) * r, ty = c.y + Math.sin(a) * r, k = Math.min(1, dt * 3);
@@ -103,7 +103,7 @@ export default {
     if (dx * dx + dy * dy > 0.01) s.head = Math.atan2(dy, dx);
     s.sx = sx; s.sy = sy;
     if (dt > 0) this.fly(p, s, dt);
-    if (s.feathers >= FEATHERS && s.quarry && !s.dive) this.fire(p, s);
+    if (!p.isRemotePlayer && s.feathers >= FEATHERS && s.quarry && !s.dive) this.fire(p, s);
   },
   /** The phoenix's flight pose from how it moved (heading, pitch, bank, wing beat), and its trail of embers. */
   fly(p, s, dt) {
@@ -144,19 +144,21 @@ export default {
     stat('ranger', 'fire');
   },
   draw(ctx, p, s, t) {
-    const [cx, cy] = headAt(p, 4);
-    for (let i = 0; i < FEATHERS; i++) { // a fan of feathers over her head
-      const a = (i - (FEATHERS - 1) / 2) * 0.32, x = cx + Math.sin(a) * 24, y = cy - Math.cos(a) * 10 + 4, lit = i < Math.floor(s.feathers);
-      feather(ctx, x, y, a, lit, G.touch ? 1.1 : 1.4);
-      if (lit && s.flash > 0 && i === Math.floor(s.feathers) - 1) glow(ctx, CREAM, x, y, 9, s.flash * 2);
-    }
-    const q = s.quarry;
-    if (q && !q.dead) { // reticle brackets over the quarry
-      const qx = isoX(q.x, q.y), qy = (q.screenTop ?? isoY(q.x, q.y) - 50) - 8, k = 6 + Math.sin(t * 6) * 1.5;
-      ctx.strokeStyle = s.feathers >= FEATHERS - 1 ? '#ffffff' : GREEN; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
-      ctx.beginPath();
-      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.moveTo(qx + sx * k, qy + sy * (k - 3)); ctx.lineTo(qx + sx * k, qy + sy * k); ctx.lineTo(qx + sx * (k - 3), qy + sy * k); }
-      ctx.stroke(); ctx.globalAlpha = 1;
+    if (!p.isRemotePlayer) {
+      const [cx, cy] = headAt(p, 4);
+      for (let i = 0; i < FEATHERS; i++) { // a fan of feathers over her head
+        const a = (i - (FEATHERS - 1) / 2) * 0.32, x = cx + Math.sin(a) * 24, y = cy - Math.cos(a) * 10 + 4, lit = i < Math.floor(s.feathers);
+        feather(ctx, x, y, a, lit, G.touch ? 1.1 : 1.4);
+        if (lit && s.flash > 0 && i === Math.floor(s.feathers) - 1) glow(ctx, CREAM, x, y, 9, s.flash * 2);
+      }
+      const q = s.quarry;
+      if (q && !q.dead) { // reticle brackets over the quarry
+        const qx = isoX(q.x, q.y), qy = (q.screenTop ?? isoY(q.x, q.y) - 50) - 8, k = 6 + Math.sin(t * 6) * 1.5;
+        ctx.strokeStyle = s.feathers >= FEATHERS - 1 ? '#ffffff' : GREEN; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { ctx.moveTo(qx + sx * k, qy + sy * (k - 3)); ctx.lineTo(qx + sx * k, qy + sy * k); ctx.lineTo(qx + sx * (k - 3), qy + sy * k); }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      }
     }
     // the phoenix itself, with its shadow on the floor
     const hx = isoX(s.hx, s.hy), hy = isoY(s.hx, s.hy), heat = s.feathers / FEATHERS;

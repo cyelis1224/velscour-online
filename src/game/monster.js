@@ -1,5 +1,6 @@
 // Monsters and minions: one AI for both teams.
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { rand, chance, TAU, clamp, angleTo, angleDiff, dist, pick, randi, shuffle } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { addEffect, Telegraph, Slash, Ring, Bolt, Column, burst, spawn, sparkle, elem, floatText, smoke, addLight } from '../gfx/vfx.js';
@@ -1291,7 +1292,7 @@ export function lookFor(world, archId, rnd = Math.random) {
  * variant 1 = "greater" breed: own palette and name, tougher. `look` = {art, swap} from the level's bestiary
  * (rollLooks in data/bestiary.js); without one the level picks. Archetypes with no art keep their pixel sprite.
  */
-export function makeMonster(world, archId, biome, level, rank = 'normal', x = 0, y = 0, variant = 0, look = undefined) {
+export function makeMonster(world, archId, biome, level, rank = 'normal', x = 0, y = 0, variant = 0, look = undefined, rnd = Math.random) {
   const A = ARCH[archId];
   const B = monsterBase(level);
   const depth = world.depth || 1;
@@ -1363,7 +1364,7 @@ export function makeMonster(world, archId, biome, level, rank = 'normal', x = 0,
     // but all existing AI, projectiles, rank affixes and drops keep working.
     if(foreign)m.name='Wayward '+m.name;
   }
-  if (rank !== 'normal') makeElite(m, rank, depth, world);
+  if (rank !== 'normal') makeElite(m, rank, depth, world, rnd);
   if (art && art.heavenlyFamily && rank === 'boss') {
     m.name = art.name.toUpperCase();
     m.aura = '#f5d78d';
@@ -1371,18 +1372,18 @@ export function makeMonster(world, archId, biome, level, rank = 'normal', x = 0,
   return m;
 }
 
-export function makeElite(m, rank, depth, world) {
+export function makeElite(m, rank, depth, world, rnd = Math.random) {
   m.rank = rank;
   const keys = Object.keys(ELITE_AFFIXES).filter((k) => k !== 'multishot' || ['ranged', 'caster'].includes(m.ai));
   if (rank === 'champion') {
     m.maxHp *= 3; m.dmg *= 1.4; m.xp *= 3; m.aura = '#4a8aff'; m.scale = 1.15;
-    m.affixes = shuffle(keys).slice(0, depth > 40 ? 2 : 1);
+    m.affixes = shuffle(keys, rnd).slice(0, depth > 40 ? 2 : 1);
     m.name = 'Champion ' + m.name;
   } else if (rank === 'unique') {
     m.maxHp *= 5; m.dmg *= 1.6; m.xp *= 6; m.aura = '#ffb030'; m.scale = 1.3;
-    m.affixes = shuffle(keys).slice(0, depth > 50 ? 3 : 2);
-    m.name = uniqueName();
-    if (m.art) m.swap = uniqueSwap();
+    m.affixes = shuffle(keys, rnd).slice(0, depth > 50 ? 3 : 2);
+    m.name = uniqueName(rnd);
+    if (m.art) m.swap = uniqueSwap(rnd);
   } else if (rank === 'boss') {
     const vel = m.arch === 'velscour';
     if (vel) { m.art = 'va_velscour'; m.artH = 94; m.swap = null; }
@@ -1392,11 +1393,11 @@ export function makeElite(m, rank, depth, world) {
     m.aura = vel ? '#ff2000' : '#ff4020';
     m.scale = vel ? 1.6 : 1.9; m.r *= vel ? 1 : 1.6;
     m.ai = 'boss';
-    m.affixes = depth > 20 && !vel ? shuffle(keys.filter((k) => !['teleport', 'multishot', 'fast'].includes(k))).slice(0, 1) : [];
-    m.name = vel ? 'DEMON LORD VELSCOUR' : (ARCH[m.arch]?.bossName || bossName());
+    m.affixes = depth > 20 && !vel ? shuffle(keys.filter((k) => !['teleport', 'multishot', 'fast'].includes(k)), rnd).slice(0, 1) : [];
+    m.name = vel ? 'DEMON LORD VELSCOUR' : (ARCH[m.arch]?.bossName || bossName(rnd));
     m.isVelscour = vel;
     const base = ['slam', 'nova', 'volley', 'charge', 'summon', 'meteor', 'spiral', 'beam'];
-    m.patterns = vel ? base : ARCH[m.arch]?.bossPatterns ? ARCH[m.arch].bossPatterns.slice() : shuffle(base.slice()).slice(0, 3 + Math.min(3, Math.floor(depth / 20)));
+    m.patterns = vel ? base : ARCH[m.arch]?.bossPatterns ? ARCH[m.arch].bossPatterns.slice() : shuffle(base.slice(), rnd).slice(0, 3 + Math.min(3, Math.floor(depth / 20)));
     if (!m.patterns.includes('slam')) m.patterns.push('slam');
     m.atkCd = 1.1;
     m.aggroRange = 9;
@@ -1413,6 +1414,12 @@ export function makeElite(m, rank, depth, world) {
   m.hp = m.maxHp;
 }
 
+let _summonSeq = 0;
+export function nextSummonId(owner) {
+  const prefix = (net && net.myId) ? net.myId : (owner && owner.id ? `c${owner.id}` : 'local');
+  return `${prefix}_s_${++_summonSeq}`;
+}
+
 /** Build a player minion from a summon definition. */
 export function buildSummon(owner, def, key, x, y, dmg, hp, life) {
   const look = def.look || { sprite: 'skeleton', pal: {}, px: 2.3 };
@@ -1425,6 +1432,7 @@ export function buildSummon(owner, def, key, x, y, dmg, hp, life) {
     defAura: def.aura, summonKey: key, awake: true, ...caster,
     spell: def.spell || null, spellCd: def.spell ? rand(0.5, def.spell.cd || 3) : 0, atkReach: def.reach ? 0.55 + def.reach : undefined,
   });
+  m.summonId = nextSummonId(owner);
   if (look.cls) { m.classId = look.cls === true ? owner.classId : look.cls; m.classPal = look.pal || null; m.spriteH = 50; }
   else { m.sprite = look.sprite; m.pal = look.pal; m.px = look.px || 2.3; }
   const art = Array.isArray(look.art) ? pick(look.art) : look.art; // pets: a random one of the list

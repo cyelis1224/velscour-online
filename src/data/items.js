@@ -475,9 +475,11 @@ export function itemName(item) {
   if (item.type === 'potion') return item.name;
   if (item.rname) return item.rname + (item.upg ? ` +${item.upg}` : '');
   if (item.uname) return item.uname + (item.upg ? ` +${item.upg}` : '');
-  const base = `${MATERIALS[item.tier].name} ${item.baseName}`;
+  const base = `${MATERIALS[item.tier]?.name || ''} ${item.baseName || item.base || 'Item'}`.trim();
   const upg = item.upg ? ` +${item.upg}` : '';
-  if (item.rarity >= 3) return `${item.title}${upg}`;
+  if (item.title) return `${item.title}${upg}`;
+  if (item.name) return `${item.name}${upg}`;
+  if (item.rarity >= 3 && item.title) return `${item.title}${upg}`;
   return `${item.pre ? item.pre + ' ' : ''}${base}${item.suf ? ' ' + item.suf : ''}${upg}`;
 }
 export function itemBaseLine(item) {

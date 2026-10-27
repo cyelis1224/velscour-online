@@ -24,9 +24,9 @@ export function addTownAnimals(d, rng, force = G.townAnimalsForce) {
   d.edge = edge;
   d.edgeSpot = (near, r = 6) => {
     if (!edge.length) return d.randomSpot();
-    if (!near) return pick(edge);
+    if (!near) return rng.pick(edge);
     const close = edge.filter(([x, y]) => dist(x, y, near[0], near[1]) < r);
-    return close.length ? pick(close) : pick(edge);
+    return close.length ? rng.pick(close) : rng.pick(edge);
   };
   const species = (s) => ANIMALS.filter((v) => v.species === s);
   const counts = force || {
@@ -44,13 +44,13 @@ export function addTownAnimals(d, rng, force = G.townAnimalsForce) {
       const v = kinds[(start + i) % kinds.length];
       const at = v.where === 'edge' ? d.edgeSpot(herd, 4) : d.randomSpot();
       herd = herd || at;
-      makeAnimal(d, v, at[0] + rand(-0.4, 0.4), at[1] + rand(-0.4, 0.4));
+      makeAnimal(d, v, at[0] + (rng.next() * 0.8 - 0.4), at[1] + (rng.next() * 0.8 - 0.4));
     }
   }
 }
 
 export function makeAnimal(d, v, x, y, opts = {}) {
-  if (!d.map.walkable(x, y)) [x, y] = d.map.randomNear(x, y, 1.5) || [x, y];
+  if (!d.map.walkable(x, y)) [x, y] = d.map.randomNear(x, y, 1.5, d.rng ? () => d.rng.next() : undefined) || [x, y];
   return d.makeAgent(v, x, y, { animal: true, species: v.species, wild: v.where === 'edge', speed: v.speed, runSpeed: v.run, idleH: v.h,
     name: v.name.startsWith('a ') ? v.name[2].toUpperCase() + v.name.slice(3) : v.name, reach: 1.3, ...opts });
 }

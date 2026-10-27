@@ -2,7 +2,7 @@
 import { G } from '../state.js';
 import { input } from '../core/input.js';
 import { camera, screenDirToTile } from '../core/view.js';
-import { dist, angleTo } from '../core/util.js';
+import { dist, angleTo, escapeHtml } from '../core/util.js';
 import { SKILLS, skillRange, needsTarget } from '../data/skills.js';
 import { SLOT_KEYS, RMB } from '../data/bar.js';
 
@@ -140,6 +140,16 @@ export const controls = {
     if (input.consume('KeyX')) p.usePotion('mp');
     if (input.consume('KeyC')) p.usePotion('rejuv');
     if (input.consume('KeyV')) p.usePotion('fury');
+    if (input.consume('Enter') && G.mode === 'game') {
+      if (G.gameChat) {
+        G.gameChat.focus();
+      } else {
+        import('../ui/chat.js').then(({ GameChat }) => {
+          GameChat.init();
+          GameChat.focus();
+        });
+      }
+    }
 
     // ---- touch world taps
     const wt = input.worldTouch;

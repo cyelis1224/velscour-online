@@ -1,5 +1,6 @@
 // Inventory + character sheet.
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { el, fmtInt, escapeHtml } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { UI, draggable, droppable } from './ui.js';
@@ -14,7 +15,7 @@ import { heroPortrait } from '../core/gearart.js';
 import { openSeal } from './sealed.js';
 import { glyphOf } from '../data/relics.js';
 import { noteFind } from '../game/reliquary.js';
-import { sparkle } from '../gfx/vfx.js';
+import { sparkle, floatText } from '../gfx/vfx.js';
 
 const DOLL = { head: [2, 1], weapon: [1, 2], body: [2, 2], offhand: [3, 2], hands: [1, 3], legs: [2, 3], feet: [2, 4], ring1: [4, 1], ring2: [4, 2], ring3: [4, 3], ring4: [4, 4] };
 
@@ -87,12 +88,153 @@ export function dropFromBag(idx) {
   if (it.locked) { UI.log('That item is locked. Unlock it first (its panel in the inventory).', '#ffd860'); sfx('error'); return false; }
   if (it.type === 'gear' && it.sealed === undefined) it.sealed = false; // already opened: it doesn't seal again on the floor
   c.bag[idx] = null;
-  const g = new GroundItem(p.x, p.y, it.type === 'potion' ? 'potion' : 'item', { item: it });
+  const lootId = `drop_${net.myId || 'p'}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  it._lootId = lootId;
+  const g = new GroundItem(p.x, p.y, it.type === 'potion' ? 'potion' : 'item', {
+    item: it,
+    lootId,
+    droppedBy: c.name,
+  });
   g.t = -1.5; // don't instantly re-pick
+  g.vx = 0; g.vy = 0; g.vz = 50;
   G.world.addLoot(g);
+  if (G.room) {
+    net.sendLootSpawn({
+      lootId,
+      x: p.x,
+      y: p.y,
+      kind: g.kind,
+      item: it,
+      droppedBy: c.name,
+      worldKind: G.world.kind,
+      depth: G.world.depth || 0,
+    });
+  }
   UI.selected = null;
   changed();
   return true;
+}
+
+export function dropGold(amount) {
+  const c = G.char, p = G.player;
+  if (!c || !p || !G.world) return false;
+  const parsed = parseInt(amount, 10);
+  if (isNaN(parsed) || parsed <= 0) return false;
+  const amt = Math.min(parsed, c.gold);
+  if (amt <= 0) return false;
+
+  c.gold -= amt;
+  const lootId = `drop_gold_${net.myId || 'p'}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+  const g = new GroundItem(p.x, p.y, 'gold', {
+    amount: amt,
+    lootId,
+    droppedBy: c.name,
+  });
+  g.t = -1.5; // Cooldown so dropper doesn't instantly vacuum it right back up
+  g.vx = 0; g.vy = 0; g.vz = 50;
+  G.world.addLoot(g);
+
+  sfx('gold');
+  floatText(p.x, p.y, 46, `-${amt} gold`, '#ffd34a', 12);
+  UI.log(`Dropped <span class="gold-text">${fmtInt(amt)} gold</span> on the floor.`, '#ffd860');
+
+  if (G.room) {
+    net.sendLootSpawn({
+      lootId,
+      x: p.x,
+      y: p.y,
+      kind: 'gold',
+      amount: amt,
+      droppedBy: c.name,
+      worldKind: G.world.kind,
+      depth: G.world.depth || 0,
+    });
+  }
+
+  changed();
+  return true;
+}
+
+export function openDropGoldDialog() {
+  const c = G.char;
+  if (!c || c.gold <= 0) {
+    UI.log('You have no gold to drop.', '#ffd860');
+    sfx('error');
+    return;
+  }
+
+  const html = `
+    <div style="min-width:280px;max-width:360px;text-align:center;padding:4px 0 10px;">
+      <p style="color:#dfd3c3;font-size:14px;margin-bottom:12px;">How much gold do you want to drop?</p>
+      
+      <div style="background:rgba(16,12,8,0.7);padding:8px 12px;border:1px solid rgba(160,120,60,0.3);border-radius:4px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:12px;color:#a8977c;">Available Gold:</span>
+        <span class="gold-text" style="font-family:var(--font-head);font-size:14px;font-weight:700;">◉ ${fmtInt(c.gold)}</span>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <input type="number" id="drop-gold-input" min="1" max="${c.gold}" value="${c.gold}" 
+          style="width:100%;box-sizing:border-box;padding:8px 12px;font-size:16px;font-family:var(--font-head);background:rgba(8,6,4,0.9);border:1px solid #c89e38;color:#ffd860;border-radius:4px;text-align:center;" />
+      </div>
+
+      <div style="display:flex;gap:6px;justify-content:center;margin-bottom:8px;">
+        <button class="btn small" data-pct="10" style="padding:4px 8px;font-size:11px;">10%</button>
+        <button class="btn small" data-pct="25" style="padding:4px 8px;font-size:11px;">25%</button>
+        <button class="btn small" data-pct="50" style="padding:4px 8px;font-size:11px;">50%</button>
+        <button class="btn small" data-pct="100" style="padding:4px 8px;font-size:11px;">All</button>
+      </div>
+    </div>
+  `;
+
+  const d = UI.dialog({
+    title: 'Drop Gold',
+    html,
+    buttons: [
+      { label: 'Cancel' },
+      {
+        label: 'Drop',
+        cls: 'btn big',
+        fn: () => {
+          const inp = d.box.querySelector('#drop-gold-input');
+          const val = parseInt(inp ? inp.value : '0', 10);
+          if (isNaN(val) || val <= 0) {
+            UI.log('Enter a valid amount of gold.', '#ff8080');
+            sfx('error');
+            return;
+          }
+          dropGold(val);
+        }
+      }
+    ]
+  });
+
+  const inp = d.box.querySelector('#drop-gold-input');
+  if (inp) {
+    inp.focus();
+    inp.select();
+    inp.onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        const val = parseInt(inp.value, 10);
+        if (!isNaN(val) && val > 0) {
+          dropGold(val);
+          d.box.remove();
+        }
+      }
+    };
+  }
+
+  d.box.querySelectorAll('[data-pct]').forEach((btn) => {
+    btn.onclick = () => {
+      sfx('ui');
+      const pct = parseInt(btn.dataset.pct, 10);
+      const target = Math.max(1, Math.floor((c.gold * pct) / 100));
+      if (inp) {
+        inp.value = String(target);
+        inp.focus();
+        inp.select();
+      }
+    };
+  });
 }
 
 function handleDropOnBag(idx, data) {
@@ -335,7 +477,26 @@ export function renderInventory(body) {
   for (let i = 0; i < c.bag.length; i++) bag.appendChild(bagSlot(i));
   mid.appendChild(bag);
   const info = el('div', 'row');
-  info.innerHTML = `<span class="gold-text">◉ ${fmtInt(c.gold)} gold</span><span class="dim">· Potions: <span style="color:#ff6060">${c.potions.hp}</span> / <span style="color:#6a8aff">${c.potions.mp}</span> / <span style="color:#c060ff">${c.potions.rejuv}</span> / <span style="color:#ffa020">${c.potions.fury}</span></span>`;
+  const goldSpan = el('span', 'gold-text gold-clickable', `◉ ${fmtInt(c.gold)} gold`);
+  goldSpan.id = 'inv-gold-display';
+  goldSpan.title = 'Click to drop gold on the floor';
+  goldSpan.setAttribute('role', 'button');
+  goldSpan.setAttribute('tabindex', '0');
+  goldSpan.onclick = () => {
+    sfx('ui');
+    openDropGoldDialog();
+  };
+  goldSpan.onkeydown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      sfx('ui');
+      openDropGoldDialog();
+    }
+  };
+  info.appendChild(goldSpan);
+  const potionsSpan = el('span', 'dim');
+  potionsSpan.innerHTML = `· Potions: <span style="color:#ff6060">${c.potions.hp}</span> / <span style="color:#6a8aff">${c.potions.mp}</span> / <span style="color:#c060ff">${c.potions.rejuv}</span> / <span style="color:#ffa020">${c.potions.fury}</span>`;
+  info.appendChild(potionsSpan);
   const sortBtn = el('button', 'btn small', 'Sort');
   sortBtn.onclick = () => { sortBag(); sfx('ui'); };
   info.appendChild(sortBtn);

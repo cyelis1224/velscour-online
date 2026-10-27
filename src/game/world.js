@@ -1,6 +1,7 @@
 // World: everything that lives in the current level.
 import { augHazard } from './augments.js';
 import { G } from '../state.js';
+import { net } from '../net/network.js';
 import { camera, isoX, isoY } from '../core/view.js';
 import { rand, dist2, TAU, chance } from '../core/util.js';
 import { sfx } from '../core/audio.js';
@@ -41,6 +42,55 @@ export class World {
     // never start inside a wall or prop: a body that overlaps one can't take a step
     if (this.map && !c.ghost && !c.isPlayer) [c.x, c.y] = this.map.nudge(c.x, c.y, bodyR(c));
     this.creatures.push(c);
+    if (c.team === 'enemy') {
+      if (!c.netId) {
+        c.netId = 'dyn_' + (net.myId || 'h') + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).substr(2, 6);
+      }
+      if (!c.idx) {
+        c.idx = (this._monsterSeq = (this._monsterSeq || 2000) + 1);
+      }
+      if (G.room && !c.fromNetwork && !this._generatingDungeon && G.game?.isDungeonAuthority(this.depth)) {
+        net.sendMonsterSpawn({
+          netId: c.netId,
+          idx: c.idx,
+          depth: this.depth || 0,
+          worldKind: this.kind || 'dungeon',
+          x: Math.round(c.x * 100) / 100,
+          y: Math.round(c.y * 100) / 100,
+          z: Math.round((c.z || 0) * 10) / 10,
+          hp: Math.round(c.hp),
+          maxHp: Math.round(c.maxHp),
+          dmg: Math.round(c.dmg || 10),
+          level: c.level || 1,
+          rank: c.rank || 'normal',
+          arch: c.arch,
+          name: c.name,
+          biome: this.biome?.id || 'dungeon',
+          look: c.look,
+          sprite: c.sprite,
+          art: c.art,
+          artH: c.artH,
+          aura: c.aura,
+          color: c.aura || (c.pal ? c.pal.a : null),
+          el: c.el,
+          ai: c.ai,
+          static: !!c.static,
+          fly: !!c.fly,
+          isWard: !!c.isWard,
+          vk: c.vk,
+          scale: c.scale || 1,
+          traits: c.traits,
+          enteringKind: c.enteringKind,
+          enteringFrom: c.enteringFrom,
+        });
+      }
+    }
+    return c;
+  }
+  remove(c) {
+    const idx = this.creatures.indexOf(c);
+    if (idx !== -1) this.creatures.splice(idx, 1);
+    if (c.world === this) c.world = null;
     return c;
   }
   addHazard(h) { h.world = this; this.hazards.push(h); return h; }
@@ -192,7 +242,7 @@ export class World {
         if (a.static) continue;
         for (let j = i + 1; j < cell.length; j++) {
           const b = cell[j];
-          if (b.static && b.owner === a) continue; // the hero walks through his own turrets and totems
+          if (b.static && (b.owner === a || (a.team === 'player' && b.team === 'player'))) continue; // walk through friendly turrets and totems
           const dx = b.x - a.x, dy = b.y - a.y;
           const rr = (a.r + b.r) * 0.85;
           const d2 = dx * dx + dy * dy;

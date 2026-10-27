@@ -9,3 +9,14 @@ tools/runeblade3d_kit/out/
 
 # the Sky Battle bake output (tools/skyship_bake.js); assets/tiles/skyship/ is what ships
 assets/source/skyship/out/
+
+# Build artifacts & temporary directories
+dist/
+www/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/.idea/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+android/app/src/main/assets/public/
