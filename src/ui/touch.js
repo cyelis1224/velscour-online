@@ -9,9 +9,12 @@ import { chooser } from './hud.js';
 
 // Landscape uses the original radial skill cluster; portrait shows all 14 skill
 // slots as a compact bottom tray, with LMB kept as the large attack control.
-const POS = [[1, 180], [1, 225], [1, 270], [2, 198], [2, 213.4], [2, 228.8], [2, 244.2], [2, 259.6], [2, 275]];
+// Landscape positions are [radius (in scale units), angle in degrees] around the ATK button.
+// Inner arc: RMB, 1, 2 (up-left of ATK, sweeping to straight above it).
+// Outer arc: 3-8, from straight left of ATK up and over the top.
+const POS = [[100, 211], [104, 244], [100, 274], [145, 178], [148, 199], [153, 219], [162, 238], [168, 256], [170, 274]];
 const PAGES = [[RMB, 2, 3, 4, 5, 6, 7, 8, 9], [10, 11, 12, 13, 1]]; // RMB 1-8 | 9 0 - = `
-const FLIP = [1.5, 186]; // between the arcs, left of RMB
+const FLIP = [90, 176]; // straight left of ATK, inside the outer arc
 
 export const TouchUI = {
   btns: [],
@@ -76,14 +79,12 @@ export const TouchUI = {
     const main = 72 * s, small = 44 * s;
     const cx = W - 14 - main / 2;
     const cy = H - 14 - main / 2 - (H < 420 ? 0 : 10);
-    const radii = [0, 92 * s, 170 * s];
-    const rad = (ring) => (ring % 1 ? (radii[Math.floor(ring)] + radii[Math.ceil(ring)]) / 2 : radii[ring]);
     const root = $('#touch-buttons');
     root.style.width = W + 'px'; root.style.height = H + 'px';
     root.style.left = '0'; root.style.top = '0'; root.style.right = 'auto'; root.style.bottom = 'auto';
     root.classList.toggle('portrait-grid', portrait);
-    const put = (b, ring, ang, size) => {
-      const r = rad(ring), a = (ang * Math.PI) / 180;
+    const put = (b, dist, ang, size) => {
+      const r = dist * s, a = (ang * Math.PI) / 180;
       const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
       Object.assign(b.style, { width: size + 'px', height: size + 'px', left: x - size / 2 + 'px', top: y - size / 2 + 'px' });
     };

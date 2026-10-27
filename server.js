@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.0.5' };
+    return { version: '1.0.6' };
   }
 }
 
