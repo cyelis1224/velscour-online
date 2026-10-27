@@ -71,6 +71,9 @@ function getBuildArtifacts() {
     android: findBinary(path.join(ROOT, 'android/app/build/outputs/apk/debug'), f => f.endsWith('.apk')),
     windows: findBinary(path.join(ROOT, 'dist/desktop'), f => f.endsWith('.exe')),
     linux: findBinary(path.join(ROOT, 'dist/desktop'), f => f.endsWith('.AppImage')),
+    // electron-builder zip names: Velscour-<v>-arm64-mac.zip (Apple Silicon), Velscour-<v>-mac.zip (Intel)
+    mac: findBinary(path.join(ROOT, 'dist/desktop'), f => f.endsWith('-arm64-mac.zip')),
+    macIntel: findBinary(path.join(ROOT, 'dist/desktop'), f => f.endsWith('-mac.zip') && !f.endsWith('-arm64-mac.zip')),
   };
 }
 
@@ -120,6 +123,8 @@ function renderDownloadPage(artifacts) {
   const android = artifacts.android;
   const windows = artifacts.windows;
   const linux = artifacts.linux;
+  const mac = artifacts.mac;
+  const macIntel = artifacts.macIntel;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -351,6 +356,25 @@ function renderDownloadPage(artifacts) {
         Download AppImage
       </a>
     </div>
+
+    <!-- macOS Desktop -->
+    <div class="card">
+      <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="12" rx="2" ry="2" />
+        <path d="M1 20h22" />
+      </svg>
+      <div class="card-title">macOS</div>
+      <div class="card-meta">${mac ? formatBytes(mac.size) : 'Unavailable'} · macOS 11+</div>
+      <div class="card-desc">Unzip and drag Velscour.app to Applications. Unsigned: if macOS says it is damaged, run <code>xattr -cr /Applications/Velscour.app</code> in Terminal, then right-click → Open.</div>
+      <a class="btn ${mac ? '' : 'disabled'}" href="/download/mac">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Apple Silicon (M1+)
+      </a>
+      <a class="btn ${macIntel ? '' : 'disabled'}" href="/download/mac-intel" style="margin-top:8px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Intel Mac
+      </a>
+    </div>
   </div>
 
   <div class="play-web">
@@ -373,6 +397,8 @@ const server = http.createServer((req, res) => {
       artifacts.android?.mtime || 0,
       artifacts.windows?.mtime || 0,
       artifacts.linux?.mtime || 0,
+      artifacts.mac?.mtime || 0,
+      artifacts.macIntel?.mtime || 0,
     ];
     const latestBuild = Math.max(...mtimes, serverStartTime);
     const resData = {
@@ -407,6 +433,20 @@ const server = http.createServer((req, res) => {
           filename: 'Velscour.AppImage',
           size: artifacts.linux ? artifacts.linux.size : 0,
           sizeFormatted: artifacts.linux ? formatBytes(artifacts.linux.size) : null
+        },
+        mac: {
+          available: !!artifacts.mac,
+          url: '/download/mac',
+          filename: 'Velscour-mac-arm64.zip',
+          size: artifacts.mac ? artifacts.mac.size : 0,
+          sizeFormatted: artifacts.mac ? formatBytes(artifacts.mac.size) : null
+        },
+        macIntel: {
+          available: !!artifacts.macIntel,
+          url: '/download/mac-intel',
+          filename: 'Velscour-mac-x64.zip',
+          size: artifacts.macIntel ? artifacts.macIntel.size : 0,
+          sizeFormatted: artifacts.macIntel ? formatBytes(artifacts.macIntel.size) : null
         }
       }
     };
@@ -450,6 +490,18 @@ const server = http.createServer((req, res) => {
       return;
     }
     streamFile(req, res, artifacts.linux.path, 'Velscour.AppImage', 'application/x-executable');
+    return;
+  }
+
+  if (pathname === '/download/mac' || pathname === '/download/mac-intel') {
+    const intel = pathname === '/download/mac-intel';
+    const art = getBuildArtifacts()[intel ? 'macIntel' : 'mac'];
+    if (!art) {
+      res.writeHead(404, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
+      res.end('macOS build not found on server.');
+      return;
+    }
+    streamFile(req, res, art.path, intel ? 'Velscour-mac-x64.zip' : 'Velscour-mac-arm64.zip', 'application/zip');
     return;
   }
 

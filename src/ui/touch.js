@@ -9,12 +9,14 @@ import { chooser } from './hud.js';
 
 // Landscape uses the original radial skill cluster; portrait shows all 14 skill
 // slots as a compact bottom tray, with LMB kept as the large attack control.
-// Landscape positions are [radius (in scale units), angle in degrees] around the ATK button.
-// Inner arc: RMB, 1, 2 (up-left of ATK, sweeping to straight above it).
-// Outer arc: 3-8, from straight left of ATK up and over the top.
-const POS = [[100, 211], [104, 244], [100, 274], [145, 178], [148, 199], [153, 219], [162, 238], [168, 256], [170, 274]];
+// Landscape positions are [radius (in scale units), angle in degrees] around the ATK button,
+// on two true arcs with even steps so every neighbour sits the same distance apart.
+// Inner arc (r 104, every 30°): flip, RMB, 1, 2 — from straight left of ATK to straight above it.
+// Outer arc (r 160, every 18°): 3-8 over the same quarter circle.
+const R1 = 104, R2 = 160;
+const POS = [[R1, 210], [R1, 240], [R1, 270], [R2, 180], [R2, 198], [R2, 216], [R2, 234], [R2, 252], [R2, 270]];
 const PAGES = [[RMB, 2, 3, 4, 5, 6, 7, 8, 9], [10, 11, 12, 13, 1]]; // RMB 1-8 | 9 0 - = `
-const FLIP = [90, 176]; // straight left of ATK, inside the outer arc
+const FLIP = [R1, 180]; // straight left of ATK, first stop on the inner arc
 
 export const TouchUI = {
   btns: [],

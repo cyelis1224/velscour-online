@@ -3,11 +3,11 @@
    Diablo II / Dark Gothic ARPG Aesthetic
    ========================================================================== */
 
-/* Main Chat Container docked at bottom-left */
+/* Main Chat Container docked at top-left (a dragged position saved by chat.js overrides this) */
 .game-chat {
   position: absolute;
-  left: 12px;
-  bottom: calc(var(--hud-w) * var(--hud-k) + 12px);
+  left: max(4px, env(safe-area-inset-left));
+  top: max(4px, env(safe-area-inset-top));
   width: min(440px, 65vw);
   height: 220px;
   min-width: 280px;

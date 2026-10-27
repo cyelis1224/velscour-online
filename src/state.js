@@ -24,7 +24,7 @@ export const G = {
     dmgNumbers: true,
     shake: true,
     zoom: 1,
-    mobileSkillBar: true,
+    mobileSkillBar: false, // landscape phones: full 15-slot bar art (off: orbs + potions only, the touch buttons hold the skills)
     lockSkillBar: false, // auto-play only fills empty bar slots
     hideItemNames: false, // no item name labels on the ground (hover still shows one)
     autoSkillPoints: true, // auto-play spends skill points
@@ -47,6 +47,8 @@ export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
     Object.assign(G.settings, s);
+    // v1.0.7: landscape phones switched to the compact HUD by default; flip older saves over once
+    if (!s.mobileHudV2) { G.settings.mobileSkillBar = false; G.settings.mobileHudV2 = true; }
   } catch (e) { /* ignore */ }
 }
 export function saveSettings() {
