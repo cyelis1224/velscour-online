@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.0.4';
+export const CURRENT_BUILD_VERSION = '1.0.5';
 
 /**
  * Returns the effective client version.
@@ -168,12 +168,12 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.0.4' : currentVer,
+        serverVersion: forceTestUpdate ? '1.0.5' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.0.4' : currentVer,
+          version: forceTestUpdate ? '1.0.5' : currentVer,
           changelog: [
             'Built-in automatic updater with in-game download & installation',
             'Immersive fullscreen Android display with hidden status bars',
