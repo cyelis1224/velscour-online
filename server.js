@@ -89,6 +89,9 @@ function streamFile(req, res, filePath, downloadFilename, contentType = 'applica
       'Content-Type': contentType,
       'Access-Control-Allow-Origin': '*',
       'Accept-Ranges': 'bytes',
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
     };
 
     if (downloadFilename) {
@@ -416,8 +419,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: '/download/android',
-          filename: 'Velscour.apk',
+          url: `/download/android?v=${pkg.version || '1.0.8'}`,
+          filename: `Velscour-${pkg.version || '1.0.8'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -461,14 +464,16 @@ const server = http.createServer((req, res) => {
   }
 
   // 2. Direct binary download routes
-  if (pathname === '/download/android' || pathname === '/download/apk') {
+  if (pathname === '/download/android' || pathname === '/download/apk' || pathname.endsWith('.apk')) {
+    const pkg = getPackageInfo();
     const artifacts = getBuildArtifacts();
     if (!artifacts.android) {
       res.writeHead(404, { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' });
       res.end('Android APK not found on server.');
       return;
     }
-    streamFile(req, res, artifacts.android.path, 'Velscour.apk', 'application/vnd.android.package-archive');
+    const dlName = `Velscour-${pkg.version || '1.0.8'}.apk`;
+    streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
 
