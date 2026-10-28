@@ -83,7 +83,7 @@ import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu 
 import { openLobby } from '../ui/lobby.js';
 import { net } from '../net/network.js';
 import { RemotePlayer } from '../net/remoteplayer.js';
-import { drawAutomapPartyRoster } from '../ui/partyroster.js';
+import { updateAutomapPartyRoster } from '../ui/partyroster.js';
 import { GameChat } from '../ui/chat.js';
 
 const PICK_WAIT = 8; // seconds auto-play gives the player to choose a portal down (portalChoice)
@@ -1862,7 +1862,7 @@ export const game = {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 0.9; ctx.drawImage(automapCanvas, 0, 0); ctx.globalAlpha = 1;
-      drawAutomapPartyRoster(ctx, W, H);
+      updateAutomapPartyRoster();
     }
   },
 };

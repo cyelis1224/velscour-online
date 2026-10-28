@@ -1394,6 +1394,138 @@ body.touch #sealed-btn i {
   image-rendering: pixelated;
 }
 
+/* party roster (streamlined automap health overlay in top-left) */
+#party-roster {
+  pointer-events: auto;
+  margin-top: 6px;
+  width: max-content;
+  min-width: 162px;
+  max-width: 190px;
+  padding: 4px 7px 5px;
+  border: 1px solid #5c3a1c;
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(34, 10, 6, .88), rgba(10, 4, 3, .88));
+  box-shadow: inset 0 0 10px #000, 0 0 0 1px rgba(0, 0, 0, .8), 0 2px 8px rgba(0, 0, 0, .7);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  user-select: none;
+}
+
+#party-roster.hidden {
+  display: none !important;
+}
+
+.pr-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(92, 58, 28, .5);
+}
+
+.pr-header span:first-child {
+  font: 700 9.5px var(--font-head);
+  color: #a8876a;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.pr-header .pr-count {
+  font: 700 10px var(--font-head);
+  color: #e8c890;
+}
+
+.pr-member {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0 2px 5px;
+  border-left: 2px solid #a8876a;
+}
+
+.pr-member.is-me {
+  border-left-color: #ffd860;
+}
+
+.pr-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.pr-name {
+  font: bold 10.5px var(--font-head);
+  color: #e8c890;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+
+.pr-member.is-me .pr-name {
+  color: #ffffff;
+  text-shadow: 0 0 4px rgba(255, 216, 96, 0.4);
+}
+
+.pr-tag {
+  font: 600 9px var(--font-body);
+  color: #8c7f6e;
+  white-space: nowrap;
+}
+
+.pr-tag.dead {
+  color: #ff4030;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.pr-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.pr-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(8, 4, 3, 0.95);
+  border: 1px solid rgba(80, 50, 25, 0.7);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pr-fill {
+  height: 100%;
+  width: 0%;
+  transition: width 0.15s ease-out;
+  border-radius: 1px;
+}
+
+.pr-fill.high {
+  background: linear-gradient(to right, #24aa3a, #3de058);
+}
+
+.pr-fill.mid {
+  background: linear-gradient(to right, #b86a10, #ffaa20);
+}
+
+.pr-fill.low {
+  background: linear-gradient(to right, #8a1010, #ff3a20);
+}
+
+.pr-hp-text {
+  font: 700 8.5px var(--font-body);
+  color: #a8947e;
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: right;
+  white-space: nowrap;
+}
+
 /* target window: portrait + name of the monster being fought (or the last one, once slain) */
 #target-box {
   pointer-events: auto;
@@ -3878,6 +4010,12 @@ body.touch.portrait #hud-top-left {
 body.touch.portrait #hero-stats {
   min-width: 0;
   width: 100%;
+}
+
+body.touch.portrait #party-roster {
+  min-width: 0;
+  width: 100%;
+  max-width: 180px;
 }
 
 body.touch.portrait #hero-stats .hs-first,

@@ -10,6 +10,7 @@ import { xpToNext } from '../game/player.js';
 import { drawMinimap } from '../game/render.js';
 import { assign, SLOT_LABELS } from './skills.js';
 import { elem } from '../gfx/vfx.js';
+import { updateAutomapPartyRoster } from './partyroster.js';
 import { pickTaunt } from '../data/taunts.js';
 
 const TAUNT_KEY = 'velscour_taunts_v1'; // Velscour's level-up deck: the last mood and the lines already shown
@@ -438,6 +439,7 @@ export const HUD = {
     }
     this.updateStats(dt);
     drawMinimap(w, dt, $('#minimap'));
+    updateAutomapPartyRoster();
   },
 
   /** The stats plaque: level, attack, sheet DPS and the real 30 s average, refreshed every 0.1 s. */
