@@ -410,6 +410,8 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Endgame expansion: Heresies of the Hollow, Abyssal Rifts, Velscour Unbound, and Infernal Marks",
+        "Global Abyssal Rift leaderboard and honour board integration",
         "Interactive mobile pinch-to-zoom gesture support with smooth camera zoom scaling",
         "NPC-style walking bounce animation with organic squash, stretch, stride sway, and idle breathing",
         "Dedicated round buttons for Smite and Madness with procedural canvas artwork and circular SVG charge rings",
