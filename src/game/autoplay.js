@@ -736,7 +736,7 @@ export const Auto = {
         if (!it || it.locked || it.gems.length >= it.sockets) continue;
         const tried = new Set();
         c.bag.forEach((g, gi) => {
-          if (!g || g.type !== 'gem' || tried.has(g.gem + g.tier)) return;
+          if (!g || g.type !== 'gem' || GEMS[g.gem].sigil || tried.has(g.gem + g.tier)) return; // Sigils wait for a Glyphword
           tried.add(g.gem + g.tier);
           const s = simulate(p, () => { it.gems.push({ gem: g.gem, tier: g.tier }); return () => { it.gems.pop(); }; });
           if (s > bs) { bs = s; best = { gi, slot }; }
@@ -1951,7 +1951,7 @@ export const Auto = {
       if (!it || it.sealed || it.locked || filterKeeps(it) || upgraded(it)) return; // only the player breaks a seal or sells what's locked; keepers and +N gear go to the chest
       if (it.type === 'gem') {
         const top = Math.max(0, ...SLOTS.flatMap((s) => (c.equip[s] ? c.equip[s].gems.map((g) => g.tier) : [])), ...c.bag.filter((b) => b && b.type === 'gem').map((b) => b.tier));
-        if (bagFree(c) > 15 || GEMS[it.gem].special || it.tier >= top - 1) return;
+        if (bagFree(c) > 15 || GEMS[it.gem].special || GEMS[it.gem].sigil || it.tier >= top - 1) return;
       } else if (it.type === 'gear' && (it.req || 1) > c.level && (it.req || 1) <= c.level + 6 && it.rarity >= 2 && !future[it.slot]) {
         const s = fitScore(p, it).s;
         if (s > simulate(p, () => () => {}) + 0.02) { future[it.slot] = true; return; }
@@ -2028,8 +2028,8 @@ export const Auto = {
 
   gemShop() {
     const p = G.player, c = G.char;
-    // the Gem Forge: fuse every triple it can afford, lowest grades first
-    const fused = fuseAll(c, this.budget(0.3));
+    // the Gem Forge: fuse every triple it can afford, lowest grades first (never Sigils: Glyphwords need every rank)
+    const fused = fuseAll(c, this.budget(0.3), true);
     if (fused) G.ui.log(`Auto-play fused ${fused} gem${fused > 1 ? 's' : ''} at the Gem Forge.`, '#c8f0ff');
     // buy gems for empty sockets when the bag has none that help
     const empty = SLOTS.reduce((a, s) => a + (c.equip[s] ? c.equip[s].sockets - c.equip[s].gems.length : 0), 0);

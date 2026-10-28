@@ -488,6 +488,7 @@ export function settingsDialog() {
     <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
     <label>Pause while menus open</label><input type="checkbox" data-k="pauseMenus" ${st.pauseMenus !== false ? 'checked' : ''}>
     <label>Show gold labels</label><input type="checkbox" data-k="showGoldLabels" ${st.showGoldLabels ? 'checked' : ''}>
+    <label title="An icon per summoning skill next to the buffs, with how many of its minions are out">Minion counts with the buffs</label><input type="checkbox" data-k="minionCounts" ${st.minionCounts !== false ? 'checked' : ''}>
     <label>Hide dropped item names</label><input type="checkbox" data-k="hideItemNames" ${st.hideItemNames ? 'checked' : ''}>
     <label>Lock skill bar (auto-play only fills empty slots)</label><input type="checkbox" data-k="lockSkillBar" ${st.lockSkillBar ? 'checked' : ''}>
     <label>Auto skill point assignment (auto-play)</label><input type="checkbox" data-k="autoSkillPoints" ${st.autoSkillPoints !== false ? 'checked' : ''}>

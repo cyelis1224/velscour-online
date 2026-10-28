@@ -362,7 +362,10 @@ export const HUD = {
       const extra = [];
       if (c.defiance) extra.push({ name: `Defiance ${c.defiance.n}: ${defianceText(c.defiance.n)} until you clear Depth ${c.defiance.block + 4}`, color: '#ff5a2a', n: c.defiance.n });
       if (c.blessing) extra.push({ name: `${c.blessing.name}: ${c.blessing.left} more depth${c.blessing.left > 1 ? 's' : ''}`, color: '#ffe080', n: c.blessing.left });
-      const key = extra.map((x) => x.name).join('|') + '|' + p.buffs.map((b) => b.id + ':' + Math.ceil(b.t)).join('|');
+      // minions out, per summoning skill (settings: minionCounts)
+      const mins = new Map();
+      if (G.settings.minionCounts !== false && w) for (const m of w.creatures) if (m.summon && !m.dead && m.owner === p && m.skillId && SKILLS[m.skillId]) mins.set(m.skillId, (mins.get(m.skillId) || 0) + 1);
+      const key = extra.map((x) => x.name).join('|') + '|' + [...mins].join('|') + '|' + p.buffs.map((b) => b.id + ':' + Math.ceil(b.t)).join('|');
       if (key !== this.last.buffs) {
         this.last.buffs = key;
         row.innerHTML = '';
@@ -371,6 +374,13 @@ export const HUD = {
           d.style.background = `radial-gradient(circle, ${x.color}, #200800)`;
           d.title = x.name;
           d.appendChild(el('span', '', x.n));
+          row.appendChild(d);
+        }
+        for (const [id, n] of mins) {
+          const d = el('div', 'buff minion'), sk = SKILLS[id];
+          const im = new Image(); im.src = skillIconURL(sk); im.style.width = '100%'; d.appendChild(im);
+          d.title = `${sk.name}: ${n} out`;
+          d.appendChild(el('span', '', n));
           row.appendChild(d);
         }
         for (const b of p.buffs) {
@@ -383,6 +393,13 @@ export const HUD = {
           if (!b.aura) d.appendChild(el('span', '', Math.ceil(b.t)));
           row.appendChild(d);
         }
+      }
+      // the message log grows up from the skill bar: keep it below the buff row (phones in landscape are short)
+      const lg = $('#log');
+      if (lg && !document.body.classList.contains('portrait')) {
+        const room = Math.floor(lg.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom - 6);
+        const v = row.children.length && room > 0 ? room + 'px' : '';
+        if (lg.style.maxHeight !== v) lg.style.maxHeight = v;
       }
     }
     this.updateStats(dt);

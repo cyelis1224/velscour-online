@@ -31,6 +31,7 @@ export const G = {
     autoStatPoints: true, // auto-play spends attribute points
     autoGear: true, // auto-play equips, sells, buys, stashes and upgrades gear (off: hands off, potions only)
     outlines: true, // see-through rims round the hero, monsters and pets, over spells, walls and darkness
+    minionCounts: true, // tiles in the buff row: how many of each summon are out
     lifeBars: true, // a life bar over every enemy, bosses too (off: only over a monster just hit)
     wallLines: false, // a line along the foot of the dungeon's walls, over the spells
     noSkipCine: false, // "Don't skip cutscenes": Sky Battle scenes already seen play at 1x, not 20x

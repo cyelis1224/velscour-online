@@ -312,11 +312,11 @@ export function fuseGem(c, i) {
   return true;
 }
 /** Fuse every stack of three, lowest grades first, until nothing more fuses (or gold runs out). Returns fusions. */
-export function fuseAll(c, budget = Infinity) {
+export function fuseAll(c, budget = Infinity, keepSigils = false) {
   let n = 0;
   for (let guard = 0; guard < 200; guard++) {
     let best = -1;
-    c.bag.forEach((b, i) => { if (b && b.type === 'gem' && (b.count || 1) >= 3 && b.tier < gemMaxTier(b.gem) && fuseCost(b) <= Math.min(c.gold, budget) && (best < 0 || b.tier < c.bag[best].tier)) best = i; });
+    c.bag.forEach((b, i) => { if (b && b.type === 'gem' && !b.locked && !(keepSigils && GEMS[b.gem].sigil) && (b.count || 1) >= 3 && b.tier < gemMaxTier(b.gem) && fuseCost(b) <= Math.min(c.gold, budget) && (best < 0 || b.tier < c.bag[best].tier)) best = i; });
     if (best < 0) break;
     budget -= fuseCost(c.bag[best]);
     fuseGem(c, best); n++;

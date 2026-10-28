@@ -109,7 +109,11 @@ export class Monster extends Creature {
       this.shockCd = 1.2;
       for (let i = 0; i < 5; i++) this.world.addHazard(new Projectile({ world: this.world, src: this, x: this.x, y: this.y, ang: rand(TAU), speed: 5, range: 5, fx: 'spark', el: 'light', dmg: [this.dmg * 0.4, this.dmg * 0.6] }));
     }
-    if (this.affixes.includes('thorns') && src && !src.dead && src.isPlayer) hit(this, src, this.dmg * 0.25, 'phys', { dot: true, crit: false });
+    // thorns strike back at most twice a second: a hail of projectiles used to mean a hail of thorns, which outpaced any leech
+    if (this.affixes.includes('thorns') && src && !src.dead && src.isPlayer && (this.thornCd || 0) <= 0) {
+      this.thornCd = 0.5;
+      hit(this, src, this.dmg * 0.25, 'phys', { dot: true, crit: false });
+    }
   }
 
   // ---------------------------------------------------------------- targeting
@@ -140,6 +144,7 @@ export class Monster extends Creature {
     this.animT += dt;
     this.lifeT += dt;
     if (this.shockCd > 0) this.shockCd -= dt;
+    if (this.thornCd > 0) this.thornCd -= dt;
     if (this.invuln > 0) this.invuln -= dt;
     const canAct = this.tickStatus(dt, (k, amount, src) => hit(src, this, amount, k === 'burn' ? 'fire' : k === 'poison' ? 'poison' : k === 'bleed' ? 'blood' : 'shadow', { dot: true, crit: false }));
     if (this.dead) return;
