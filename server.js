@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.2' };
+    return { version: '1.1.3' };
   }
 }
 
@@ -424,6 +424,8 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Shared multiplayer Heresies: portal activator sets party Heresies and biomes for deterministic enemy synchronization",
+        "Resolved multiplayer monster authority symmetry and split-monster replication",
         "Enforced version synchronization for Online Multiplayer mode with direct one-click update prompts",
         "Lobby auto-reconnect on foreground resume, WebSocket keepalive heartbeat, and 90-second host room grace period",
         "Endgame expansion: Heresies of the Hollow, Abyssal Rifts, Velscour Unbound, and Infernal Marks",
@@ -437,8 +439,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.2'}`,
-          filename: `Velscour-${pkg.version || '1.1.2'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.3'}`,
+          filename: `Velscour-${pkg.version || '1.1.3'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -490,7 +492,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.2'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.3'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -803,7 +805,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.1.2';
+        const serverVer = getPackageInfo().version || '1.1.3';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -856,7 +858,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.1.2',
+          serverVersion: getPackageInfo().version || '1.1.3',
         }));
 
         if (reconnectedRoom) {
