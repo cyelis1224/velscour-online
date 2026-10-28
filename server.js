@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.0.7' };
+    return { version: '1.0.8' };
   }
 }
 
@@ -407,9 +407,10 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Parchment player chat speech bubbles with off-screen edge directional indicators",
+        "Settings toggles to customize player chat bubbles and side notification logging",
+        "Centered mobile HUD: flanking HP & Mana orbs with centered potion slots",
         "Built-in automatic updater with in-game download & installation",
-        "Immersive fullscreen Android display with hidden status bars",
-        "Seamless Google Account sign-in on Desktop and Android",
         "Multiplayer Dungeon Crawling & Diablo-inspired Battle.net Lobby"
       ],
       downloads: {
