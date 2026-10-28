@@ -1107,7 +1107,21 @@ wss.on('connection', (ws) => {
           break;
         }
 
+        // Clean up any existing or disconnected instance of this player in the room
+        const existingIdx = room.players.findIndex(p => p.id === clientData.id || p.name === clientData.name);
+        if (existingIdx >= 0) {
+          const oldP = room.players[existingIdx];
+          if (oldP.disconnectTimer) clearTimeout(oldP.disconnectTimer);
+          room.players.splice(existingIdx, 1);
+          broadcastToRoom(roomName, {
+            type: 'player_left_room',
+            playerId: oldP.id,
+            playerName: oldP.name,
+          }, ws);
+        }
+
         clientData.room = roomName;
+        clientData.disconnected = false;
         room.players.push(clientData);
 
         // Notify room members
@@ -1156,7 +1170,11 @@ wss.on('connection', (ws) => {
         clientData.room = null;
 
         if (room) {
-          room.players = room.players.filter(p => p.id !== clientData.id);
+          const leaving = room.players.filter(p => p.id === clientData.id || p.name === clientData.name);
+          for (const lp of leaving) {
+            if (lp.disconnectTimer) clearTimeout(lp.disconnectTimer);
+          }
+          room.players = room.players.filter(p => p.id !== clientData.id && p.name !== clientData.name);
           broadcastToRoom(roomName, {
             type: 'player_left_room',
             playerId: clientData.id,
@@ -1167,8 +1185,9 @@ wss.on('connection', (ws) => {
             if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
             rooms.delete(roomName);
           } else if (room.hostId === clientData.id) {
-            room.hostId = room.players[0].id;
-            room.hostName = room.players[0].name;
+            const nextHost = room.players.find(p => !p.disconnected) || room.players[0];
+            room.hostId = nextHost.id;
+            room.hostName = nextHost.name;
             broadcastToRoom(roomName, {
               type: 'host_migrated',
               hostId: room.hostId,
@@ -1379,6 +1398,23 @@ wss.on('connection', (ws) => {
         if (p) {
           p.disconnected = true;
           p.disconnectedAt = Date.now();
+          if (p.disconnectTimer) clearTimeout(p.disconnectTimer);
+          const roomName = clientData.room;
+          p.disconnectTimer = setTimeout(() => {
+            const r = rooms.get(roomName);
+            if (r) {
+              const idx = r.players.findIndex(pl => pl.id === clientData.id);
+              if (idx >= 0 && r.players[idx].disconnected) {
+                const removed = r.players.splice(idx, 1)[0];
+                broadcastToRoom(r.name, {
+                  type: 'player_left_room',
+                  playerId: removed.id,
+                  playerName: removed.name,
+                });
+                broadcastLobbyUpdate();
+              }
+            }
+          }, 15000);
         }
         const activePlayers = room.players.filter(pl => !pl.disconnected);
         if (activePlayers.length === 0) {

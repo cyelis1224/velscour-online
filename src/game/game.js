@@ -189,7 +189,29 @@ function attachNetListeners() {
   netListenersAttached = true;
 
   net.on('player_joined_room', (p) => {
-    if (G.world && p.id !== net.myId && !G.remotePlayers?.has(p.id)) {
+    if (G.world && p.id !== net.myId) {
+      // Clean up any existing remote player with the same ID or name before adding the new one
+      if (G.remotePlayers) {
+        for (const [existingId, oldRp] of G.remotePlayers.entries()) {
+          if (existingId === p.id || (p.name && oldRp.name === p.name)) {
+            oldRp.destroy();
+            if (G.world.creatures) {
+              const idx = G.world.creatures.indexOf(oldRp);
+              if (idx !== -1) G.world.creatures.splice(idx, 1);
+            }
+            G.remotePlayers.delete(existingId);
+          }
+        }
+      }
+      if (G.world.creatures) {
+        for (let i = G.world.creatures.length - 1; i >= 0; i--) {
+          const c = G.world.creatures[i];
+          if (c.isRemotePlayer && (c.id === p.id || (p.name && c.name === p.name))) {
+            c.destroy && c.destroy();
+            G.world.creatures.splice(i, 1);
+          }
+        }
+      }
       const rp = new RemotePlayer(p);
       let sx = G.player.x + 1, sy = G.player.y + 1;
       if (G.world.kind === 'town' && townCache?.portal) {
@@ -211,23 +233,53 @@ function attachNetListeners() {
   });
 
   net.on('player_left_room', (data) => {
-    if (G.remotePlayers?.has(data.playerId)) {
-      const rp = G.remotePlayers.get(data.playerId);
+    const toRemove = [];
+    if (G.remotePlayers) {
+      for (const [id, rp] of G.remotePlayers.entries()) {
+        if (id === data.playerId || (data.playerName && rp.name === data.playerName)) {
+          toRemove.push([id, rp]);
+        }
+      }
+    }
+    for (const [id, rp] of toRemove) {
       rp.destroy();
-      if (G.world) {
+      if (G.world && G.world.creatures) {
         const idx = G.world.creatures.indexOf(rp);
         if (idx !== -1) G.world.creatures.splice(idx, 1);
       }
-      G.remotePlayers.delete(data.playerId);
-      UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName)}</b> left the room.`, '#a8977c');
+      G.remotePlayers.delete(id);
     }
+    if (G.world && G.world.creatures) {
+      for (let i = G.world.creatures.length - 1; i >= 0; i--) {
+        const c = G.world.creatures[i];
+        if (c.isRemotePlayer && (c.id === data.playerId || (data.playerName && c.name === data.playerName))) {
+          c.destroy && c.destroy();
+          G.world.creatures.splice(i, 1);
+        }
+      }
+    }
+    UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName || 'A player')}</b> left the room.`, '#a8977c');
   });
 
   net.on('player_disconnected', (data) => {
+    if (G.remotePlayers) {
+      for (const [id, rp] of G.remotePlayers.entries()) {
+        if (id === data.playerId || (data.playerName && rp.name === data.playerName)) {
+          rp.alpha = 0.5;
+        }
+      }
+    }
     UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName || 'A player')}</b> lost connection (waiting for reconnect...).`, '#ffd860');
   });
 
   net.on('player_reconnected', (data) => {
+    if (G.remotePlayers) {
+      for (const [id, rp] of G.remotePlayers.entries()) {
+        if (id === data.playerId || (data.playerName && rp.name === data.playerName)) {
+          rp.alpha = 1.0;
+        }
+      }
+    }
     UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName || 'A player')}</b> reconnected!`, '#48e868');
   });
 
@@ -243,6 +295,17 @@ function attachNetListeners() {
     if (!G.remotePlayers) G.remotePlayers = new Map();
     let rp = G.remotePlayers.get(state.id);
     if (!rp) {
+      // Clean up any stale remote player with this same name
+      for (const [oldId, oldRp] of G.remotePlayers.entries()) {
+        if (state.name && oldRp.name === state.name) {
+          oldRp.destroy();
+          if (G.world.creatures) {
+            const idx = G.world.creatures.indexOf(oldRp);
+            if (idx !== -1) G.world.creatures.splice(idx, 1);
+          }
+          G.remotePlayers.delete(oldId);
+        }
+      }
       rp = new RemotePlayer({ id: state.id, name: state.name || 'Hero', classId: state.classId || 'paladin', level: state.level || 1, gear: state.gear });
       G.remotePlayers.set(state.id, rp);
     }
@@ -743,10 +806,10 @@ export const game = {
     if (Auto.on) Auto.toggle(false);
     if (G.room) {
       net.leaveRoom();
-      net.disconnect();
+      if (!toLobby) net.disconnect();
       G.room = null;
       if (G.remotePlayers) {
-        for (const rp of G.remotePlayers.values()) rp.destroySummons();
+        for (const rp of G.remotePlayers.values()) rp.destroy();
       }
       G.remotePlayers = null;
     }

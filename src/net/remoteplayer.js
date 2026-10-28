@@ -290,8 +290,14 @@ export class RemotePlayer extends Creature {
   }
 
   destroy() {
+    this.dead = true;
     this.destroySummons();
     this.destroySig();
+    const w = this.world || G.world;
+    if (w && w.creatures) {
+      const idx = w.creatures.indexOf(this);
+      if (idx !== -1) w.creatures.splice(idx, 1);
+    }
   }
 
   destroySummons() {

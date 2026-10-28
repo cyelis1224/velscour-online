@@ -253,7 +253,11 @@ function serializeGearItem(item, slot) {
 
   disconnect() {
     this.shouldReconnect = false;
+    if (this.connected && (this.currentRoom || this.activeRoomName) && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try { this.ws.send(JSON.stringify({ type: 'leave_room' })); } catch (e) {}
+    }
     this.activeRoomName = null;
+    this.currentRoom = null;
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
