@@ -1114,11 +1114,21 @@ export class Monster extends Creature {
   bossUpdate(dt) {
     if (this.vel && this.vel.holdBoss()) return; // Velscour hovering, hidden or bound (game/velscour.js)
     const w = this.world, p = w.player;
-    if (!p || p.dead) return this.idle(dt);
-    const t = this.pickTarget() || p;
+    const players = [];
+    if (p && !p.dead) players.push(p);
+    if (G.remotePlayers) {
+      for (const rp of G.remotePlayers.values()) {
+        if (!rp.dead && (rp.world === w || (rp.worldKind === w.kind && rp.depth === w.depth))) {
+          players.push(rp);
+        }
+      }
+    }
+    const t = this.pickTarget() || (p && !p.dead ? p : players[0]);
+    if (!t) return this.idle(dt);
     const d = dist(this.x, this.y, t.x, t.y);
     if (!this.awake) {
-      if (d > 9 || !w.map.los(this.x, this.y, t.x, t.y)) return this.idle(dt);
+      const awakeTarget = players.find(pl => dist(this.x, this.y, pl.x, pl.y) <= 9 && w.map.los(this.x, this.y, pl.x, pl.y));
+      if (!awakeTarget) return this.idle(dt);
       this.awake = true;
       this.alertPack();
       if (w.onBossAwake) w.onBossAwake(this);

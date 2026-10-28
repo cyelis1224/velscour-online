@@ -549,9 +549,9 @@ function rollRotation(pool, once = []) {
   return out;
 }
 
-function rollMods(depth) {
+function rollMods(depth, rnd = Math.random) {
   const n = depth < 30 ? 1 : depth < 60 ? 2 : 3;
-  return shuffle(Object.keys(RAID_MODS)).slice(0, n);
+  return shuffle(Object.keys(RAID_MODS), rnd).slice(0, n);
 }
 
 /** Build the raid boss for this arena: a random one of RAID_BOSSES (not the same as the hero's last). */
@@ -575,17 +575,23 @@ export const raidHitMul = (depth) => 2.7 * (1 - 0.3 * clamp((depth - 10) / 90, 0
  *  opts.court: one of Velscour Unbound's court (game/unbound.js): it never seals the arena or announces a BOSS ROOM.
  *  opts.hp / opts.dmg: multipliers on a BOSS ROOM's. */
 export function makeRaidBoss(world, arena, depth, level, opts = {}) {
+  const rnd = opts.rnd || Math.random;
   const c = G.char;
-  const tpl = opts.tpl || pick(RAID_BOSSES.filter((b) => b.id !== (c && c.lastRaid)));
-  if (c && !opts.tpl) c.lastRaid = tpl.id;
-  const artId = opts.art || pick(tpl.art.filter((id) => ART_BY_ID[id]));
+  const candidates = (G.room || opts.rnd || !c || !c.lastRaid) ? RAID_BOSSES : RAID_BOSSES.filter((b) => b.id !== c.lastRaid);
+  const tpl = opts.tpl || candidates[Math.floor(rnd() * candidates.length)];
+  if (c && !opts.tpl && !G.room && !opts.rnd) c.lastRaid = tpl.id;
+  const validArt = tpl.art.filter((id) => ART_BY_ID[id]);
+  const artId = opts.art || validArt[Math.floor(rnd() * validArt.length)];
   const art = ART_BY_ID[artId];
-  const mods = rollMods(depth);
+  const mods = rollMods(depth, rnd);
   const fifth = worldHeresies(world).includes('fifth'); // the Fifth Phase Heresy: one more modifier (and a phase, below)
-  if (fifth) { const more = Object.keys(RAID_MODS).filter((k) => !mods.includes(k) && k !== tpl.innate); if (more.length) mods.push(pick(more)); }
+  if (fifth) {
+    const more = Object.keys(RAID_MODS).filter((k) => !mods.includes(k) && k !== tpl.innate);
+    if (more.length) mods.push(more[Math.floor(rnd() * more.length)]);
+  }
   if (tpl.innate && !mods.includes(tpl.innate)) mods.unshift(tpl.innate);
   const has = (k) => mods.includes(k);
-  const m = makeMonster(world, art.arch, world.biome, level, 'boss', arena.cx + 4, arena.cy, 0, { art: artId, swap: null });
+  const m = makeMonster(world, art.arch, world.biome, level, 'boss', arena.cx + 4, arena.cy, 0, { art: artId, swap: null }, rnd);
   const B = monsterBase(level);
   Object.assign(m, {
     ai: 'raid', el: tpl.el, res: { [tpl.el]: 0.4, ...(m.undead ? { poison: 0.5, shadow: 0.3 } : null) },
@@ -631,24 +637,38 @@ class Raid {
 
   update(dt) {
     const m = this.m, w = m.world, p = w.player;
-    if (!p || p.dead) { m.moving = false; return; }
-    this.seeThrough(p, dt);
+    const players = [];
+    if (p && !p.dead) players.push(p);
+    if (G.remotePlayers) {
+      for (const rp of G.remotePlayers.values()) {
+        if (!rp.dead && (rp.world === w || (rp.worldKind === w.kind && rp.depth === w.depth))) {
+          players.push(rp);
+        }
+      }
+    }
+    if (!players.length) { m.moving = false; return; }
+    if (p && !p.dead) this.seeThrough(p, dt);
     const g = this.arena.gate;
-    if (!this.announced && dist(p.x, p.y, g.x, (g.y0 + g.y1 + 1) / 2) < 9) {
+    if (!this.announced && players.some(pl => dist(pl.x, pl.y, g.x, (g.y0 + g.y1 + 1) / 2) < 9)) {
       this.announced = true;
       UI.centerMsg('BOSS ROOM', `${this.tpl.name}, ${this.tpl.title}, awaits`, 3.2);
       UI.log(`<b style="color:#ff8050">BOSS ROOM</b> ahead: ${this.tpl.name}. ${this.mods.map((k) => `<b>${RAID_MODS[k].name}</b> (${RAID_MODS[k].desc})`).join(', ')}.`, '#ffc0a0');
       sfx('roar', 0.6);
     }
+    const anyInside = players.some(pl => this.inside(pl, 1.5));
     if (!m.awake) {
       m.moving = false;
-      m.face(angleTo(m.x, m.y, p.x, p.y));
-      if (!this.inside(p, 1.5)) return;
+      const nearestPl = players.reduce((best, pl) => {
+        const d = dist(m.x, m.y, pl.x, pl.y);
+        return (!best || d < best.d) ? { pl, d } : best;
+      }, null)?.pl;
+      if (nearestPl) m.face(angleTo(m.x, m.y, nearestPl.x, nearestPl.y));
+      if (!anyInside) return;
       this.wake();
     }
-    if (!this.sealed && this.inside(p, 1.5)) this.seal();
+    if (!this.sealed && anyInside) this.seal();
     this.t += dt;
-    this.minHp = Math.min(this.minHp ?? 1, p.hp / p.maxHp);
+    this.minHp = Math.min(this.minHp ?? 1, (p && !p.dead) ? p.hp / p.maxHp : 1);
     // the execute timer: after 3 minutes the boss winds up a killing blow nothing survives (the hero restarts the dungeon)
     if (this.t > EXECUTE_T && !this.execT) {
       this.execT = this.t + 2.5;
@@ -657,8 +677,10 @@ class Raid {
       sfx('roar'); sfx('boss');
     }
     if (this.execT && this.t > this.execT) {
-      addEffect(new Column(p.x, p.y, '#ff1010', 1.2, 60, 400)); burst(p.x, p.y, 30, 'blood', 50, 6); sfx('thud');
-      if (!G.godMode) { p.phoenixCd = Math.max(p.phoenixCd || 0, 1); p.hp = 0; p.die(m); return; }
+      if (p && !p.dead) {
+        addEffect(new Column(p.x, p.y, '#ff1010', 1.2, 60, 400)); burst(p.x, p.y, 30, 'blood', 50, 6); sfx('thud');
+        if (!G.godMode) { p.phoenixCd = Math.max(p.phoenixCd || 0, 1); p.hp = 0; p.die(m); return; }
+      }
       this.execT = this.t + 5;
     }
     // the DPS check: enraged after 3 minutes, and harder still every 45 s after that (MADNESS doubles the hero's damage)
@@ -672,7 +694,7 @@ class Raid {
     if (this.inter) this.interTick(dt);
     const gapMul = (this.has('relentless') ? 0.75 : 1) * (this.enraged ? 0.6 : 1) * (this.inter ? 1.4 : 1) * (1 - 0.07 * this.pi);
     this.gap -= dt;
-    const t = m.pickTarget() || p;
+    const t = m.pickTarget() || (p && !p.dead ? p : players[0]);
     if (this.gap <= 0) {
       const k = this.next();
       this.gap = (this.follow.length ? 0.35 : rand(2, 3.2)) * gapMul;

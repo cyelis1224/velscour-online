@@ -49,7 +49,7 @@ export class World {
       if (!c.idx) {
         c.idx = (this._monsterSeq = (this._monsterSeq || 2000) + 1);
       }
-      if (G.room && !c.fromNetwork && !this._generatingDungeon && G.game?.isDungeonAuthority(this.depth)) {
+      if (G.room && !c.fromNetwork && !this._generatingDungeon && !c.ambusher && G.game?.isDungeonAuthority(this.depth)) {
         net.sendMonsterSpawn({
           netId: c.netId,
           idx: c.idx,
@@ -199,11 +199,23 @@ export class World {
     this.rebuildGrid();
     if (p && !p.dead) p.update(dt);
     if (G.world && G.world !== this) return; // the hero just stepped through a portal: this world stops with him gone
-    const ax = p ? p.x : 0, ay = p ? p.y : 0;
+    const activePlayers = [];
+    if (p && !p.dead) activePlayers.push({ x: p.x, y: p.y });
+    if (G.remotePlayers) {
+      for (const rp of G.remotePlayers.values()) {
+        if (!rp.dead && (rp.world === this || (rp.worldKind === this.kind && (this.kind !== 'dungeon' || rp.depth === this.depth)))) {
+          activePlayers.push({ x: rp.x, y: rp.y });
+        }
+      }
+    }
+    const maxSimDistSq = 28 * 28;
     for (const c of this.creatures) {
       if (c === p || c.dead) continue;
-      // only simulate creatures near the action
-      if (c.team === 'enemy' && !c.awake && dist2(c.x, c.y, ax, ay) > 26 * 26) continue;
+      // only simulate creatures near the action (near any active player or awake, or bosses)
+      if (c.team === 'enemy' && !c.awake && !c.isRaid && c.rank !== 'boss' && c !== this.boss) {
+        const nearPlayer = activePlayers.some(pl => dist2(c.x, c.y, pl.x, pl.y) <= maxSimDistSq);
+        if (!nearPlayer) continue;
+      }
       c.update(dt);
     }
     if (this.townLife) this.townLife.update(dt);

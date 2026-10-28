@@ -50,9 +50,9 @@ const ENTRY = ['drop', 'teleport', 'burrow', 'wall'];
 
 /** Floor spot near (x, y) the hero can reach, `r0..r1` tiles away. */
 function spotNear(w, x, y, r0, r1, rr) {
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 40; i++) {
     const a = rand(TAU), r = rand(r0, r1), sx = x + Math.cos(a) * r, sy = y + Math.sin(a) * r;
-    if (w.map.circleFree(sx, sy, rr) && w.map.flowAt(sx, sy) >= 0) return [sx, sy];
+    if (w.map.walkable(sx, sy) && w.map.circleFree(sx, sy, rr)) return [sx, sy];
   }
   return null;
 }
@@ -63,7 +63,7 @@ function wallSpot(w, x, y) {
   for (let i = 0; i < 40; i++) {
     const a = rand(TAU), r = rand(3, 7), tx = Math.floor(x + Math.cos(a) * r), ty = Math.floor(y + Math.sin(a) * r);
     const cx = tx + 0.5, cy = ty + 0.5;
-    if (!map.circleFree(cx, cy, 0.35) || map.flowAt(cx, cy) < 0) continue;
+    if (!map.walkable(cx, cy) || !map.circleFree(cx, cy, 0.35)) continue;
     for (const [dx, dy] of shuffle([[1, 0], [-1, 0], [0, 1], [0, -1]])) if (!map.isFloor(cx + dx, cy + dy)) return [cx, cy, cx + dx * 0.7, cy + dy * 0.7];
   }
   return null;
@@ -140,19 +140,30 @@ export function enter(m, kind, from) {
  */
 export function ambushTick(w, dt) {
   if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
-  const p = w.player;
-  if (w.kind !== 'dungeon' || w.raid || w.breach || !p || p.dead || !w.roster || !w.roster.length) return;
+  const players = [];
+  if (w.player && !w.player.dead) players.push(w.player);
+  if (G.remotePlayers) {
+    for (const rp of G.remotePlayers.values()) {
+      if (!rp.dead && (rp.world === w || (rp.worldKind === w.kind && rp.depth === w.depth))) {
+        players.push(rp);
+      }
+    }
+  }
+  if (w.kind !== 'dungeon' || w.raid || w.breach || !players.length || !w.roster || !w.roster.length) return;
   if (w.boss && w.boss.awake && !w.boss.dead) return;
   if (w.ambushT === undefined) w.ambushT = rand(25, 40) / (w.heresyAmbush || 1);
   if ((w.ambushT -= dt) > 0) return;
   w.ambushT = rand(30, 55) * Math.max(0.6, 1 - w.depth * 0.004) / (w.heresyAmbush || 1); // Ambush Weather (game/heresies.js): three times as often
+  const p = pick(players);
   // not on top of a fight that is already big
   if (w.hostiles('player', p.x, p.y, 9).length > 8) { w.ambushT = 8; return; }
-  ambush(w);
+  ambush(w, pick(ENTRY), 0, p);
 }
 
-export function ambush(w, kind = pick(ENTRY), n = 0) {
-  const p = w.player, depth = w.depth || 1, lvl = depthLevel(depth);
+export function ambush(w, kind = pick(ENTRY), n = 0, targetPlayer = null) {
+  const p = targetPlayer || w.player;
+  if (!p) return 0;
+  const depth = w.depth || 1, lvl = depthLevel(depth);
   const arch = pick(w.roster);
   n = n || Math.min(7, 2 + Math.floor(rand(0, 3) + depth / 25));
   const trait = chance(0.45) ? pick(['tank', 'gunner', 'phaser', 'burrower']) : null;
@@ -190,6 +201,12 @@ export function ambush(w, kind = pick(ENTRY), n = 0) {
       arch,
       lvl: m.level,
       rank,
+      name: m.name,
+      maxHp: Math.round(m.maxHp),
+      dmg: Math.round(m.dmg),
+      scale: m.scale || 1,
+      affixes: m.affixes ? [...m.affixes] : null,
+      aura: m.aura || null,
       trait: i === 0 ? trait : null,
       delay,
     });
@@ -203,6 +220,9 @@ export function ambush(w, kind = pick(ENTRY), n = 0) {
       net.sendAmbushSpawn({
         kind,
         depth: w.depth || 0,
+        tx: Math.round(p.x * 100) / 100,
+        ty: Math.round(p.y * 100) / 100,
+        targetPlayerId: p === w.player ? net.myId : p.id,
         monsters: batch,
       });
     }

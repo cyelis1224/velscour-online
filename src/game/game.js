@@ -325,6 +325,12 @@ function attachNetListeners() {
       m.netId = mon.netId;
       if (mon.idx) m.idx = mon.idx;
       m.fromNetwork = true;
+      if (mon.name) m.name = mon.name;
+      if (mon.maxHp) { m.maxHp = mon.maxHp; m.hp = mon.maxHp; }
+      if (mon.dmg) m.dmg = mon.dmg;
+      if (mon.scale) m.scale = mon.scale;
+      if (mon.affixes) m.affixes = [...mon.affixes];
+      if (mon.aura) m.aura = mon.aura;
       if (mon.trait) applyTrait(m, mon.trait);
       m.awake = true; m.hunter = true; m.ambusher = true;
       G.world.add(m);
@@ -343,8 +349,10 @@ function attachNetListeners() {
       burrow: 'The ground splits open!',
       wall: 'The walls come alive!'
     }[data.kind];
-    if (msg && G.world.player) {
-      floatText(G.world.player.x, G.world.player.y, 90, msg, '#ff8060', 14, { life: 1.8 });
+    const targetX = data.tx ?? G.world.player?.x;
+    const targetY = data.ty ?? G.world.player?.y;
+    if (msg && targetX != null && targetY != null) {
+      floatText(targetX, targetY, 90, msg, '#ff8060', 14, { life: 1.8 });
       sfx('roar', 0.5);
     }
   });
@@ -410,6 +418,8 @@ function attachNetListeners() {
       if (data.maxHp) { m.maxHp = data.maxHp; m.hp = data.hp ?? data.maxHp; }
       if (data.dmg) m.dmg = data.dmg;
       if (data.scale) m.scale = data.scale;
+      if (data.affixes) m.affixes = Array.isArray(data.affixes) ? [...data.affixes] : [data.affixes];
+      if (data.aura || data.color) m.aura = data.aura || data.color;
       m.awake = true;
       if (data.traits) {
         for (const tr of (Array.isArray(data.traits) ? data.traits : [data.traits])) {
@@ -462,8 +472,19 @@ function attachNetListeners() {
         if (s.hp <= 0) {
           if (!m.dead) kill(m, null, { el: 'phys' });
         } else {
+          if (s.maxHp && m.maxHp !== s.maxHp) m.maxHp = s.maxHp;
           m.hp = Math.min(m.maxHp, s.hp);
-          if (s.a) m.awake = true;
+          if (s.name && m.name !== s.name) m.name = s.name;
+          if (s.rank && m.rank !== s.rank) m.rank = s.rank;
+          if (s.color && !m.aura) m.aura = s.color;
+          if (s.affixes && (!m.affixes || m.affixes.length !== s.affixes.length)) m.affixes = [...s.affixes];
+          if (s.a) {
+            if (!m.awake) {
+              m.awake = true;
+              if (m.raid && !m.raid.announced) m.raid.wake();
+              else if (m === G.world.boss && G.world.onBossAwake) G.world.onBossAwake(m);
+            }
+          }
           if (s.f !== undefined) m.facing = s.f;
           const d2 = dist2(m.x, m.y, s.x, s.y);
           if (d2 > 9) {
@@ -1227,7 +1248,7 @@ export const game = {
     for (let si = 0; si < rawSpawns.length; si++) {
       const s = rawSpawns[si];
       if (s.rank === 'raid') {
-        const m = makeRaidBoss(world, gen.raid, depth, lvl + 3);
+        const m = makeRaidBoss(world, gen.raid, depth, lvl + 3, { rnd: rndVal });
         m.netId = `raid_${si}`;
         m.idx = monsterSeq++;
         world.add(m);
@@ -2057,26 +2078,40 @@ export const game = {
           if (monSyncT >= 0.15) {
             monSyncT = 0;
             const monSync = [];
+            const activePlayers = [{ x: p.x, y: p.y }];
+            if (G.remotePlayers) {
+              for (const rp of G.remotePlayers.values()) {
+                if (!rp.dead && (rp.world === w || (rp.worldKind === w.kind && rp.depth === w.depth))) {
+                  activePlayers.push({ x: rp.x, y: rp.y });
+                }
+              }
+            }
+            const maxSyncDistSq = 32 * 32;
             for (const m of w.creatures) {
-              if (m.team === 'enemy' && !m.dead && (m.awake || dist2(m.x, m.y, p.x, p.y) < 30 * 30)) {
-                monSync.push({
-                  id: m.netId || m.idx,
-                  x: Math.round(m.x * 100) / 100,
-                  y: Math.round(m.y * 100) / 100,
-                  hp: Math.round(m.hp),
-                  f: m.facing ? 1 : 0,
-                  a: m.awake ? 1 : 0,
-                  arch: m.arch,
-                  name: m.name,
-                  isWard: !!m.isWard,
-                  vk: m.vk,
-                  static: !!m.static,
-                  fly: !!m.fly,
-                  maxHp: Math.round(m.maxHp),
-                  lvl: m.level,
-                  rank: m.rank,
-                  color: m.aura || (m.pal ? m.pal.a : null),
-                });
+              if (m.team === 'enemy' && !m.dead) {
+                const isSpecial = m.awake || m.isRaid || m.rank === 'boss' || m === w.boss || m.rank === 'champion' || m.rank === 'unique';
+                const nearAnyPlayer = activePlayers.some(pl => dist2(m.x, m.y, pl.x, pl.y) < maxSyncDistSq);
+                if (isSpecial || nearAnyPlayer) {
+                  monSync.push({
+                    id: m.netId || m.idx,
+                    x: Math.round(m.x * 100) / 100,
+                    y: Math.round(m.y * 100) / 100,
+                    hp: Math.round(m.hp),
+                    f: m.facing ? 1 : 0,
+                    a: m.awake ? 1 : 0,
+                    arch: m.arch,
+                    name: m.name,
+                    isWard: !!m.isWard,
+                    vk: m.vk,
+                    static: !!m.static,
+                    fly: !!m.fly,
+                    maxHp: Math.round(m.maxHp),
+                    lvl: m.level,
+                    rank: m.rank,
+                    color: m.aura || (m.pal ? m.pal.a : null),
+                    affixes: m.affixes ? [...m.affixes] : null,
+                  });
+                }
               }
             }
             if (monSync.length > 0) {
