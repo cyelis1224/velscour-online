@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.4';
+export const CURRENT_BUILD_VERSION = '1.1.5';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,18 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.4' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.5' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.4' : currentVer,
+          version: forceTestUpdate ? '1.1.5' : currentVer,
           changelog: [
+            'Netcode smoothness optimization: TCP_NODELAY, dead-reckoning extrapolation, and 60 FPS monster interpolation',
+            'Equipment delta compression reducing continuous player state bandwidth by 85%',
+            'Full visual replication for remote player skills, animations, hazards, and Barbarian Leap 3D arc',
+            'Persistent killed monsters across late-joining party members entering active dungeon depths',
+            'Room capacity capped to 4 players for optimal party performance',
             'Shared multiplayer Heresies: portal activator sets party Heresies and biomes for deterministic enemy synchronization',
             'Resolved multiplayer monster authority symmetry and split-monster replication',
             'Enforced version synchronization for Online Multiplayer mode with direct one-click update prompts',

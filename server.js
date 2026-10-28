@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.4' };
+    return { version: '1.1.5' };
   }
 }
 
@@ -424,6 +424,11 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Netcode smoothness optimization: TCP_NODELAY, dead-reckoning extrapolation, and 60 FPS monster interpolation",
+        "Equipment delta compression reducing continuous player state bandwidth by 85%",
+        "Full visual replication for remote player skills, animations, hazards, and Barbarian Leap 3D arc",
+        "Persistent killed monsters across late-joining party members entering active dungeon depths",
+        "Room capacity capped to 4 players for optimal party performance",
         "Full multiplayer synchronization for champion monsters, affixes, auras, and stats",
         "Synchronized boss awakening across all peers and shared boss HUD health bar",
         "Multiplayer ambush waves targeting any active party member with matching champion spawns",
@@ -444,8 +449,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.4'}`,
-          filename: `Velscour-${pkg.version || '1.1.4'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.5'}`,
+          filename: `Velscour-${pkg.version || '1.1.5'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -497,7 +502,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.4'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.5'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -813,7 +818,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.1.4';
+        const serverVer = getPackageInfo().version || '1.1.5';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -866,7 +871,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.1.4',
+          serverVersion: getPackageInfo().version || '1.1.5',
         }));
 
         if (reconnectedRoom) {
