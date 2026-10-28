@@ -1,0 +1,33 @@
+rules_version = '2';
+// VELSCOUR's Firestore rules (docs/CLOUD_SAVES.md: paste them in the Firebase console > Firestore Database > Rules).
+// A player's heroes and account record (the Endgame's shared record, docs/ENDGAME.md) are theirs alone; the Abyssal
+// Rifts' honour board is public to read, and each player writes or deletes only their own entry per class (the game
+// deletes it when a hero takes Velscour's gift, game/deathgift.js: a cheat is never listed).
+// Saves are local, so the board is an honour board: these checks keep entries well formed, not honest.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) { return request.auth != null && request.auth.uid == uid; }
+
+    match /users/{uid}/heroes/{cls} { allow read, write: if owner(uid); }
+    match /users/{uid}/account/{doc} { allow read, write: if owner(uid); }
+
+    match /boards/{cls}/entries/{uid} {
+      allow read: if true;
+      allow create, update: if owner(uid) && entry(request.resource.data, cls);
+      allow delete: if owner(uid);
+    }
+    function entry(d, cls) {
+      return d.keys().hasAll(['v', 'name', 'cls', 'tier', 'time', 'build'])
+        && d.keys().hasOnly(['v', 'name', 'cls', 'tier', 'time', 'at', 'level', 'marks', 'build'])
+        && d.v == 1
+        && d.name is string && d.name.size() <= 24
+        && d.cls is string && d.cls == cls
+        && d.tier is int && d.tier >= 1 && d.tier <= 10000
+        && d.time is number && d.time > 0
+        && (!('level' in d) || d.level is int)
+        && (!('marks' in d) || d.marks is int)
+        && (!('at' in d) || d.at == request.time)
+        && d.build is map;
+    }
+  }
+}

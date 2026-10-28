@@ -20,3 +20,6 @@ android/.idea/
 android/build/
 android/capacitor-cordova-android-plugins/build/
 android/app/src/main/assets/public/
+
+# Claude Code worktrees (the harness makes them for parallel agents)
+.claude/worktrees/

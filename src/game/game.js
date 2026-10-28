@@ -17,7 +17,7 @@ import { CLASSES } from '../data/classes.js';
 import { generateDungeon, isRaidDepth } from '../world/dungeon.js';
 import { FINAL_DEPTH, depthLevel, blockStart } from '../data/depth.js';
 import { addDefiance, clearDefiance, defianceText, tickBlessing } from './defiance.js';
-import { setupHappenings, announceHappenings, happeningsTick, townHappening, townTick, recordDepth, markNemesis, OMENS, rollOmen, omenable } from './happenings.js';
+import { setupHappenings, announceHappenings, happeningsTick, townHappening, townTick, recordDepth, markNemesis, OMENS, rollOmen, anyOmen, omenable } from './happenings.js';
 import { greedOf, greedPacks, greedWorld, greedCleared, greedDeath } from './greed.js';
 import { spectateTick } from './spectate.js';
 import { toggleSmite } from './smite.js';
@@ -65,6 +65,7 @@ import { renderWorld, drawMinimap, preloadTownSheets, releaseTownSheets } from '
 import { controls } from './controls.js';
 import { Auto } from './autoplay.js';
 import { writeSave, newCharData, migrate } from './save.js';
+import { grantDeathGift, DEATH_PHRASE } from './deathgift.js';
 import { clearVfx, floatText, sparkle, addEffect, Ring, Bolt, Column } from '../gfx/vfx.js';
 import { Meter } from './dpsmeter.js';
 import { UI } from '../ui/ui.js';
@@ -79,12 +80,21 @@ import { toggleQuest } from '../ui/quest.js';
 import { setupVelscour } from './velscour.js';
 import { loadVelscourThrone } from '../gfx/velscourthrone.js';
 import { offerCommissions, setupCommissions, commissionClear, wantedBiomes, LINE_BY_ID, commState } from './commissions.js';
-import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu } from '../ui/screens.js';
+import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu, helpDialog } from '../ui/screens.js';
 import { openLobby } from '../ui/lobby.js';
 import { net } from '../net/network.js';
 import { RemotePlayer } from '../net/remoteplayer.js';
 import { updateAutomapPartyRoster } from '../ui/partyroster.js';
 import { GameChat } from '../ui/chat.js';
+// the Endgame (docs/ENDGAME.md): Heresies, Abyssal Rifts, Velscour Unbound, Infernal Marks
+import { endgameUnlocked, unlockEndgame } from './endgame.js';
+import { heresySpawns, heresyWorld, heresyBegin, heresyTick, heresiesOf, worldRank, MARKS_RANK } from './heresies.js';
+import { createRiftRun, riftTick, riftOpen, riftDepth, riftLevel, fmtTime, riftLeave, RIFT_QUOTA, RIFT_DENSITY } from './rifts.js';
+import { unboundReady, spendKeys, keysOf } from './unbound.js';
+import { grantMarks, saveMarkXp } from './marks.js';
+import { Heresies } from '../ui/heresies.js';
+import { Rifts } from '../ui/rifts.js';
+import { Marks } from '../ui/marks.js';
 
 const PICK_WAIT = 8; // seconds auto-play gives the player to choose a portal down (portalChoice)
 
@@ -687,6 +697,7 @@ export const game = {
   autosave() {
     if (!G.char) return;
     writeSave(G.char);
+    saveMarkXp();   // XP towards the next Infernal Mark (game/marks.js)
     saveT = 0;
   },
 
@@ -743,6 +754,7 @@ export const game = {
 
   setWorld(world, start, oldWorld) {
     const p = G.player;
+    if (oldWorld && oldWorld.rift && oldWorld !== world) riftLeave(oldWorld); // walking out of an unfinished rift is a fail
     const keep = this.carrySummons(oldWorld);
     clearVfx();
     UI.closeAll();
@@ -776,6 +788,7 @@ export const game = {
       }
     }
     G.world = world;
+    p.recompute(); // the Heresies in force read the level the hero stands in (game/heresies.js)
     Cine.abort(); // a cut scene belongs to the world it played in
     useTerrain(world.map); // a height map lifts the ground plane (gfx/terrain.js); flat maps clear it
     useTower(world); // the Serpentine Tower lays the grid onto its spiral stair (game/tower.js)
@@ -819,6 +832,8 @@ export const game = {
       if (!t.map.walkable(rx, ry) || Math.hypot(rx - x, ry - y) < 1.5) [rx, ry] = t.map.randomNear(t.start[0] - 1, t.start[1], 2.5);
       world.npcs.push({ stash: true, reliquary: true, name: 'The Reliquary', x: rx, y: ry, reach: 1.6, flip: false, use: () => G.ui.reliquary.open() });
     }
+    // the Altar of Heresy (ui/heresies.js), a dark obelisk at the plaza's edge: the Endgame's door (docs/ENDGAME.md)
+    if (t.altar) world.npcs.push({ altar: true, name: 'Altar of Heresy', x: t.altar.x, y: t.altar.y, reach: 1.7, flip: false, use: () => Heresies.open() });
     const visitSeed = G.room ? (G.room.seed >>> 0) : ((c.townVisitCount = (c.townVisitCount || 0) + 1));
     offerCommissions(c); // Town Commissions (game/commissions.js)
     // the townsfolk, visiting adventurers, little set pieces and (about one visit in four) a special event
@@ -834,6 +849,8 @@ export const game = {
     }];
     // THE ETERNAL BREACH's purple portal (game.confirmBreach, docs/ETERNAL_BREACH.md)
     if (t.breach) world.portals.push({ x: t.breach.x, y: t.breach.y, active: true, breach: true, color: '#a040ff', reach: 2.2, label: 'THE ETERNAL BREACH', use: () => this.confirmBreach() });
+    // the Abyssal Rift gate (game.confirmRift): lit once the Endgame is open
+    if (t.rift) world.portals.push({ x: t.rift.x, y: t.rift.y, rift: true, color: '#20e0ff', reach: 1.7, get active() { return endgameUnlocked(); }, set active(v) {}, get label() { return endgameUnlocked() ? `Abyssal Rift — Tier ${riftOpen()}` : 'Abyssal Rift (sealed)'; }, use: () => this.confirmRift() });
     // the hero steps out of the portal, a little way down its road toward the square
     const P = t.portal, C = t.center, l = Math.hypot(C.x - P.x, C.y - P.y) || 1;
     let arrive = [P.x + ((C.x - P.x) / l) * 3.2, P.y + ((C.y - P.y) / l) * 3.2];
@@ -951,6 +968,12 @@ export const game = {
           if (['HAIL VELSCOUR!', '13', '65', '69', '666', '6669'].includes(message)) {
             close();
             this.openVelscourTeleport();
+          } else if (message === DEATH_PHRASE) { // exact, case sensitive
+            close();
+            if (Auto.on) Auto.toggle(false);
+            grantDeathGift();
+            if (G.world?.kind !== 'town') this.enterTown(); // the town portal now opens on Depth 500
+            else this.autosave();
           } else if (message.trim().toLowerCase() === 'mountain') {
             close();
             this.teleportToBiome(BIOME_BY_ID.mountainside); // the Mountainside beta
@@ -963,7 +986,13 @@ export const game = {
           } else if (['final boss', 'finalboss', 'velscour'].includes(message.trim().toLowerCase())) {
             close();
             this.finalBoss(); // straight into Velscour's arena, scaled to this depth
-          } else if (message.trim().toLowerCase() === 'tower') {
+          } else if (['unbound', 'velscour unbound'].includes(message.trim().toLowerCase())) {
+            close();
+            this.enterUnbound(); // the rematch, for three Abyssal Keys (docs/ENDGAME.md)
+          } else if (['heresy', 'heresies', 'altar'].includes(message.trim().toLowerCase())) { close(); Heresies.open(); }
+          else if (['marks', 'infernal marks'].includes(message.trim().toLowerCase())) { close(); Marks.open(); }
+          else if (['rift', 'rifts', 'abyssal rift'].includes(message.trim().toLowerCase())) { close(); this.confirmRift(); }
+          else if (message.trim().toLowerCase() === 'tower') {
             close();
             this.teleportToBiome(BIOME_BY_ID.serpentine_tower);
           } else if (['caverns', 'caves', 'cave', 'depths edge', "depth's edge"].includes(message.trim().toLowerCase())) {
@@ -1152,13 +1181,15 @@ export const game = {
     ];
     // monsters
     const lvl = depthLevel(depth);
-    world.practice = biome.id === 'throne' && depth !== FINAL_DEPTH; // "final boss" from the skull: Velscour at this depth
+    world.unbound = biome.id === 'throne' && !!G.unboundNext; G.unboundNext = false; // Velscour Unbound (game/unbound.js)
+    world.practice = biome.id === 'throne' && depth !== FINAL_DEPTH && !world.unbound; // "final boss" from the skull: Velscour at this depth
+    const heresies = heresyBegin(world, c); // the Heresies (game/heresies.js): twinned packs now, BOSS ROOM phases, the rest as monsters appear
     const monRng = G.room ? new RNG(seed ^ 0x5bf03641) : null;
     const rndVal = () => (monRng ? monRng.next() : Math.random());
     let monsterSeq = 1;
-    const spawns = greedPacks(gen.spawns, G.room ? 0 : greedOf(c)); // the Greed lever: bigger packs, champion leaders (game/greed.js)
-    for (let si = 0; si < spawns.length; si++) {
-      const s = spawns[si];
+    const rawSpawns = heresySpawns(greedPacks(gen.spawns, G.room ? 0 : greedOf(c)), heresies);
+    for (let si = 0; si < rawSpawns.length; si++) {
+      const s = rawSpawns[si];
       if (s.rank === 'raid') {
         const m = makeRaidBoss(world, gen.raid, depth, lvl + 3);
         m.netId = `raid_${si}`;
@@ -1197,6 +1228,7 @@ export const game = {
     if (!sky && biome.id !== 'throne') setupHappenings(world, gen.start, gen); // omens, shrines, treasure imps, cursed chests (game/happenings.js)
     setupCommissions(world, gen.start); // this depth's Town Commission objectives (game/commissions.js)
     greedWorld(world, c); // the Greed lever and its Hoard multiply the omen's loot dials
+    heresyWorld(world, c); // the Heresies' rank pays on top (none in Unbound)
     tickBlessing(c);
     world._generatingDungeon = false;
     world.onBossAwake = (m) => {
@@ -1205,7 +1237,14 @@ export const game = {
     };
     world.onBossKilled = (m) => {
       if (biome.overworld) return;
-      exit.active = true; exit.color = '#40a0ff'; exit.label = 'Exit — continue';
+      if (m.raid && m.raid.court) return; // one of Velscour Unbound's court: not the fight's end
+      exit.active = true; exit.color = '#40a0ff'; exit.label = world.unbound ? 'Exit — to town' : 'Exit — continue';
+      if (world.unbound) { // the rematch: no depth cleared, no victory screen; its hoard is Velscour's (game/velscour.js)
+        c.unbound.wins = (c.unbound.wins || 0) + 1;
+        UI.centerMsg('VELSCOUR UNBOUND HAS FALLEN', `${c.unbound.wins} time${c.unbound.wins > 1 ? 's' : ''} · the exit is open`, 4);
+        addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#40a0ff', 5)); sfx('gate'); UI.refresh(); this.autosave();
+        return;
+      }
       const first = !c.cleared[depth];
       c.cleared[depth] = true;
       c.deepest = Math.max(c.deepest || 0, depth);
@@ -1216,7 +1255,11 @@ export const game = {
       sfx('gate');
       UI.refresh();
       this.autosave();
-      if (m.isVelscour && !world.practice) setTimeout(() => victoryScreen(() => {}), 3200);
+      if (m.isVelscour && !world.practice) {
+        // the Endgame opens for every hero on this browser (docs/ENDGAME.md)
+        if (unlockEndgame()) UI.log('<b style="color:#20e0ff">The Endgame opens.</b> The Altar of Heresy and the Abyssal Rift gate in Herrington Hollow answer to every hero now.', '#a0f0ff');
+        setTimeout(() => victoryScreen(() => {}), 3200);
+      }
     };
     if (sky) {   // the Sky Battle (game/skybattle.js): one of eight weathers or thirty stories, never the last one twice
       world.overworldScenario = createSkyBattle(world, gen, biome, depth, { variant: c.skyVariant, last: c.lastSkyVariant, seen: c.skySeen || {} }, () => {
@@ -1304,7 +1347,7 @@ export const game = {
     }
     if (!biome.beta) recordBiomeVisit(c, biome, depth); // a beta biome leaves the overworld guarantee alone
     c.lastBiome = biome.id;
-    HUD.setArea(`Depth ${depth}${depth > FINAL_DEPTH ? ' — Endless Torment' : ''}`, biome.overworld ? `${gen.variant ? gen.variant.name : biome.name} · ${world.overworldScenario.title}` : gen.raid ? `${biome.name} · Boss Room` : biome.name);
+    HUD.setArea(world.unbound ? 'Velscour Unbound' : `Depth ${depth}${depth > FINAL_DEPTH ? ' — Endless Torment' : ''}`, (biome.overworld ? `${gen.variant ? gen.variant.name : biome.name} · ${world.overworldScenario.title}` : gen.raid ? `${biome.name} · Boss Room` : biome.name) + (worldRank(world) ? ` · Heresy ${worldRank(world)}` : ''));
     playMusic('wilds', { delay: 4 + Math.random() * 20 }); setAmbience(sky ? world.sky.v.amb : biome.id);
     const kin = tileset.mixed && BIOME_BY_ID[tileset.mixed];
     if (!sky) UI.centerMsg((gen.variant ? gen.variant.name : biome.name).toUpperCase(), `Depth ${depth}${kin ? ` · bleeding into the ${kin.name}` : ''}`, 2.4);
@@ -1321,9 +1364,10 @@ export const game = {
   },
 
   useTownPortal() {
+    const w = G.world;
     UI.dialog({
       title: 'Return to Town?',
-      html: `<p>You will return to Herrington Hollow. ${G.world?.breach ? `Floor ${G.world.breach.floor} of the Eternal Breach` : `Depth ${G.world?.depth || G.char.depth}`} will be re-forged when you come back.</p>`,
+      html: `<p>You will return to Herrington Hollow. ${w?.breach ? `Floor ${w.breach.floor} of the Eternal Breach` : w?.rift ? `The Rift (Tier ${w.rift.tier}) collapses behind you; it` : w?.unbound ? 'Velscour Unbound' : `Depth ${w?.depth || G.char.depth}`} will be re-forged when you come back.</p>`,
       buttons: [{ label: 'Stay' }, { label: 'Return', fn: () => {
         sfx('portal');
         if (G.world && G.world.depth) {
@@ -1337,8 +1381,10 @@ export const game = {
 
   useExit(world, exit) {
     const c = G.char;
-    if (!exit.active) { floatText(exit.x, exit.y, 70, world.breach ? 'Sealed — the Breach Heart still beats!' : world.overworldScenario ? 'Sealed — complete the shrine trial!' : 'Sealed — slay the guardian!', '#ff6040', 13, { life: 1.6 }); sfx('error'); return; }
+    if (!exit.active) { floatText(exit.x, exit.y, 70, world.breach ? 'Sealed — the Breach Heart still beats!' : world.rift ? 'Sealed — the Guardian still stands!' : world.overworldScenario ? 'Sealed — complete the shrine trial!' : 'Sealed — slay the guardian!', '#ff6040', 13, { life: 1.6 }); sfx('error'); return; }
     if (world.breach) this.breachExit(world);
+    else if (world.rift) this.riftExit(world);
+    else if (world.unbound) { sfx('portal'); this.enterTown(); }
     else this.portalChoice(world);
   },
 
@@ -1389,7 +1435,7 @@ export const game = {
     const cards = ids.map((id) => {
       const biome = BIOME_BY_ID[id] || BIOME_BY_ID.catacombs;
       const comm = commState(c).open.find((e) => { const ch = LINE_BY_ID[e.id] && LINE_BY_ID[e.id].chapters[e.ch]; return ch && ch.biome === biome.id; });
-      return { id: biome.id, biome, omen: omenable(next, biome) ? rollOmen(next) : undefined, comm: comm && LINE_BY_ID[comm.id].name };
+      return { id: biome.id, biome, omen: omenable(next, biome) ? rollOmen(next) || (heresiesOf(c).includes('omens') ? anyOmen() : null) : heresiesOf(c).includes('omens') && next > FINAL_DEPTH && !biome.overworld && !isRaidDepth(next) ? anyOmen() : undefined, comm: comm && LINE_BY_ID[comm.id].name }; // Black Omens: always one
     });
     let sel = 0, chosen = false;
     const tag = (cd) => (cd.biome.id === 'throne' ? '<b style="color:#ff4020">Demon Lord Velscour awaits</b>' : cd.biome.id === 'skyship' ? 'Sky battle' : cd.biome.overworld ? 'Overworld trial' : isRaidDepth(next) ? '<b style="color:#ff6030">BOSS ROOM</b>' : 'Dungeon');
@@ -1462,6 +1508,7 @@ export const game = {
     const c = G.char, had = c.defiance && c.defiance.n;
     commissionClear(G.world);
     greedCleared(G.world, c); // the Greed lever pays into the Hoard (game/greed.js)
+    if (worldRank(G.world) >= MARKS_RANK && !G.world.markPaid) { G.world.markPaid = true; grantMarks(1, `for a depth cleared at Heresy rank ${worldRank(G.world)}`); } // (docs/ENDGAME.md)
     if (!clearDefiance(c, depth)) return;
     if (G.player) G.player.recompute();
     UI.log(`The wall is broken. <b style="color:#ff6a3a">Defiance ${had}</b> fades — Velscour takes note.`, '#ffb080');
@@ -1471,6 +1518,8 @@ export const game = {
     const c = G.char;
     const w = G.world;
     if (w && w.breach) return this.breachDeath(src);
+    if (w && w.rift) return this.riftDeath(src);
+    if (w && w.unbound) return this.unboundDeath(src);
     c.deaths = (c.deaths || 0) + 1;
     const depth = w && w.kind === 'dungeon' ? w.depth : c.depth;
     const n = addDefiance(c, depth);
@@ -1578,7 +1627,7 @@ export const game = {
     if (!gen.map.walkable(tp[0], tp[1])) tp = gen.map.randomNear(sx, sy, 2);
     const exit = { x: gen.exit[0], y: gen.exit[1], type: 'exit', active: false, color: '#4a3a5a', reach: 2, label: 'Sealed — the Breach Heart', use: () => this.useExit(world, exit) };
     world.portals = [{ x: tp[0], y: tp[1], type: 'town', active: true, color: '#3a8aff', reach: 1.6, label: 'Town Portal', use: () => this.useTownPortal() }]; // the exit appears when the Heart is won
-    for (const s of gen.spawns) {
+    for (const s of heresySpawns(gen.spawns, heresyBegin(world, c))) { // Twinned Packs reach the Breach too (game/heresies.js)
       for (let i = 0; i < s.n; i++) {
         const [x, y] = i === 0 ? [s.x, s.y] : gen.map.randomNear(s.x, s.y, 1.6);
         const rank = i === 0 ? s.rank : 'normal';
@@ -1588,6 +1637,7 @@ export const game = {
       }
     }
     world.roster = BREACH_ARCHS;
+    heresyWorld(world, c);
     world.onBossAwake = () => {};
     world.onBossKilled = () => {};
     world.overworldScenario = createBreachRun(world, gen, B, floor, () => {
@@ -1598,7 +1648,7 @@ export const game = {
     });
     this.setWorld(world, gen.start, old);
     world.night = true;
-    HUD.setArea('The Eternal Breach', `Floor ${floor} · as deadly as Depth ${depth}`);   // (the floor in the name ran under a phone's boss bar)
+    HUD.setArea('The Eternal Breach', `Floor ${floor} · as deadly as Depth ${depth}${worldRank(world) ? ` · Heresy ${worldRank(world)}` : ''}`);   // (the floor in the name ran under a phone's boss bar)
     playMusic('wilds', { delay: 3 + Math.random() * 10 }); setAmbience('eternal_breach');
     UI.centerMsg('THE ETERNAL BREACH', `Floor ${floor} · as deadly as Depth ${depth}`, 3);
     UI.log(`Floor ${floor} of the Eternal Breach: win the shrines on the medium and large islands to lift the wards on the walkways, then face the keeper of the <b style="color:#ff70d0">Breach Heart</b>.`, '#d8b0ff');
@@ -1638,6 +1688,168 @@ export const game = {
         this.enterTown();
         UI.log(`The Breach casts you out. Floor ${floor} waits beyond the purple portal; your descent still stands at Depth ${c.depth}.`, '#c890ff');
       }, { where: `on Floor ${floor} of the Eternal Breach`, note: 'Your gear, levels and skills endure, and the Breach takes no toll on your descent. Grow stronger and try the floor again.' });
+    }, 1700);
+  },
+
+  // ------------------------------------------------------------ ABYSSAL RIFTS (docs/ENDGAME.md)
+  /** The rift gate: pick a tier (ui/rifts.js) and step in. Refused until the Endgame is open. */
+  confirmRift(tier) {
+    if (!endgameUnlocked()) { UI.log('<b style="color:#20e0ff">The Abyssal Rift</b> is sealed: Velscour still sits his throne. Slay him at Depth 500 and it opens for every hero.', '#a0f0ff'); sfx('error'); return null; }
+    return Rifts.open(tier);
+  },
+  enterRift(tier) {
+    const c = G.char;
+    if (!endgameUnlocked() || this.riftLoading) return; // one rift at a time (auto-play may step on the gate again while it loads)
+    tier = Math.max(1, Math.min(riftOpen(c), tier | 0 || 1));
+    const pool = BIOMES.filter((b) => !b.overworld && !b.beta && !b.challenge && !b.tower && !b.cave && b.id !== 'throne' && b.id !== c.lastRift);
+    const biome = pick(pool.length ? pool : BIOMES.filter((b) => !b.overworld)) || BIOME_BY_ID.catacombs;
+    c.lastRift = biome.id;
+    const mix = mixPartner(biome);
+    const loading = document.getElementById('loading');
+    document.getElementById('loading-text').textContent = `Into the Abyssal Rift — Tier ${tier}…`;
+    loading.classList.remove('hidden');
+    sfx('portal');
+    this.riftLoading = true;
+    setTimeout(async () => {
+      try { await this.loadLevelArt(biome, mix); } catch (e) { console.warn(e); }
+      try {
+        this.riftLoading = false;
+        this.buildRift(tier, biome, mix);
+        const w = G.world;
+        await loadArtFor([...w.creatures.map((m) => m.art), ...(w.looks ? w.looks.ids() : [])], true).catch((e) => console.warn(e));
+        await warmLevelArt(w);
+        releaseLevelArt(biome);
+      } finally { loading.classList.add('hidden'); }
+    }, 40);
+  },
+  /** A rift level: a small maze and a BOSS ROOM arena of a standard biome, as deadly as depth 500 + 10 T, no boss until the quota. */
+  buildRift(tier, biome = BIOME_BY_ID.catacombs, mix = null, seed = G.riftSeed ?? (Math.random() * 1e9) | 0) {
+    const c = G.char, old = G.world, depth = riftDepth(tier), lvl = riftLevel(tier);
+    const tileset = mix ? mixedTileSet(biome, mix, Math.random() < 0.5) : biomeTileSet(biome);
+    keepTileSets(tileset);
+    const gen = generateDungeon(depth, biome, tileset, seed, { raid: true, small: true, density: RIFT_DENSITY });
+    const world = new World('dungeon', { map: gen.map, tileset, biome, depth, props: gen.props, torches: gen.torches, wallHangings: gen.wallHangings, looks: gen.looks, townTiles: null, buildings: [] });
+    world.rooms = gen.rooms || [];
+    world.chests = gen.chests.map((ch) => ({ ...ch, opened: false, reach: 1.3, use() { if (this.opened) return; this.opened = true; sfx('chest'); sfx('gold'); dropChest(world, this, depth); sparkle(this.x, this.y, 20, '#ffd060', 20, 0.5); } }));
+    const [sx, sy] = gen.start;
+    let tp = gen.townPortal || [sx + 1.6, sy - 0.6];
+    if (!gen.map.walkable(tp[0], tp[1])) tp = gen.map.randomNear(sx, sy, 2);
+    const exit = { x: gen.exit[0], y: gen.exit[1], type: 'exit', active: false, color: '#5a5a60', reach: 1.6, label: 'Sealed Exit', use: () => this.useExit(world, exit) };
+    world.portals = [{ x: tp[0], y: tp[1], type: 'town', active: true, color: '#3a8aff', reach: 1.6, label: 'Town Portal', use: () => this.useTownPortal() }, exit];
+    for (const s of gen.spawns) {
+      if (s.rank === 'raid' || s.rank === 'boss') continue; // the Guardian stirs at the quota (game/rifts.js)
+      const variant = Math.random() < 0.4 ? 1 : 0, trait = rollTrait(world, Math.min(depth, 500));
+      for (let i = 0; i < s.n; i++) {
+        const [x, y] = i === 0 ? [s.x, s.y] : gen.map.randomNear(s.x, s.y, 1.6);
+        const rank = s.rank === 'unique' ? (i === 0 ? 'unique' : 'normal') : s.rank;
+        const m = makeMonster(world, s.arch, biome, lvl + (rank === 'normal' ? 0 : 1), rank, x, y, variant, s.look);
+        if (s.rank === 'unique' && i > 0) { m.affixes = []; m.name = m.name + ' Minion'; }
+        if (trait && (i === 0 || ['hunter', 'phaser', 'burrower'].includes(trait))) applyTrait(m, trait);
+        world.add(m);
+      }
+    }
+    world.roster = [...new Set(gen.spawns.filter((s) => s.arch && !['raid', 'boss'].includes(s.rank)).map((s) => s.arch))];
+    world.rift = createRiftRun(world, gen, tier, {
+      onWin: () => { exit.active = true; exit.color = '#20e0ff'; exit.label = 'Exit — onward or home'; addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#20e0ff', 5)); sfx('gate'); UI.refresh(); this.autosave(); },
+      onFail: () => this.autosave(),
+      onBack: () => { if (G.world === world) { stopMusic(); this.enterTown(); UI.log(`The Rift threw you back into Herrington Hollow. Tier ${tier} waits at the gate.`, '#a0f0ff'); } },
+    });
+    c.rifts.runs = (c.rifts.runs || 0) + 1;
+    world.onBossAwake = (m) => { UI.centerMsg(m.name, `${m.title}${m.raid && m.raid.mods.length ? ' · ' + m.raid.modText() : ''}`, 3); sfx('boss'); };
+    world.onBossKilled = () => {}; // riftWin handles it
+    this.setWorld(world, gen.start, old);
+    world.darkK = Math.max(world.darkK || 0, 0.25);
+    HUD.setArea('Abyssal Rift', `Tier ${tier} · ${biome.name} · as deadly as Depth ${depth}`);
+    playMusic('wilds', { delay: 2 }); setAmbience(biome.id);
+    UI.centerMsg('ABYSSAL RIFT', `Tier ${tier} · ${fmtTime(world.rift.limit)} on the clock`, 3);
+    UI.log(`<b style="color:#20e0ff">Abyssal Rift Tier ${tier}</b> (${biome.name}, as deadly as Depth ${depth}): slay ${Math.round(100 * RIFT_QUOTA)}% of the rift's monsters to wake the Guardian in the arena, and slay it before the clock runs out. Faster wins open more tiers.`, '#a0f0ff');
+    this.autosave();
+  },
+  /** The exit of a closed rift: on to the next tier, or home. opts.auto: auto-play's call (opts.town: it wants to shop). */
+  riftExit(world, opts = {}) {
+    const R = world.rift, next = Math.min(riftOpen(), R.result ? R.result.next : R.tier + 1);
+    if (Auto.on) Auto.transitT = 3;
+    if (opts.auto) { // on to the next tier, or the highest open one it is ready for when that is still a climb; else home
+      const go = Auto.riftReady(next) ? next : Auto.riftTier();
+      if (opts.town || go <= R.tier) { UI.log(opts.town ? 'Auto-play heads back to town to trade.' : `Auto-play judges Tier ${next} too deadly for now and heads home.`, '#8fe0ff'); sfx('portal'); this.enterTown(); }
+      else this.enterRift(go);
+      return;
+    }
+    Rifts.results(R, { onNext: () => this.enterRift(next), onTown: () => { sfx('portal'); this.enterTown(); }, next });
+  },
+  /** Death in a rift: back to town with no Defiance, the descent untouched. */
+  riftDeath(src) {
+    const c = G.char, R = G.world.rift;
+    c.deaths = (c.deaths || 0) + 1;
+    c.rifts.deaths = (c.rifts.deaths || 0) + 1;
+    if (!R.done) R.failed = true;
+    G.smiteArmed = false;
+    const killer = src ? (src.owner ? src.owner.name : src.name) : null;
+    stopMusic();
+    this.autosave();
+    setTimeout(() => {
+      deathScreen(riftDepth(R.tier), killer, () => {
+        const p = G.player;
+        p.dead = false; p.buffs = []; p.recompute(); p.hp = p.maxHp; p.mana = p.maxMana;
+        this.enterTown();
+        UI.log(`The Rift spat you out. Tier ${R.tier} waits at the gate; your descent still stands at Depth ${c.depth}.`, '#a0f0ff');
+      }, { where: `in Abyssal Rift Tier ${R.tier}`, note: 'Your gear, levels and skills endure, and a Rift takes no toll on your descent. Try the tier again, or a lower one.' });
+    }, 1700);
+  },
+
+  // ------------------------------------------------------------ VELSCOUR UNBOUND (docs/ENDGAME.md)
+  /** Three Abyssal Keys: the rematch on his throne, at the hero's depth (500 at the least), the hero set down in the arena. */
+  async enterUnbound() {
+    const c = G.char;
+    if (!unboundReady(c)) { UI.log(`<b style="color:#20e0ff">Velscour Unbound</b> needs three Abyssal Keys (you hold ${keysOf(c)})${endgameUnlocked(c) ? '' : ' and Velscour slain at Depth 500'}. Keys drop from BOSS ROOM bosses past Depth 600 under Heresy rank 10, and from Abyssal Rift Guardians from Tier 10.`, '#a0f0ff'); sfx('error'); return false; }
+    if (Auto.on) Auto.toggle(false);
+    spendKeys(c);
+    const depth = Math.max(FINAL_DEPTH, G.world?.kind === 'dungeon' && !G.world.rift ? G.world.depth : c.depth || 1), biome = BIOME_BY_ID.throne;
+    const loading = document.getElementById('loading');
+    document.getElementById('loading-text').textContent = `Velscour Unbound — Depth ${depth}…`;
+    loading.classList.remove('hidden');
+    try {
+      await this.loadLevelArt(biome);
+      G.unboundNext = true;
+      this.buildDungeon(depth, biome);
+      const w = G.world;
+      await loadArtFor([...w.creatures.map((m) => m.art), ...(w.looks ? w.looks.ids() : []), ...(w.velscour ? w.velscour.courtArt || [] : [])], true).catch((e) => console.warn(e)); // (his court steps in later)
+      await warmLevelArt(w);
+      releaseLevelArt(biome);
+      const p = G.player;
+      if (w.velscour && p) {
+        const [x, y] = w.map.nudge(22.5, 26.5, 0.4);
+        p.x = x; p.y = y; p.path = null; p.moveTarget = null; p.attackTarget = null;
+        for (const s of w.creatures) if (s.team === 'player' && s !== p) [s.x, s.y] = w.map.randomNear(x, y, 1.5);
+        w.map.reveal(x, y, 30);
+        camera.follow(x, y, 0, true);
+      }
+      UI.log('<b style="color:#ff4020">Velscour Unbound.</b> The keys turn; the Demon Lord rises with his court at his side. There is no practice here.', '#ffb0a0');
+    } catch (e) {
+      console.warn(e); G.unboundNext = false;
+      c.keys += 3; // the keys come back
+      UI.log('The abyss rejected the keys. Try again.', '#ff8060');
+    } finally {
+      loading.classList.add('hidden');
+      this.autosave();
+    }
+    return true;
+  },
+  /** Death in Velscour Unbound: back to town; no Defiance, the keys are spent. */
+  unboundDeath(src) {
+    const c = G.char;
+    c.deaths = (c.deaths || 0) + 1;
+    G.smiteArmed = false;
+    const killer = src ? (src.owner ? src.owner.name : src.name) : null;
+    stopMusic();
+    this.autosave();
+    setTimeout(() => {
+      deathScreen(G.world ? G.world.depth : FINAL_DEPTH, killer, () => {
+        const p = G.player;
+        p.dead = false; p.buffs = []; p.recompute(); p.hp = p.maxHp; p.mana = p.maxMana;
+        this.enterTown();
+        UI.log('Velscour Unbound keeps his throne. Three more Abyssal Keys buy another try.', '#ffb0a0');
+      }, { where: "on Velscour's throne", note: 'Your gear, levels and skills endure, and your descent is untouched. The three keys are spent.' });
     }, 1700);
   },
 
@@ -1702,6 +1914,8 @@ export const game = {
         ambushTick(w, dt);
       }
       if (w.kind === 'town') townTick(w, dt); else if (!w.sky) happeningsTick(w, dt);
+      if (w.rift) riftTick(w, dt); // the Abyssal Rift's clock (game/rifts.js)
+      if (w.heresy) heresyTick(w, dt); // the Heresies as monsters appear, the Legion's hellgates (game/heresies.js; the Breach has no happenings tick)
       madnessTick(dt);
       spectateTick(w, dt); // gilded critters, the SMITE reticle (game/spectate.js)
       footsteps(p, w.kind === 'town' ? 'dirt' : STEP_SURFACE[w.biome && w.biome.id] || 'stone');

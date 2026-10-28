@@ -135,6 +135,7 @@ export function newCharData(classId, name) {
     stash: Array(300).fill(null),
     gold: 150, potions: { hp: 6, mp: 4, rejuv: 1, fury: 1 },
     depth: 1, deepest: 0, nextBiome: null, biomeBag: [], cleared: {}, overworldMisses: 0, overworldLastVisit: null, seaOfSandRuns: {}, darkForestRuns: {}, breach: { best: 0, cleared: {} },
+    heresy: { on: [] }, rifts: { open: 1, best: 0, cleared: {}, bestTime: {}, runs: 0, fails: 0, deaths: 0 }, keys: 0, unbound: { wins: 0, best: 0 }, // the Endgame (docs/ENDGAME.md)
     kills: 0, deaths: 0, created: Date.now(), lastPlayed: Date.now(), tips: {},
   };
   c.equip.weapon = rollItem(1, { slot: 'weapon', base: C.weapon, rarity: 0 });
@@ -154,6 +155,11 @@ export function migrate(c) {
   c.seaOfSandRuns = c.seaOfSandRuns || {};
   c.darkForestRuns = c.darkForestRuns || {};
   c.breach = Object.assign({ best: 0, cleared: {} }, c.breach); // THE ETERNAL BREACH: best floor beaten, clears per floor
+  // the Endgame (docs/ENDGAME.md): Heresies on, Abyssal Rifts, Abyssal Keys, Velscour Unbound
+  c.heresy = Object.assign({ on: [] }, c.heresy); if (!Array.isArray(c.heresy.on)) c.heresy.on = [];
+  c.rifts = Object.assign({ open: 1, best: 0, cleared: {}, bestTime: {}, runs: 0, fails: 0, deaths: 0 }, c.rifts); c.rifts.open = Math.max(1, c.rifts.open | 0);
+  c.keys = Math.max(0, c.keys | 0);
+  c.unbound = Object.assign({ wins: 0, best: 0 }, c.unbound);
   c.granted = c.granted || {};
   c.tips = c.tips || {};
   if (c.classId === 'barbarian') c.rage = Math.max(0, Math.min(100, Number(c.rage) || 0));

@@ -5,10 +5,11 @@
 import { G } from '../state.js';
 import { rand, chance, TAU, dist } from '../core/util.js';
 import { sfx } from '../core/audio.js';
-import { addEffect, Column, Ring, Bolt, burst, sparkle, elem, glowSprite } from '../gfx/vfx.js';
+import { addEffect, Column, Ring, Bolt, Telegraph, burst, sparkle, smoke, elem, glowSprite } from '../gfx/vfx.js';
 import { isoX, isoY } from '../core/view.js';
 import { explode, Delayed } from './hazards.js';
 import { hit } from './combat.js';
+import { buildSummon } from './monster.js';
 
 const PROC = { proc: true, crit: false, noArc: true };
 const CAP_CD = 0.25; // seconds between two firings of the same proc (a whirlwind's hits would chain them)
@@ -23,6 +24,7 @@ export function relicProc(p, on, tgt, dmg) {
   p.procT = p.procT || {};
   for (const pr of list) {
     if (pr.on !== on) continue;
+    if (pr.only === 'demon' && !(tgt && (tgt.demon || tgt.pitSpawn))) continue; // the Seal of the Pit: demons only
     const key = pr.name + pr.fx;
     if (pr.every) { p.procN = p.procN || {}; if ((p.procN[key] = (p.procN[key] || 0) + 1) % pr.every) continue; }
     else if (!chance(pr.chance)) continue;
@@ -44,7 +46,7 @@ function fire(p, pr, tgt, base) {
     case 'meteor': { const t = at || nearest(p, 8); if (!t) return;
       w.addHazard(new Delayed({ world: w, src: p, x: t.x, y: t.y, r: pr.r || 1.8, delay: 0.55, fx: 'meteor', el, dmg: [amt * 0.9, amt * 1.1], o: { ...PROC }, showRing: true })); return; }
     case 'stars': { const t = at || nearest(p, 9); if (!t) return;
-      for (let i = 0; i < 5; i++) { const a = rand(TAU), d = rand(0.4, 2.2); w.addHazard(new Delayed({ world: w, src: p, x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d, r: pr.r || 1.2, delay: 0.35 + i * 0.12, fx: 'meteor', el, dmg: [amt * 0.9, amt * 1.1], o: { ...PROC }, showRing: true })); }
+      for (let i = 0; i < (pr.n || 5); i++) { const a = rand(TAU), d = rand(0.4, 2.2); w.addHazard(new Delayed({ world: w, src: p, x: t.x + Math.cos(a) * d, y: t.y + Math.sin(a) * d, r: pr.r || 1.2, delay: 0.35 + i * 0.12, fx: 'meteor', el, dmg: [amt * 0.9, amt * 1.1], o: { ...PROC }, showRing: true })); }
       return; }
     case 'nova':
       addEffect(new Ring(p.x, p.y, 0.3, pr.r || 3, 0.45, E.glow, 5));
@@ -62,7 +64,32 @@ function fire(p, pr, tgt, base) {
       }
       sfx('thunder', 0.35); return; }
     case 'consecrate': if (!at) return; w.addHazard(new Consecration(w, p, at.x, at.y, pr.r || 2, Math.max(1, amt), el)); return;
+    case 'void': { const t = at || nearest(p, 8); if (!t) return; // the Abyssal Edge: a rift tears open where the blow fell
+      addEffect(new Ring(t.x, t.y, 0.2, pr.r || 2.2, 0.5, '#a040ff', 5)); burst(t.x, t.y, 24, el, 14, 2);
+      explode(w, p, t.x, t.y, pr.r || 2.2, amt, el, { ...PROC, sound: false }, 'eruption');
+      sfx('arcane', 0.5); return; }
+    case 'demon': pitDemon(p); return;
   }
+}
+
+// The Crown of the Demon Lord: one Pit Demon of the Legion at the hero's side while the Crown is worn (a permanent
+// summon, carried from level to level; it leaves when the Crown does, and climbs out again 20 s after it falls).
+const PIT_DEMON = { name: 'Pit Demon of the Legion', look: { art: 'carmine_gorehorn', sprite: 'demon', pal: { a: '#7a1810', c: '#c03018', e: '#ffcc30' }, px: 2.8 }, ai: 'melee', hp: 0.8, dmg: 0.6, spd: 3.4, el: 'fire', atk: { type: 'melee', cd: 1 } };
+export const crownWorn = (p) => Object.values(p.char.equip || {}).some((it) => it && it.relic === 'heir' && it.rid === 'crown_demon');
+function pitDemon(p) {
+  const w = p.world, d = p.pitDemon, sp = 1 + (p.st.summonPct || 0) / 100, dmg = Math.max(1, (p.relicDmg || 0) * PIT_DEMON.dmg * sp);
+  if (d && !d.dead && d.world === w) { d.dmg = dmg; return; } // its blows follow the hero's (a share of the recent hit)
+  if (w.kind === 'town' || (p.pitDemonT || 0) > w.time) return;
+  p.pitDemonT = w.time + 20;
+  const [x, y] = w.map.randomNear(p.x, p.y, 1.8);
+  const m = buildSummon(p, PIT_DEMON, 'pit_demon', x, y, dmg, Math.max(20, p.maxHp * PIT_DEMON.hp * sp), 0);
+  m.aura = '#ff4010';
+  const up = m.update.bind(m);
+  m.update = (dt) => { if (!crownWorn(p)) { m.dead = true; smoke(m.x, m.y, 0, '#200808', 5, 9); return; } return up(dt); };
+  w.add(m); p.pitDemon = m;
+  addEffect(new Telegraph({ kind: 'circle', x, y, r: 1.4, dur: 0.6, color: '#ff4010' }), 'ground');
+  addEffect(new Ring(x, y, 0.2, 1.8, 0.6, '#ff3010', 4)); smoke(x, y, 0, '#200808', 5, 9);
+  sfx('summon', 0.6);
 }
 
 function nearest(p, r) {

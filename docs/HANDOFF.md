@@ -14,6 +14,37 @@ Contents
 
 ---
 
+## October 28, 2026 — THE ENDGAME: Heresies, Abyssal Rifts, Velscour Unbound, Infernal Marks (branch `feat/endgame`)
+- **Request (user):** "What would you suggest as an endgame? People have beaten Velscour and want more." Then: build all
+  four suggestions (not the later options: hardcore, seasons, affix rerolls), balance them over several iterations, check
+  the whole game's balance with the recent additions, test thoroughly, and summarize with screenshots before pushing/merging.
+- **Design and reference:** [`ENDGAME.md`](ENDGAME.md) (every rule, number and file). The Endgame opens for every hero on
+  the browser once any hero kills Velscour for real (`src/game/endgame.js`, localStorage `velscour_endgame_v1`, merged
+  three ways with Firestore `users/{uid}/account/endgame`).
+  - **Heresies** (`src/data/heresies.js`, `src/game/heresies.js`, `src/ui/heresies.js`): 12 modifiers, ranks to 26, at the
+    Altar of Heresy by the plaza; rank pays drops/MF/gold/XP/Sigils/relics; rank 10 lets Abyssal Keys drop past depth 600,
+    rank 20 gives a Mark a depth. Not in rifts or Unbound.
+  - **Abyssal Rifts** (`src/data/rifts.js`, `src/game/rifts.js`, `src/ui/rifts.js`, `src/game/leaderboard.js`,
+    `firestore.rules`): a third town portal; tier T = depth 500 + 10T; 420 s clock, 60% quota, then the Guardian; tier
+    jumps by time; Abyssal rarity (`RARITY[6]`, weight 0, worth 21 item levels) from Guardians; honour board per class.
+  - **Velscour Unbound** (`src/game/unbound.js`, Unbound branches of `src/game/velscour.js`, Unbound Heirlooms and the
+    Crown of the Demon Lord in `src/data/relics.js`): three Abyssal Keys; two signature raid bosses as his court; the Pact.
+  - **Infernal Marks** (`src/game/marks.js`, `src/ui/marks.js`): XP past level 600, rift clears (ceil(T/10)), Heresy 20;
+    four tapering categories; auto-play spends them.
+- **Balance iterations** (numbers in ENDGAME.md): Abyssal +2 power levels and a perk (worth 17.2 -> 21); rift quota 0.7 ->
+  0.6, density 0.8, Guardian 0.6x; rift Marks tier/4 -> tier/10; Gaze aggro x2.5 -> x2 (frame cost); Unbound court
+  1.2x -> 0.8x life, 0.8x -> 0.65x hits, self-healing 35%, each courtier's Pact wanes after 120 s, auto-play turns back to
+  him then. Without god mode (`velscour_real.js ... unbound`, depth-600 gear): 1/4 -> 5/9 -> 5/9 -> 6/9 wins, no stalls.
+- **Whole game:** endgame.js (5 classes), tuning.js (16 classes, depths 1-500), raid.js, balance.js 30/146/300,
+  velscour_real.js, rarity.js, relic_balance.js. Class damage past level 160 was flat: a level-300 knot in `DMG_TUNE_AT`
+  takes the Dragoon (x0.42 over two steps), Boomerang Knight (x0.40), Carrion Witch (x1.56) and Gunner (x1.44) from
+  0.28x/0.34x/2.4x/2.1x the mean kill time at depths 400-500 to ~0.6x/0.6x/1.3x/1.0x.
+- **Test fixes found on the way:** `velscour_real.js` let a lost attempt's death screen land in the next fight (fake
+  2-second deaths); `velscour_probe.js` (new) traces a fight's first seconds or every N s.
+- **Open:** deploy `firestore.rules` by hand (Firebase console) or the board is refused; the board is an honour board;
+  rifts wall at tier ~20-30 for a hero of the tier's level (intended, like the Endless Torment); `tuning.js`'s
+  single-target number is broken for the Slime Lord (and sometimes Lancer/Necromancer) on `main` too.
+
 ## October 25, 2026 — Velscour faces the hero, sits on his throne, summons demons (branch `fix/velscour-throne`)
 - **Request (user):** Velscour didn't face the right way in the final fight; put the Castle biome's throne in his throne
   room, palette-swapped to match him, on 2 x 2 floor tiles so he can sit on it; make him summon demons in a phase.

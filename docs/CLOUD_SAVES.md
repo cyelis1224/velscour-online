@@ -31,11 +31,25 @@ The code is `src/game/cloud.js` and `src/game/herobackup.js`, the screens are in
 ## How it works
 - **Firebase project `velscour`** (console.firebase.google.com, owned by the user, free Spark plan). Authentication has
   Google enabled. The authorized domains are `localhost`, `agilancer.github.io` and the Firebase defaults. Firestore
-  (Standard edition) has these rules:
-  ```
-  match /users/{uid}/{document=**} { allow read, write: if request.auth != null && request.auth.uid == uid; }
-  ```
+  (Standard edition) runs the rules in [`firestore.rules`](../firestore.rules) at the repo root: a player's heroes
+  (`users/{uid}/heroes/{classId}`) and account record (`users/{uid}/account/endgame`, docs/ENDGAME.md) are read and
+  written by their owner only; the Abyssal Rifts' honour board (`boards/{classId}/entries/{uid}`) is read by anyone and
+  each player creates or updates only their own entry (checked fields: `v == 1`, `name` a string of at most 24,
+  `cls` the path's class, `tier` an int 1..10000, `time` a number > 0, `level`/`marks` ints, `at` the server time,
+  `build` a map); a player may delete only their own entry (the game does when a hero takes Velscour's gift). **To deploy them**: Firebase console > Firestore Database > Rules, paste the file, Publish
+  (or `firebase deploy --only firestore:rules` with the Firebase CLI). Until then the board's reads and writes fail
+  with permission-denied (the game says it could not reach the board) and the account record's sync logs a warning.
   The web config in `cloud.js` is public by design. The rules are what protect the saves.
+- **Velscour's gift is a cheat.** A hero sent "DEATH IS THE ONLY WAY OUT, MY KIND SIR." (`src/game/deathgift.js`) gets
+  `c.cheated = true` for good: `Board.submit` refuses it (`barred`), its rift wins never reach the account record's
+  bests, and its class's entry comes off the board (`Board.withdraw` → `Cloud.delBoard` at once when signed in, and every
+  full sync deletes the entry of each local hero marked so, which covers a gift taken signed out or on another device).
+- **The honour board is an honour board.** Saves live in each browser's localStorage, so a player can edit a hero and
+  post any tier and time; the rules only keep entries well formed and in their owner's name. Every entry records the
+  build (the skill bar, the worn gear's names, rarities and item levels, the level and Infernal Marks) so readers can
+  judge it. A post is a transaction that reads the entry and writes only a better run (a higher tier, or the same tier
+  faster), so a stale device can't replace a better one. The board dialog loads the SDK when opened, signed in or not
+  (an explicit tap), and reads one class's entries (one read per entry).
 - **The SDK** (`firebase-app`, `firebase-auth`, `firebase-firestore-lite`, 12.19.0) is imported from gstatic only
   for a device that is signed in, or when the pointer reaches the sign-in button. Players who never sign in load
   nothing extra. The sign-in uses `signInWithPopup`; the popup waits on Google's iframe from `apis.google.com`.
@@ -61,7 +75,27 @@ The code is `src/game/cloud.js` and `src/game/herobackup.js`, the screens are in
     meantime, it becomes a conflict instead of an overwrite. The class being played is never pulled; the player gets
     one log line, and the choice waits for the title screen.
 - **Offline:** work stays dirty, the status reads offline, and it retries every 2 minutes and on the `online` event.
-- **Sign out** keeps the heroes on the device and clears `base`, so a later sign-in merges from scratch.
+- **The account record** (the Endgame's shared record, `src/game/endgame.js`, docs/ENDGAME.md): one more document,
+  `users/{uid}/account/endgame`, holding `{ v, unlocked, marks: { pts, xp, spent: { life, crit, mf, rift } }, bests,
+  keysFound, unboundWins, at }`. It is not a hero: it never conflicts and never asks; `mergeEndgame(local, cloud,
+  base)` folds the two copies into one that loses nothing, three ways against `st.endBase` (the record this device
+  last synced, in `velscour_cloud_v1`):
+  - **Counters** (`marks.pts`, `keysFound`, `unboundWins`): the base plus what each side earned since it, so 10
+    Marks earned on one device and 5 on another while apart end at 15 on both. Never below either side or the base.
+    No base (a first sign-in on this device): the larger.
+  - **Spending** (`marks.spent`): each side's change since the base, per category (a reset on one device and a spend
+    on the other both hold). If the sum is more than the Marks (the same free Marks spent on both devices), this
+    device's spending wins. A side with fewer Marks than the base is damaged and its spending is ignored. No base:
+    the spending of the side with more Marks.
+  - **The rest:** `marks.xp` the larger, `unlocked` the earliest time, `bests` the better rift per class. A damaged
+    record (junk values, spending past its Marks) is sanitised by `fixEndgame` first, so it lowers nothing; the next
+    sync writes the merged record back over it.
+  The sync (`syncAccount`, part of every full sync, and 60 s after any change to the record outside play's XP ticks)
+  adopts the merge here, sets the base to what it read, and writes the merge back in a transaction that checks the
+  document still holds what was read (another device wrote in between: read and merge again, up to 3 times); after
+  the write the base is the merge. XP towards the next Mark alone does not wake the sync.
+- **Sign out** keeps the heroes and the account record on the device and clears `base` and `endBase`, so a later
+  sign-in merges from scratch.
 
 ## Costs
 On the free tier (50,000 reads and 20,000 writes a day), one write every 5 minutes while playing allows roughly 1,600
@@ -69,6 +103,8 @@ player-hours a day. A full sync reads one document per hero.
 
 ## Not done yet
 - Apple sign-in (needs an Apple Developer account; Firebase supports it with the same code plus an `OAuthProvider('apple.com')`).
-- Settings, the taunt deck and the Bard's heard melodies stay per device.
+- Settings, the taunt deck, the Bard's heard melodies and the Reliquary stay per device. The Endgame record (Marks,
+  rift bests, the unlock) is per browser too and merges into the signed-in account's copy, so a second Google account
+  in the same browser inherits it.
 - The real popup can't be tested in cloud containers (gstatic and apis.google.com are blocked there). `cloud.js` routes
   the SDK from the npm package and checks that it loads and that Firestore refuses a signed-out read.

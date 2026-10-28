@@ -5,6 +5,7 @@
 //   AP_FILTER=1 node tools/tests/autoplay.js ...   # loot filter on: rings Uncommon+, gear Epic+, all gems, keepers to the chest
 //   node tools/tests/autoplay.js wizard 8 handsoff # Settings › "Auto-play manages gear" off: fails if the gear ever
 //                                                  # changes; when it waits in town with a full bag, the test sells the bag's gear
+//   AP_HERESIES=twins,thirst node tools/tests/autoplay.js ...  # the Endgame open and these Heresies on (docs/ENDGAME.md)
 const { openGame, report } = require('./harness');
 const cls = process.argv[2] || 'paladin';
 const minutes = +(process.argv[3] || 15);
@@ -13,8 +14,9 @@ const handsOff = process.argv.includes('handsoff');
 
 (async () => {
   const { browser, page, errors, shot } = await openGame(mobile ? { width: 844, height: 390, mobile: true } : {});
-  const gear0 = await page.evaluate(async ({ cls, filter, handsOff }) => {
+  const gear0 = await page.evaluate(async ({ cls, filter, handsOff, heresies }) => {
     await window.VELSCOUR.game.newChar(cls, 'Autobot');
+    if (heresies.length) { (await import('/src/game/endgame.js')).unlockEndgame(); const H = await import('/src/game/heresies.js'); for (const id of heresies) H.setHeresy(id, true); }
     if (filter) Object.assign((await import('/src/game/lootfilter.js')).lootFilter(), { on: true, weapon: 3, offhand: 3, armor: 3, ring: 1, gems: true, upgrades: true, keep: true });
     const { Auto } = await import('/src/game/autoplay.js');
     const { G } = window.VELSCOUR;
@@ -22,7 +24,7 @@ const handsOff = process.argv.includes('handsoff');
     G.settings.autoGear = !handsOff;
     Auto.toggle(true);
     return Object.values(G.char.equip).map((it) => it && it.uid).join();
-  }, { cls, filter: !!process.env.AP_FILTER, handsOff });
+  }, { cls, filter: !!process.env.AP_FILTER, handsOff, heresies: (process.env.AP_HERESIES || '').split(',').filter(Boolean) });
   await page.waitForTimeout(500);
   await shot(`auto_${cls}_start`);
   let lastDepth = 0;

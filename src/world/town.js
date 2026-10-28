@@ -481,7 +481,22 @@ function rollTown(tileset, seed, last) {
     return null;
   }
   if (!last && (npcs.length < VENDORS.length || !reach(portal.x, portal.y) || !reach(breach.x, breach.y) || npcs.some((n) => !reach(n.x, n.y)))) return null;
-  return { map, buildings, npcs, props, torches, wallHangings, portal, breach, center: { x: C.x + 0.5, y: C.y + 0.5 }, start };
+  // the Endgame's places (docs/ENDGAME.md): the Abyssal Rift gate on the breach yard's road, short of the purple portal,
+  // and the Altar of Heresy at the plaza's edge; both on walkable, reachable, unbuilt ground
+  const spot = (fx, fy, r0, r1) => {
+    let best = null, bd = 99;
+    for (let ty = Math.floor(fy - r1); ty <= fy + r1; ty++) for (let tx = Math.floor(fx - r1); tx <= fx + r1; tx++) {
+      if (!inb(tx, ty) || !map.walkableTile(tx, ty) || !seen[I(tx, ty)] || use[I(tx, ty)] === 4) continue;
+      const d = Math.hypot(tx + 0.5 - fx, ty + 0.5 - fy);
+      if (d < r0 || d >= bd || npcs.some((n) => Math.hypot(n.x - tx - 0.5, n.y - ty - 0.5) < 2.5) || Math.hypot(tx + 0.5 - portal.x, ty + 0.5 - portal.y) < 3.5 || Math.hypot(tx + 0.5 - breach.x, ty + 0.5 - breach.y) < 2.6) continue;
+      bd = d; best = { x: tx + 0.5, y: ty + 0.5 };
+    }
+    return best;
+  };
+  const toC = Math.atan2(C.y + 0.5 - breach.y, C.x + 0.5 - breach.x);
+  const rift = spot(breach.x + Math.cos(toC) * 3.6, breach.y + Math.sin(toC) * 3.6, 0, 2.5) || spot(breach.x, breach.y, 2.7, 4.5);
+  const altar = spot(C.x + 0.5 + Math.cos(aB + 1.3) * 5.5, C.y + 0.5 + Math.sin(aB + 1.3) * 5.5, 0, 3) || spot(C.x + 0.5, C.y + 0.5, 4, 7);
+  return { map, buildings, npcs, props, torches, wallHangings, portal, breach, rift, altar, center: { x: C.x + 0.5, y: C.y + 0.5 }, start };
 }
 
 function shuffle(a, rng) {

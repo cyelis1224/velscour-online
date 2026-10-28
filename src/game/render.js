@@ -25,6 +25,10 @@ import { drawNebula } from '../gfx/breach.js';
 import { drawWyrm } from '../gfx/breachdragon.js';
 import { skyBack, skyWorld, skyFx, skyFront, drawSkyGate } from '../gfx/skyship.js';
 import { drawCine } from './cinema.js';
+import { obelisk } from './happenings.js';
+import { endgameUnlocked } from './endgame.js';
+import { heresyRankOf } from './heresies.js';
+import { addLight } from '../gfx/vfx.js';
 import { drawTerrain, drawColumn, occludersFor, occludersOfRect, occluderObj, clipAdd, hiddenBehind, standKey, hopZ, drawSky, terrainShade, HS } from '../gfx/terrain.js';
 
 let lightCanvas = null, glowCanvas = null, vignette = null, vigKey = '';
@@ -428,6 +432,14 @@ function drawCorpse(ctx, c) {
 }
 
 function drawNpc(ctx, n) {
+  if (n.altar) { // the Altar of Heresy (docs/ENDGAME.md): a dark obelisk, lit in Velscour's red once the Endgame is open, a skull glow while a Heresy is on
+    const x = isoX(n.x, n.y), y = isoY(n.x, n.y), open = endgameUnlocked(), lit = open && heresyRankOf() > 0;
+    if (lit) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.3 + Math.sin(G.time * 2.5) * 0.12; ctx.drawImage(glowSprite('#ff3020'), x - 48, y - 70, 96, 80); ctx.restore(); }
+    obelisk(ctx, x, y, open ? '#ff3020' : '#606070', open, 44);
+    if (open) addLight(n.x, n.y, 2.6, lit ? 0.9 : 0.5, 30, '#ff3020');
+    n.sbox = [x - 18, y - 56, x + 18, y + 6];
+    return;
+  }
   if (n.stash) {
     const x = isoX(n.x, n.y), y = isoY(n.x, n.y);
     if (n.reliquary) { // a golden glow round the vault every hero shares
@@ -1172,14 +1184,14 @@ function drawOverheadNames(ctx, world) {
   // townsfolk names: only the one nearest the hero (a crowd of labels hides the crowd)
   const hero = world.player;
   let nearest = null, nd = 2.6;
-  if (hero) for (const n of world.npcs) if (!n.vendor && !n.stash && !n.hidden && n.sbox) { const q = Math.hypot(hero.x - n.x, hero.y - n.y); if (q < nd) { nd = q; nearest = n; } }
+  if (hero) for (const n of world.npcs) if (!n.vendor && !n.stash && !n.altar && !n.hidden && n.sbox) { const q = Math.hypot(hero.x - n.x, hero.y - n.y); if (q < nd) { nd = q; nearest = n; } }
   for (const n of world.npcs) {
     if (!n.sbox || n.hidden) continue;
-    if (!n.vendor && !n.stash && (n !== nearest || n.talkT > 0)) continue;
+    if (!n.vendor && !n.stash && !n.altar && (n !== nearest || n.talkT > 0)) continue;
     const x = (n.sbox[0] + n.sbox[2]) / 2;
     const [sx, sy] = camera.toScreen(x, n.sbox[1] - 10);
     const label = n.vendor ? n.vendor.name : n.name;
-    if (label) drawLabel(ctx, label, sx * d, sy * d, nameFont, n.vendor || n.stash ? '#ffe090' : '#c8c0b0', 3 * d);
+    if (label) drawLabel(ctx, label, sx * d, sy * d, nameFont, n.altar ? '#ff8060' : n.vendor || n.stash ? '#ffe090' : '#c8c0b0', 3 * d);
     if (n.vendor && n.vendor.title) drawLabel(ctx, n.vendor.title, sx * d, (sy + 12) * d, `${Math.round(10 * d)}px "Alegreya Sans", sans-serif`, '#b0a080', 0);
   }
   // portal labels

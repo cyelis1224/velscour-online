@@ -34,6 +34,7 @@ node tools/tests/homunculus.js                      # the blacksmith live: bubbl
 node tools/tests/encounters.js [kinds]             # dungeon encounters with people (captive, knight's last stand, peddler, wizard, witch, Greener) + rats
 node tools/tests/rings.js                          # ring augments in a live dungeon, skill mastery, ring/forge UI shots
 node tools/tests/flow.js                           # town -> portal -> boss -> exit -> depth 2 -> death -> reload
+node tools/tests/deathgift.js [classes]            # "DEATH IS THE ONLY WAY OUT, MY KIND SIR." to Velscour: level 350, Mythic +10 gear, depth 500; the hero is barred from the Honour Board
 node tools/tests/stash.js                          # town storage chest: 300 slots, store/take, auto-play stashing
 node tools/tests/savesafe.js                       # unreadable saves never written over: set aside before the first save (localStorage or IndexedDB), downloadable, refused + warned when no room
 node tools/tests/cloud.js [nosdk]                  # cloud saves (Google sign-in + Firestore): 4 devices on a fake Firebase (push, pull, conflicts, tombstones, offline, backups + restore, lost/corrupt/damaged saves change nothing) + real SDK smoke
@@ -43,6 +44,11 @@ node tools/tests/stalegear.js                      # auto-play swaps a stale +10
 node tools/tests/relics.js                         # Heirlooms, Covenants, Sigils, Glyphwords (by hand and by auto-play), the shared Reliquary + Codex, Town Commissions (auto-play does a chapter)
 node tools/tests/relic_balance.js [classes] [n]    # Heirloom / Covenant piece / full set worth in item levels, like rarity.js (Heirloom ~ Legendary, piece ~ Epic, set ~ five Mythics)
 node tools/tests/velscour.js [noauto]              # Velscour's five phases stepped by hand + "final boss" from the skull, then auto-play beats him at depth 500 (5-10 min)
+node tools/tests/heresies.js                       # the Endgame (docs/ENDGAME.md): the Altar of Heresy, every Heresy's effect on a level, the rank's rewards, auto-play under them
+node tools/tests/rifts.js                          # Abyssal Rifts: the clock, the quota, the Guardian, collapse/death/win, tier jumps, the board's sorting, auto-play clears a tier (the honour board on a fake Firestore is cloud.js's scenario 17)
+node tools/tests/rift_balance.js                   # rift tiers vs the clock for a hero of the tier's level (model, like endgame.js)
+node tools/tests/unbound.js                        # Velscour Unbound: Abyssal Keys, the court, the Pact, every phase stepped, the Crown and Unbound Heirlooms, auto-play wins
+node tools/tests/marks.js                          # Infernal Marks: XP past the cap, spending, the bonuses on the sheet, shared across heroes, the account record's cloud merge
 node tools/tests/velscour_real.js [classes] [n]    # Velscour without god mode: depth-500 gear, wins / minutes / phase reached per class
 node tools/tests/rarity.js [classes] [samples]     # gear rarity worth in item levels, level 25 Rare > level 10 Mythic, drop odds
 node tools/tests/ui.js                             # skill tree, inventory, socketing, vendors
@@ -215,6 +221,7 @@ Screenshots are written to `tools/tests/out/` (git-ignored). Look at them, becau
   (`src/data/relics.js`, Sigils in `src/data/items.js`, powers in `src/game/relicprocs.js`), the shared Reliquary and
   Codex (`src/game/reliquary.js`, `src/ui/reliquary.js`, localStorage `velscour_reliquary_v1`) and Town Commissions
   (`src/game/commissions.js`, `G.char.comm`): run `relics.js` (and `relic_balance.js` after changing their numbers).
+  The Endgame (docs/ENDGAME.md; opens for every hero once Velscour falls for real): Heresies (`src/data/heresies.js`, `src/game/heresies.js`, `src/ui/heresies.js`): run `heresies.js`; Abyssal Rifts and the honour board (`src/data/rifts.js`, `src/game/rifts.js`, `src/ui/rifts.js`, `src/game/leaderboard.js`, `firestore.rules`): run `rifts.js`, `rift_balance.js` and `cloud.js`; Velscour Unbound (`src/game/unbound.js`, the Unbound branches of `src/game/velscour.js`, the Unbound Heirlooms in `src/data/relics.js`): run `unbound.js` and `velscour.js`; Infernal Marks and the shared record (`src/game/marks.js`, `src/game/endgame.js`, localStorage `velscour_endgame_v1`, Firestore `users/{uid}/account/endgame`): run `marks.js`, `cloud.js` and `endgame.js`. The Abyssal rarity (`RARITY[6]`, weight 0): run `rarity.js`.
 
 ## Git / GitHub
 - The working branch is `claude/amazing-rubin-kguehz`. PR https://github.com/Agilancer/velscour/pull/1

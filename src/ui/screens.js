@@ -564,7 +564,7 @@ export function settingsDialog() {
 /** Settings > Loot filter: the lowest rarity of each item type auto-pickup grabs (game/lootfilter.js). */
 export function lootFilterDialog(onDone) {
   const f = lootFilter();
-  const hue = ['white', 'green', 'blue', 'purple', 'orange', 'red'];
+  const hue = ['white', 'green', 'blue', 'purple', 'orange', 'red', 'cyan'];
   const opts = `<option value="-1">None</option>` + RARITY.map((r, i) => `<option value="${i}" style="color:${r.color}">${r.name}${i < RARITY.length - 1 ? ' or better' : ''} (${hue[i]})</option>`).join('');
   const html = `<div class="settings-grid">
     <label><b>Use the loot filter</b></label><input type="checkbox" data-f="on" ${f.on ? 'checked' : ''}>

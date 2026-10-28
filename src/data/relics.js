@@ -67,6 +67,12 @@ export const POWERS = {
   echo: { name: 'Echo Loop', desc: '{0}% chance to Echo-cast skills.', stats: [['echoChance', 15]] },
   hollowking: { name: 'Hollow King', desc: '+{0}% damage to bosses.', stats: [['bossDmg', 30]] },
   wyrm: { name: 'Wyrmcoil', desc: '+1 projectile to all projectile skills.', stats: [['extraProj', 1]] },
+  // Unbound Heirlooms (Velscour Unbound's spoils; game/unbound.js, docs/ENDGAME.md)
+  demonlord: { name: 'Demon Lord', desc: '+{0} to All Skills and +{1}% damage to bosses; a Pit Demon of the Legion climbs out of a hellgate to fight beside you.', stats: [['skillsAll', 2], ['bossDmg', 25]], procs: [{ on: 'hit', chance: 1, fx: 'demon' }, { on: 'cast', chance: 1, fx: 'demon' }, { on: 'hurt', chance: 1, fx: 'demon' }] },
+  abyssal_edge: { name: 'Void Rift', desc: 'Hits have a 15% chance to tear open a void rift that bursts for 200% of the hit as Shadow damage.', procs: [{ on: 'hit', chance: 0.15, fx: 'void', el: 'shadow', mult: 2, r: 2.2 }] },
+  unbound_mantle: { name: 'Unbound', desc: '{0}% damage reduction; the dark of the Abyss holds no dread for you.', legs: ['dreadless'], stats: [['reduce', 12]] },
+  pit_seal: { name: 'Seal of the Pit', desc: '+{0} Pierce and +{1}% critical damage; every demon you slay heals you 2%.', stats: [['pierce', 1], ['critDmg', 20]], procs: [{ on: 'kill', chance: 1, fx: 'heal', mult: 0.02, only: 'demon' }] },
+  abyss_heart: { name: 'Heart of the Abyss', desc: '+{0}% damage; casts have a 10% chance to drop three meteors on your target for 150% of your last hit.', stats: [['dmgPct', 15]], procs: [{ on: 'cast', chance: 0.1, fx: 'stars', n: 3, el: 'fire', mult: 1.5, r: 1.6 }] },
   // Covenant set powers
   pyre: { name: 'Pyre of Vows', desc: 'Killing blows leave consecrated fire for 4 s: foes in it take Holy damage and 25% more damage.', procs: [{ on: 'kill', chance: 1, fx: 'consecrate', el: 'holy', mult: 0.25, r: 2 }] },
   ninthstar: { name: 'The Ninth Star', desc: 'Casts have a 15% chance to call a falling star on your target for 250% of your last hit.', procs: [{ on: 'cast', chance: 0.15, fx: 'meteor', el: 'arcane', mult: 2.5, r: 2 }] },
@@ -94,6 +100,7 @@ export const POWERS = {
 
 // ---------------------------------------------------------------- Heirlooms
 // lines: [stat, k] (k core lines' worth; heirlooms sum to about 4.5); minIlvl: first item level it can drop at.
+// unbound: only Velscour Unbound drops it (makeHeirloom(ilvl, { unbound: true }); crown: only by its id), never maybeRelic.
 export const HEIRLOOMS = [
   { id: 'verdict', name: "Grandsire's Verdict", slot: 'weapon', base: 'mace', minIlvl: 20, power: 'verdict', lines: [['dmgPct', 1], ['holyPct', 1], ['critDmg', 0.9], ['lifeSteal', 0.8], ['str', 0.8]], flavor: 'Old Aldous never lost an argument. He only ever needed one swing.' },
   { id: 'emberwake', name: 'Emberwake', slot: 'weapon', base: 'sword', minIlvl: 20, power: 'kindled', lines: [['firePct', 1], ['dmgPct', 1], ['atkSpeed', 0.9], ['critChance', 0.8]], flavor: 'Forged in a burning house, and it never forgot.' },
@@ -131,6 +138,11 @@ export const HEIRLOOMS = [
   { id: 'echoloop', name: 'Echo Loop', slot: 'ring', minIlvl: 60, power: 'echo', lines: [['castSpeed', 1], ['dmgPct', 1], ['mana', 0.8]], flavor: 'Say it once. It says it again.' },
   { id: 'hollowking', name: 'Seal of the Hollow King', slot: 'ring', minIlvl: 120, power: 'hollowking', lines: [['dmgPct', 1], ['critChance', 1], ['critDmg', 0.8]], flavor: 'His seal outlived his kingdom, and him.' },
   { id: 'wyrmcoil', name: 'Wyrmcoil', slot: 'ring', minIlvl: 120, power: 'wyrm', lines: [['firePct', 1], ['coldPct', 1], ['lightPct', 0.8]], flavor: 'Three heads, one appetite.' },
+  { id: 'crown_demon', name: 'Crown of the Demon Lord', slot: 'head', minIlvl: 250, power: 'demonlord', unbound: true, crown: true, lines: [['life', 1], ['allAttr', 1], ['cdr', 0.9], ['resAll', 0.9], ['critChance', 0.8]], flavor: 'He wore it for a thousand years. It has not decided whether you are the next.' },
+  { id: 'abyssal_edge', name: 'The Abyssal Edge', slot: 'weapon', base: 'sword', minIlvl: 250, power: 'abyssal_edge', unbound: true, lines: [['shadowPct', 1], ['dmgPct', 1], ['critDmg', 1], ['atkSpeed', 0.9], ['lifeSteal', 0.8]], flavor: 'It does not cut. It opens.' },
+  { id: 'mantle_unbound', name: 'Mantle of the Unbound', slot: 'body', minIlvl: 250, power: 'unbound_mantle', unbound: true, lines: [['life', 1], ['lifePct', 1], ['resAll', 1], ['armorPct', 0.9], ['reduce', 0.8]], flavor: 'Stitched from the chains that held him. They hold nothing now.' },
+  { id: 'seal_of_the_pit', name: 'Seal of the Pit', slot: 'ring', minIlvl: 250, power: 'pit_seal', unbound: true, lines: [['dmgPct', 1], ['critChance', 1], ['firePct', 0.9]], flavor: 'The Legion answers to whoever wears it. For now they are only watching.' },
+  { id: 'heart_of_the_abyss', name: 'Heart of the Abyss', slot: 'offhand', base: 'orb', minIlvl: 250, power: 'abyss_heart', unbound: true, lines: [['dmgPct', 1], ['castSpeed', 1], ['shadowPct', 0.9], ['mana', 0.9], ['cdr', 0.8]], flavor: 'The shard that did not break. It still beats, slowly, out of time with yours.' },
 ];
 export const HEIRLOOM_BY_ID = Object.fromEntries(HEIRLOOMS.map((h) => [h.id, h]));
 
@@ -231,7 +243,7 @@ function shapeRelic(it, kind, id, name, lines, maxSock) {
 }
 /** A Heirloom at item level ilvl (one of id, or a random one that can drop for the slot at that level; null if none). */
 export function makeHeirloom(ilvl, opts = {}) {
-  const pool = HEIRLOOMS.filter((h) => (opts.id ? h.id === opts.id : (!opts.slot || h.slot === opts.slot) && h.minIlvl <= ilvl));
+  const pool = HEIRLOOMS.filter((h) => (opts.id ? h.id === opts.id : (!opts.slot || h.slot === opts.slot) && h.minIlvl <= ilvl && !h.crown && !h.unbound === !opts.unbound));
   if (!pool.length) return null;
   const H = pick(pool);
   const it = rollItem(ilvl, { slot: H.slot, rarity: 4, base: H.base, generic: true });

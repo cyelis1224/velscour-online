@@ -25,6 +25,7 @@ import { TOWNSFOLK } from '../data/townsfolk.js';
 import { setupScenario, scenarioTick } from './scenarios.js';
 import { smiteKill } from './smite.js';
 import { greedTick } from './greed.js';
+import { worldHeresies } from './heresies.js';
 
 // ------------------------------------------------------------------------------------------------ omens
 // A level-wide twist, announced on arrival. mon: applied to every enemy as it appears (ambushes too).
@@ -43,6 +44,7 @@ const OMEN_KEYS = Object.keys(OMENS);
 export const omenable = (depth, biome) => !!biome && !biome.overworld && !isRaidDepth(depth) && depth < FINAL_DEPTH;
 /** A depth's omen roll: an OMENS key, or null for a quiet one. */
 export const rollOmen = (depth) => (chance(Math.min(0.45, 0.22 + depth * 0.004)) ? pick(OMEN_KEYS) : null);
+export const anyOmen = () => pick(OMEN_KEYS);
 
 // ------------------------------------------------------------------------------------------------ shrines
 export const SHRINES = {
@@ -99,11 +101,12 @@ export function setupHappenings(world, start, gen) {
   // the portal the hero took showed this depth's omen (game.portalChoice): keep its word
   const c0 = G.char, told = c0 && c0.nextOmen !== undefined ? c0.nextOmen : undefined;
   if (c0) delete c0.nextOmen;
-  if (world.kind !== 'dungeon' || world.raid || gen.raid || depth >= FINAL_DEPTH || world.biome.overworld || G.room) return;
+  // Black Omens (game/heresies.js): every level carries an omen, the Endless Torment's too (where nothing else happens)
+  const black = worldHeresies(world).includes('omens'), torment = black && depth > FINAL_DEPTH;
+  if (world.kind !== 'dungeon' || world.raid || gen.raid || (depth >= FINAL_DEPTH && !torment) || world.biome.overworld || G.room) return;
   const H = world.happen;
-  setupScenario(world, start); // one of the biome's twenty optional set pieces (game/scenarios.js)
-  // the omen
-  const omen = told !== undefined ? (OMENS[told] ? told : null) : rollOmen(depth);
+  if (!torment) setupScenario(world, start); // one of the biome's twenty optional set pieces (game/scenarios.js)
+  const omen = told !== undefined ? (OMENS[told] ? told : black ? pick(OMEN_KEYS) : null) : rollOmen(depth) || (black ? pick(OMEN_KEYS) : null);
   if (omen) {
     H.omen = omen;
     const O = OMENS[H.omen];
@@ -111,8 +114,11 @@ export function setupHappenings(world, start, gen) {
     world.goldMul = O.gold || 1;
     if (O.dark) world.darkK = Math.max(world.darkK || 0, O.dark);
   }
+  if (torment) { if (H.omen === 'champions') for (const m of world.creatures) if (m.team === 'enemy' && m.rank === 'normal' && chance(0.12)) makeElite(m, 'champion', depth, world); return; }
   const want = 1 + (chance(0.6) ? 1 : 0) + (chance(0.35) ? 1 : 0) + (H.omen === 'vault' ? 3 : 0);
   const spots = roomSpots(world, start, want + 3);
+  // the monster that last killed the hero is back, and it remembers (its spot first: the shrines and caches can't take it)
+  const c = G.char, nemSpot = c && c.nemesis && (depth >= c.nemesis.depth - 5 || black) ? spots.pop() : null;
   // shrines
   const nShrines = chance(0.7) ? (chance(0.35) ? 2 : 1) : 0;
   for (let i = 0; i < nShrines && spots.length; i++) addShrine(world, spots.pop(), pick(SHRINE_KEYS));
@@ -139,9 +145,7 @@ export function setupHappenings(world, start, gen) {
       }
     }
   }
-  // the monster that last killed the hero is back, and it remembers
-  const c = G.char;
-  if (c && c.nemesis && depth >= c.nemesis.depth - 5 && spots.length) spawnNemesis(world, spots.pop(), c.nemesis);
+  if (nemSpot) spawnNemesis(world, nemSpot, c.nemesis);
   if (H.omen === 'champions') {
     for (const m of world.creatures) if (m.team === 'enemy' && m.rank === 'normal' && chance(0.12)) makeElite(m, 'champion', depth, world);
   }
@@ -162,7 +166,7 @@ export function announceHappenings(world) {
 }
 
 // ------------------------------------------------------------------------------------------------ interactables
-function obelisk(ctx, x, y, col, lit, h = 34) {
+export function obelisk(ctx, x, y, col, lit, h = 34) {
   ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.beginPath(); ctx.ellipse(x, y, 15, 6, 0, 0, TAU); ctx.fill();
   ctx.fillStyle = '#3a3640'; ctx.beginPath(); ctx.moveTo(x - 13, y - 2); ctx.lineTo(x, y + 4); ctx.lineTo(x + 13, y - 2); ctx.lineTo(x, y - 8); ctx.fill();
   ctx.fillStyle = '#56505e'; ctx.beginPath(); ctx.moveTo(x - 7, y - 4); ctx.lineTo(x - 4, y - h); ctx.lineTo(x, y - h - 6); ctx.lineTo(x, y); ctx.fill();

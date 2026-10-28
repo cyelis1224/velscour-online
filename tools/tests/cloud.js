@@ -3,7 +3,9 @@
 // a conflict picked from the dialog, the in-game warning, deleting (tombstones), a first sign-in that must not
 // overwrite, offline and back, reload resumes the session, sign out. No save is lost: every replaced hero is backed up
 // (and restorable from Settings), a hero lost on either side is copied back instead of deleted, unreadable local saves
-// and damaged cloud copies change nothing, a device without IndexedDB (no backups) changes nothing, the 5-minute push. Then a smoke test of the real SDK (12.19.0 from npm when the
+// and damaged cloud copies change nothing, a device without IndexedDB (no backups) changes nothing, the 5-minute push,
+// the Abyssal Rifts' honour board (one entry per player that only a better run replaces, read signed out),
+// the Endgame's account record (Infernal Marks earned on two devices apart add up, never lowered). Then a smoke test of the real SDK (12.19.0 from npm when the
 // gstatic CDN is blocked): it loads, the popup goes to velscour.firebaseapp.com, and Firestore refuses a signed-out read.
 // node tools/tests/cloud.js [nosdk]
 const fs = require('fs');
@@ -30,6 +32,7 @@ const FAKE = {
     export const collection = (db, ...p) => ({ path: p.join('/') });
     export const doc = (db, ...p) => ({ path: p.join('/'), id: p[p.length - 1] });
     export const serverTimestamp = () => Date.now();
+    export async function deleteDoc(ref) { return net('put', [ref.path, null]); }
     export async function getDocs(col) { const docs = await net('list', col.path); return { forEach: (fn) => docs.forEach((d) => fn({ id: d.id, data: () => wrap(d.data) })) }; }
     export async function runTransaction(db, fn) {
       const writes = [];
@@ -45,8 +48,8 @@ function backend(op, a) {
   if (op === 'get') return store.get(a) || null;
   if (op === 'put') { if (a[1]) store.set(a[0], a[1]); else store.delete(a[0]); return true; }
 }
-async function device(name, user, noIdb) {
-  const d = await openGame();
+async function device(name, user, noIdb, opts) {
+  const d = await openGame(opts);
   if (noIdb) { await d.page.addInitScript(() => { Object.defineProperty(window, 'indexedDB', { value: undefined }); }); await d.page.reload(); await d.page.waitForFunction(() => window.VELSCOUR && document.querySelector('#loading').classList.contains('hidden')); }
   await d.ctx.route(SDK + '*', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE[r.request().url().split('/').pop()] }));
   await d.page.exposeFunction('__store', backend);
@@ -299,6 +302,134 @@ const check = (ok, msg, fails) => { console.log((ok ? 'ok   ' : 'FAIL ') + msg);
     await run(A.page, 'seed', [['bard', 'Lyre', 1]]);
     await idle(A.page);
     check(!await cloudHero(A.page, 'bard'), 'A signed out: a new hero does not go up', fails);
+
+    // 16. the Endgame's account record (users/{uid}/account/endgame) on two more devices of one account: Infernal
+    // Marks earned apart add up (a three-way merge against the record each device last synced), spending holds, the
+    // unlock keeps the earliest time, rift bests merge per class, a damaged cloud copy lowers nothing, sign-out keeps it
+    const U = { uid: 'u3', displayName: 'Mark Player', email: 'marks@example.com' }, DOC = 'users/u3/account/endgame';
+    const E = await device('E', U), F = await device('F', U);
+    try {
+      const rec = (d) => d.page.evaluate(async () => { const { endgame } = await import('/src/game/endgame.js'); const r = endgame(); return { pts: r.marks.pts, spent: r.marks.spent, bests: Object.keys(r.bests).sort().join(','), unlocked: r.unlocked }; });
+      const doc = () => E.page.evaluate((p) => window.__store('get', p), DOC);
+      const act = (d, fn, ...a) => d.page.evaluate(`(async () => { const M = await import('/src/game/marks.js'); const E = await import('/src/game/endgame.js'); (${fn})(M, E, ...${JSON.stringify(a)}); })()`);
+      const signIn = (d) => d.page.evaluate(async () => { const { Cloud } = await import('/src/game/cloud.js'); await Cloud.signIn(); });
+      const sp = (r) => `${r.pts} (life ${r.spent.life}, crit ${r.spent.crit})`;
+      await signIn(E);
+      await act(E, (M) => { M.grantMarks(10, 'test'); M.spendMark('life', 4); });
+      await sync(E.page); await idle(E.page);
+      let c = await doc();
+      check(c && c.marks.pts === 10 && c.marks.spent.life === 4, `account E: earns 10 Marks, 4 on Vitality, syncs: the cloud holds ${c && c.marks.pts}/${c && c.marks.spent.life}`, fails);
+      await signIn(F); await idle(F.page);
+      let rf = await rec(F);
+      check(rf.pts === 10 && rf.spent.life === 4, `account F signs in: sees ${sp(rf)}`, fails);
+      // apart: E offline earns 6 (and slays Velscour, a paladin rift best); F earns 3, spends 2 on Precision (an earlier unlock, a wizard best)
+      await E.page.evaluate(() => { window.__OFFLINE = true; });
+      await act(E, (M, E) => { M.grantMarks(6, 'test'); E.unlockEndgame(); E.noteRiftBest('paladin', 12, 300); });
+      await sync(E.page); await idle(E.page);
+      await act(F, (M, E, t) => { M.grantMarks(3, 'test'); M.spendMark('crit', 2); E.endgame().unlocked = t; E.noteRiftBest('wizard', 9, 200); }, Date.now() - 864e5);
+      await sync(F.page); await idle(F.page);
+      c = await doc();
+      check(c.marks.pts === 13, `account F syncs while E is offline: the cloud holds ${c.marks.pts}`, fails);
+      await E.page.evaluate(() => { window.__OFFLINE = false; });
+      await sync(E.page); await idle(E.page);
+      await sync(F.page); await idle(F.page);
+      const re = await rec(E); rf = await rec(F); c = await doc();
+      check(re.pts === 19 && rf.pts === 19 && c.marks.pts === 19, `account: 10 + 6 + 3 Marks earned apart -> E ${re.pts}, F ${rf.pts}, cloud ${c.marks.pts} (no Mark lost)`, fails);
+      check(sp(re) === '19 (life 4, crit 2)' && sp(rf) === sp(re), `account: spending holds on both: E ${sp(re)}, F ${sp(rf)}`, fails);
+      check(re.unlocked === rf.unlocked && re.unlocked < Date.now() - 8e7 && re.bests === 'paladin,wizard' && rf.bests === re.bests, `account: the unlock keeps the earliest time, rift bests merge (${re.bests})`, fails);
+      // a damaged cloud copy: nothing lowered here, and the next sync mends it
+      await E.page.evaluate((p) => window.__store('put', [p, { v: 1, unlocked: 'x', marks: { pts: 'x', xp: 'y', spent: { life: 99 } }, bests: { paladin: { tier: 'z' } }, keysFound: 'q' }]), DOC);
+      await sync(F.page); await idle(F.page);
+      rf = await rec(F); c = await doc();
+      check(sp(rf) === '19 (life 4, crit 2)' && rf.bests === 'paladin,wizard' && rf.unlocked === re.unlocked, `account: a damaged cloud copy (pts 'x', 99 on Vitality) lowers nothing on F: ${sp(rf)}`, fails);
+      check(c.marks.pts === 19 && c.marks.spent.life === 4 && c.marks.spent.crit === 2, `account: F's sync mends the cloud copy (${c.marks.pts}, life ${c.marks.spent.life})`, fails);
+      await act(E, (M) => { M.grantMarks(1, 'test'); });
+      await sync(E.page); await idle(E.page); await sync(F.page); await idle(F.page);
+      rf = await rec(F);
+      check(rf.pts === 20 && (await rec(E)).pts === 20, `account: one more Mark on E after the mend reaches F once (${rf.pts})`, fails);
+      // sign-out keeps the record here and forgets the base
+      await E.page.evaluate(async () => { const { Cloud } = await import('/src/game/cloud.js'); await Cloud.signOut(); });
+      const out = await E.page.evaluate(() => ({ rec: JSON.parse(localStorage.getItem('velscour_endgame_v1')).marks.pts, base: 'endBase' in JSON.parse(localStorage.getItem('velscour_cloud_v1')) }));
+      check(out.rec === 20 && !out.base, `account E signs out: its record stays (${out.rec} Marks), the merge base goes`, fails);
+    } finally {
+      errs.push(...E.errors.map((e) => 'E ' + e), ...F.errors.map((e) => 'F ' + e));
+      await E.browser.close(); await F.browser.close();
+    }
+
+    // 17. the Abyssal Rifts' honour board (game/leaderboard.js): one entry per player and class that only a better run
+    // replaces (a read-compare-set), sorted tier first then time, read by a signed-out device and shown in its dialog
+    const as = async (d, uid, name) => { await d.page.evaluate(async ([uid, name]) => { const { Cloud } = await import('/src/game/cloud.js'); if (Cloud.signedIn) await Cloud.signOut(); window.__FAKE_USER = { uid, displayName: name, email: name.toLowerCase() + '@example.com' }; await Cloud.signIn(); }, [uid, name]); await idle(d.page); };
+    const post = (d, name, tier, time) => d.page.evaluate(async ([name, tier, time]) => {
+      const { newCharData } = await import('/src/game/save.js');
+      const { rollItem } = await import('/src/data/items.js');
+      const { Board } = await import('/src/game/leaderboard.js');
+      const { SKILLS } = await import('/src/data/skills.js');
+      const c = newCharData('wizard', name); c.level = 270 + tier;
+      Object.keys(SKILLS).filter((k) => k.startsWith('wizard.')).slice(0, 6).forEach((id, i) => { c.bar[i] = id; });
+      c.equip.weapon = rollItem(272, { slot: 'weapon', rarity: 6 }); c.equip.body = rollItem(268, { slot: 'body', rarity: 5 }); c.equip.ring1 = rollItem(270, { slot: 'ring', rarity: 4 });
+      return Board.submit(c, tier, time);
+    }, [name, tier, time]);
+    const entry = (uid) => A.page.evaluate((uid) => window.__store('get', 'boards/wizard/entries/' + uid), uid);
+    await as(A, 'u-ann', 'Ann');
+    const pAnn = await post(A, 'Ann', 12, 220);
+    await as(B, 'u-bo', 'Bo');
+    const pBo = await post(B, 'Bo', 12, 190);
+    await as(A, 'u-cy', 'Cy');
+    const pCy = await post(A, 'Cy', 15, 300);
+    check(pAnn.ok && pBo.ok && pCy.ok, `board: Ann, Bo and Cy each post a run (${JSON.stringify([pAnn, pBo, pCy])})`, fails);
+    await as(A, 'u-ann', 'Ann');
+    const slower = await post(A, 'Ann', 12, 240), lower = await post(A, 'Ann', 11, 100);
+    let e = await entry('u-ann');
+    check(slower.kept && !slower.ok && lower.kept && e.tier === 12 && e.time === 220, `board: a slower tier 12 and a faster tier 11 from Ann are refused; her 3:40 stands (${e.tier} ${e.time})`, fails);
+    const keys = Object.keys(e).sort().join();
+    check(keys === 'at,build,cls,level,marks,name,tier,time,v' && e.v === 1 && Number.isInteger(e.tier) && e.time > 0 && e.cls === 'wizard' && e.build.gear.weapon.rarity === 6 && Array.isArray(e.build.bar), `board: the entry has the fields firestore.rules allows (${keys})`, fails);
+    const top = await A.page.evaluate(async () => { const { Board } = await import('/src/game/leaderboard.js'); return (await Board.top('wizard')).map((x) => `${x.name} ${x.tier} ${x.time}`); });
+    check(top.join(', ') === 'Cy 15 300, Bo 12 190, Ann 12 220', `board: top() orders Cy, Bo, Ann (${top.join(', ')})`, fails);
+    // a hero that took Velscour's gift (game/deathgift.js) is never listed: Dax posts clean, takes the gift, and his entry
+    // comes off at once; a gift taken signed out (or on another device) is caught by the next sync
+    await as(A, 'u-dax', 'Dax');
+    const pDax = await post(A, 'Dax', 14, 200), e0 = await entry('u-dax');
+    const gifted = await A.page.evaluate(async () => {
+      const { newCharData } = await import('/src/game/save.js'); const { Board } = await import('/src/game/leaderboard.js');
+      const c = newCharData('wizard', 'Dax'); c.cheated = true; return Board.submit(c, 30, 100);
+    });
+    const e1 = await entry('u-dax');
+    await A.page.evaluate((v) => window.__store('put', ['boards/wizard/entries/u-dax', v]), e0);
+    const e2 = await entry('u-dax');
+    await A.page.evaluate(async () => {
+      const { newCharData, writeSave } = await import('/src/game/save.js'); const { Cloud } = await import('/src/game/cloud.js');
+      const c = newCharData('wizard', 'Dax'); c.cheated = true; writeSave(c); await Cloud.sync(true);
+    });
+    const e3 = await entry('u-dax');
+    check(pDax.ok && e0 && e0.tier === 14 && gifted.barred && !e1 && e2 && !e3, `board: Dax's clean run is listed; with Velscour's gift his post is refused and his entry comes off (${JSON.stringify(gifted)}), and a sync takes it off again`, fails);
+    const V = await device('V'), W = await device('W', null, false, { width: 844, height: 390, mobile: true });
+    try {
+      for (const [d, nm] of [[V, 'rift_board'], [W, 'rift_board_phone']]) {
+        const seen = await d.page.evaluate(async () => {
+          const { G, game } = window.VELSCOUR;
+          await game.newChar('wizard', 'Viewer');
+          document.querySelectorAll('.screen').forEach((s) => s.remove()); G.ui.modalCount = 0; G.ui.closeAll();
+          const { Cloud } = await import('/src/game/cloud.js');
+          const { noteRiftBest } = await import('/src/game/endgame.js');
+          noteRiftBest('wizard', 9, 251);
+          const { Rifts } = await import('/src/ui/rifts.js');
+          const dl = Rifts.board('wizard');
+          await dl.ready;
+          return { signedIn: Cloud.signedIn, names: [...dl.box.querySelectorAll('.rb-row[data-i] .rb-name')].map((x) => x.textContent), you: dl.box.querySelector('.rb-you').textContent };
+        });
+        check(!seen.signedIn && seen.names.join() === 'Cy,Bo,Ann' && /Tier 9 · 4:11/.test(seen.you) && /Sign in with Google/.test(seen.you), `board: signed-out device ${d.name} reads it after loading the SDK (${seen.names.join(', ')}; ${seen.you})`, fails);
+        await d.page.click('.rb-row[data-i="2"]');
+        const open = await d.page.evaluate(() => { const b = document.querySelector('.rb-row[data-i="2"] + .rb-build'); return !b.classList.contains('hidden') && /Abyssal/.test(b.innerHTML) && /Level 282/.test(b.textContent) && b.querySelectorAll('.rb-skills span').length === 6; });
+        check(open, `board (${d.name}): Ann's row opens her build (skills, Abyssal weapon, level)`, fails);
+        await d.page.waitForTimeout(200);
+        await d.shot(nm);
+      }
+      await V.page.evaluate(async () => { window.__OFFLINE = true; document.querySelectorAll('.screen').forEach((s) => s.remove()); window.VELSCOUR.G.ui.modalCount = 0; const { Rifts } = await import('/src/ui/rifts.js'); await Rifts.board('wizard').ready; });
+      check(/Could not reach the board/.test(await V.page.textContent('.rb-list')), 'board: offline, the dialog says it could not reach the board', fails);
+    } finally {
+      errs.push(...V.errors.map((x) => 'V ' + x).filter((x) => !/client is offline/.test(x)), ...W.errors.map((x) => 'W ' + x));
+      await V.browser.close(); await W.browser.close();
+    }
   } finally {
     errs.push(...A.errors.map((e) => 'A ' + e), ...B.errors.map((e) => 'B ' + e));
     await A.browser.close(); await B.browser.close();

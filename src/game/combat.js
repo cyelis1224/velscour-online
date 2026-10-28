@@ -17,6 +17,7 @@ import { sigKill } from './signature.js';
 import { armorDiv } from '../data/depth.js';
 import { relicProc } from './relicprocs.js';
 import { commissionKill } from './commissions.js';
+import { riftKill } from './rifts.js';
 
 const PLAYER_RES = { fire: 'fire', cold: 'cold', light: 'light', poison: 'poison', acid: 'poison' };
 const LEECH_K = 2; // life/mana leech: a whole monster's life taken returns LEECH_K x leech% of the hero's own
@@ -274,7 +275,7 @@ export function kill(tgt, src, info = {}) {
       if (p.chart && tgt.team === 'enemy') astroOnKill(p, tgt); // the fallen may become a star on the Astronomer's chart
       if (p.sig && !info.sig) sigKill(p, tgt, src); // the class signature (game/signature.js); its own kills never feed it
     }
-    if (tgt.team === 'enemy') { dropLoot(world, tgt); commissionKill(world, tgt); }
+    if (tgt.team === 'enemy') { dropLoot(world, tgt); commissionKill(world, tgt); if (world.rift) riftKill(world, tgt); }
     if (world.onKill) world.onKill(tgt); // streaks, challenges (game/happenings.js)
   }
   if (tgt.rank === 'boss' && world) {

@@ -134,7 +134,7 @@ export class Monster extends Creature {
     if (taunt) return taunt;
     if (this.aggro && !this.aggro.dead && this.aggro.team !== this.team && dist(this.x, this.y, this.aggro.x, this.aggro.y) < 14) return this.aggro;
     const near = w.nearestHostile(this.team, this.x, this.y, this.awake ? 30 : this.aggroRange, !this.awake);
-    if (!near && this.hunter && w.player && !w.player.dead && this.team === 'enemy') return w.player; // hunters track the hero anywhere
+    if (!near && (this.hunter || (this.gaze && this.awake)) && w.player && !w.player.dead && this.team === 'enemy') return w.player; // hunters (and, once awake, Velscour's Gaze: game/heresies.js) track the hero anywhere
     return near;
   }
 

@@ -66,7 +66,7 @@ export function commState(c = G.char) {
 }
 const chapterOf = (e) => LINE_BY_ID[e.id] && LINE_BY_ID[e.id].chapters[e.ch];
 /** Does chapter ch happen in world w (its biome, or anywhere for chapters without one)? */
-const here = (ch, w) => !!ch && !!w && w.kind === 'dungeon' && !w.breach && (!ch.biome || (w.biome && w.biome.id === ch.biome)) && (ch.kind !== 'raid' || !!w.raid);
+const here = (ch, w) => !!ch && !!w && w.kind === 'dungeon' && !w.breach && !w.rift && !w.unbound && (!ch.biome || (w.biome && w.biome.id === ch.biome)) && (ch.kind !== 'raid' || !!w.raid);
 /** The biomes open chapters are waiting for (the portal choice favours them). */
 export function wantedBiomes(c = G.char) {
   return commState(c).open.map(chapterOf).filter((ch) => ch && ch.biome).map((ch) => ch.biome);

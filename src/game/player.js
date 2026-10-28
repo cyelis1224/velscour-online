@@ -26,6 +26,9 @@ import { sigCast, sigHit, sigUpdate } from './signature.js';
 import { relicBonuses } from '../data/relics.js';
 import { relicProc } from './relicprocs.js';
 import { noteFind, codexMf } from './reliquary.js';
+import { markBonuses, gainMarkXp } from './marks.js';
+import { heresyHero, heresyAllows } from './heresies.js';
+import { endgame, saveEndgame } from './endgame.js';
 
 // XP for the next level. The (L/30)^1.5 term paces a hero who clears every depth to stay ~10-50 levels above its
 // monsters and reach ~270 by Velscour (depth 500, monster level 258); without it a full-clearing hero hit level 300
@@ -106,6 +109,9 @@ export class Player extends Creature {
     // Defiance (deaths in this five-depth block) and the town's blessing (game/defiance.js)
     const hb = heroBonus(c);
     buffDmg += hb.dmg; buffLife += hb.life; buffReduce += hb.reduce; buffMf += hb.mf + (this.codexMf = codexMf()); buffGf += hb.gf; buffXp += hb.xp;
+    // the Endgame (docs/ENDGAME.md): Infernal Marks (every hero's) and the Glass Cannon Heresy (this hero's)
+    const mk = this.marks = markBonuses(), hh = heresyHero(c);
+    buffLife += mk.life + hh.life; buffDmg += hh.dmg; buffMf += mk.mf;
     const attr = (k) => c.attrs[k] + (add[k] || 0) + (add.allAttr || 0);
     const str = attr('str'), dex = attr('dex'), vit = attr('vit'), int = attr('int');
     const st = {
@@ -118,7 +124,7 @@ export class Player extends Creature {
         poison: (add.resPoison || 0) + (add.resAll || 0) + buffRes,
         magic: Math.round(((add.resAll || 0) + buffRes) * 0.75),
       },
-      critChance: clamp(5 + dex * 0.05 + (add.critChance || 0) + buffCrit / 4, 0, 75),
+      critChance: clamp(5 + dex * 0.05 + (add.critChance || 0) + buffCrit / 4 + mk.crit, 0, 75),
       critDmg: 50 + (add.critDmg || 0),
       atkSpeed: Math.min(150, dex * 0.3 + (add.atkSpeed || 0) + buffAs),
       castSpeed: Math.min(150, int * 0.1 + (add.castSpeed || 0) + buffAs),
@@ -166,7 +172,7 @@ export class Player extends Creature {
     const lifePct = (add.lifePct || 0) + buffLife;
     this.maxHp = Math.round((C.life + (c.level - 1) * C.lifeLvl + vit * 3 + (add.life || 0)) * (1 + lifePct / 100) * st.fortitude);
     this.maxMana = Math.round(C.mana + (c.level - 1) * C.manaLvl + int * 2 + (add.mana || 0));
-    st.lifeRegen = 0.6 + c.level * 0.12 + vit * 0.05 + (add.lifeRegen || 0) + this.maxHp * st.regenPct / 100;
+    st.lifeRegen = heresyAllows('regen', c) ? 0.6 + c.level * 0.12 + vit * 0.05 + (add.lifeRegen || 0) + this.maxHp * st.regenPct / 100 : 0; // Hunger of the Abyss: none
     st.manaRegen = 1.6 + c.level * 0.15 + int * 0.06 + (add.manaRegen || 0);
     this.st = st;
     this.augs = RING_SLOTS.flatMap((s) => (c.equip[s] && c.equip[s].aug) || []);
@@ -255,15 +261,17 @@ export class Player extends Creature {
   // ------------------------------------------------------------------ progression
   gainXp(n, flat = false) { // flat: no penalty for out-levelling the depth (gilded critters pay by hero level)
     const c = this.char;
-    if (c.level >= MAX_LEVEL) return;
     const depth = depthLevel((this.world && this.world.depth) || 1);
     const diff = c.level - depth;
     const pen = !flat && diff > 5 ? Math.max(0.1, 1 - (diff - 5) * 0.1) : 1;
-    c.xp += Math.round(n * pen * (1 + this.st.xpPct / 100));
+    const gain = Math.round(n * pen * (1 + this.st.xpPct / 100));
+    if (c.level >= MAX_LEVEL) { gainMarkXp(gain); return; } // at the cap XP becomes Infernal Marks (game/marks.js)
+    c.xp += gain;
     while (c.level < MAX_LEVEL && c.xp >= xpToNext(c.level)) {
       c.xp -= xpToNext(c.level);
       this.levelUp();
     }
+    if (c.level >= MAX_LEVEL && c.xp > 0) { gainMarkXp(c.xp); c.xp = 0; } // the last level's spare XP counts too
   }
   levelUp() {
     const c = this.char;
@@ -339,6 +347,12 @@ export class Player extends Creature {
         return true;
       case 'orb_hp': this.heal(this.maxHp * 0.15); sfx('orb'); return true;
       case 'orb_mp': this.mana = Math.min(this.maxMana, this.mana + this.maxMana * 0.18); sfx('orb'); floatText(this.x, this.y, 46, '+mana', '#6a8aff', 11); return true;
+      case 'key': { // an Abyssal Key (docs/ENDGAME.md): three open Velscour Unbound
+        c.keys = (c.keys | 0) + 1; endgame().keysFound++; saveEndgame();
+        sfx('levelup', 0.5); floatText(this.x, this.y, 56, `ABYSSAL KEY ${Math.min(3, c.keys)}/3`, '#20e0ff', 15, { life: 2 });
+        if (G.ui) { G.ui.log(`An <b style="color:#20e0ff">Abyssal Key</b>: ${c.keys} held${c.keys >= 3 ? ' — three open <b>Velscour Unbound</b> at the Altar of Heresy' : ' (three open Velscour Unbound)'}.`, '#a0f0ff'); G.ui.refresh(); }
+        return true;
+      }
       case 'potion':
         if ((c.potions[g.item.kind] || 0) >= 30) { if (g.t > 0.6 && !g.warned) { g.warned = true; floatText(this.x, this.y, 50, 'Potion belt full', '#ccc', 11); } return false; }
         c.potions[g.item.kind] = (c.potions[g.item.kind] || 0) + 1; sfx('pickup');
@@ -361,6 +375,7 @@ export class Player extends Creature {
   usePotion(kind) {
     const c = this.char;
     if (this.dead || this.potionCd > 0) return;
+    if (!heresyAllows('potion', c)) { floatText(this.x, this.y, 50, 'The Heresy forbids it', '#ff8060', 11); sfx('error'); return; } // Dry Throat
     if (!c.potions[kind]) { floatText(this.x, this.y, 50, 'No potions', '#ccc', 11); sfx('error'); return; }
     c.potions[kind]--;
     this.potionCd = 0.9;

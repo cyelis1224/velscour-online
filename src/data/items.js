@@ -21,7 +21,10 @@ export const RARITY = [
   { id: 3, name: 'Epic', color: '#b45cff', weight: 1, lv: 7, perks: 1, sockets: 3, bonus: 2.2, minIlvl: 30, fullIlvl: 40 },
   { id: 4, name: 'Legendary', color: '#ff9a2a', weight: 0.14, lv: 8, perks: 1, sockets: 4, bonus: 2.8, minIlvl: 45, fullIlvl: 60 },
   { id: 5, name: 'Mythic', color: '#ff4058', weight: 0.012, lv: 10, perks: 2, sockets: 4, bonus: 3.4, minIlvl: 60, fullIlvl: 80 },
+  // Abyssal never rolls from a kill (weight 0): Abyssal Rift Guardians and Velscour Unbound make it (docs/ENDGAME.md)
+  { id: 6, name: 'Abyssal', color: '#20e0ff', weight: 0, lv: 14, perks: 3, sockets: 5, bonus: 0, minIlvl: 200, fullIlvl: 200 },
 ];
+export const ABYSSAL = 6;
 /** How much of a rarity's drop odds item level ilvl has unlocked: 0 below its minIlvl, ramping to 1 at fullIlvl. */
 export const rarityUnlock = (r, ilvl) => clamp((ilvl - RARITY[r].minIlvl + 1) / (RARITY[r].fullIlvl - RARITY[r].minIlvl + 1), 0, 1);
 /** The best rarity up to r that item level ilvl allows (guaranteed rewards: a level 3 "Legendary" gift is a Rare). */
@@ -371,7 +374,7 @@ export function rollRarity(mf = 0, bonus = 0, ilvl = 999) {
   return weighted(RARITY.map((r) => [r.id, r.id === 0 ? r.weight / (1 + bonus) : r.weight * (1 + bonus * r.bonus) * mfMul(mf, r.id) * rarityUnlock(r.id, ilvl)]));
 }
 /** Magic find's multiplier on a rarity's weight (at 100% it raises the share of Epic and above ~1.6x). */
-export const mfMul = (mf, id) => 1 + Math.max(0, mf) / 100 * [0, 0.6, 0.8, 0.9, 0.9, 0.9][id];
+export const mfMul = (mf, id) => 1 + Math.max(0, mf) / 100 * [0, 0.6, 0.8, 0.9, 0.9, 0.9, 0.9][id];
 
 const EPIC_A = ['Doom', 'Soul', 'Blood', 'Grim', 'Storm', 'Night', 'Wrath', 'Bone', 'Dread', 'Ember', 'Frost', 'Shadow', 'Hell', 'Star', 'Void', 'Rune', 'Gore', 'Plague', 'Dawn', 'Ash'];
 const EPIC_B = ['bringer', 'reaver', 'fang', 'song', 'ward', 'call', 'bane', 'shard', 'heart', 'grasp', 'veil', 'brand', 'mourn', 'fall', 'spire', 'maw', 'crest', 'thorn', 'whisper', 'edge'];
@@ -418,7 +421,7 @@ export function rollItem(ilvl, opts = {}) {
   const R = RARITY[rarity];
   rollAffixes(item, CORE_LINES);
   rollAffixes(item, R.perks, true);
-  item.maxSockets = slot === 'ring' ? [0, 0, 1, 1, 2, 2][rarity] : rarity === 0 ? HOLLOW[slot] : R.sockets;
+  item.maxSockets = slot === 'ring' ? [0, 0, 1, 1, 2, 2, 3][rarity] : rarity === 0 ? HOLLOW[slot] : R.sockets;
   item.sockets = Math.min(item.maxSockets, chance(0.45) ? randi(0, Math.ceil(item.maxSockets / 2)) : 0);
   if (rarity >= 4) item.legendary = pick(Object.keys(LEGENDARY));
   if (rarity >= 3) item.title = pick(EPIC_A) + pick(EPIC_B);
@@ -518,7 +521,7 @@ export function itemArmor(item) { return Math.round((item.armor || 0) * upgMult(
 
 export function itemValue(item) {
   if (item.type === 'gem') return GEMS[item.gem].sigil ? Math.round(goldPile(depthLevelOf(item.tier * 24 + 12)) * 8) : Math.round((GEMS[item.gem].special ? 400 : 60) * Math.pow(2.6, item.tier));
-  const base = 12 * Math.pow(1.06, item.ilvl) * [1, 2.5, 6, 15, 40, 100][item.rarity] * (item.relic ? { heir: 2.5, cov: 2 }[item.relic] : RELIC_HOOK.glyph && RELIC_HOOK.glyph(item) ? 60 : 1);
+  const base = 12 * Math.pow(1.06, item.ilvl) * [1, 2.5, 6, 15, 40, 100, 250][item.rarity] * (item.relic ? { heir: 2.5, cov: 2 }[item.relic] : RELIC_HOOK.glyph && RELIC_HOOK.glyph(item) ? 60 : 1);
   return Math.round(base * (1 + item.affixes.length * 0.15) * (1 + item.sockets * 0.2) * (1 + (item.upg || 0) * 0.3));
 }
 

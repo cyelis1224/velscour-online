@@ -147,7 +147,7 @@ export function itemLook(item, src = S) {
   } else {
     const lib = src.meta.armor;
     if (!item.look || item.look[3] !== LOOK_GEN || item.look[0] > lib.n) {
-      const band = lib.bands[rarityName(item.rarity)] || lib.bands.common;
+      const band = lib.bands[rarityName(item.rarity)] || lib.bands.mythic || lib.bands.common; // Abyssal wears the Mythic designs
       item.look = [pick(band), finishFor(item.rarity), item.look?.[2] ?? fxFor(item.rarity), LOOK_GEN];
     }
   }

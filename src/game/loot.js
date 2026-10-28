@@ -15,6 +15,8 @@ import { depthLevel } from '../data/depth.js';
 import { filterPasses } from './lootfilter.js';
 import { rollSigil, SIGILS } from '../data/items.js';
 import { maybeRelic } from '../data/relics.js';
+import { heresyAllows } from './heresies.js';
+import { keyChance } from './unbound.js';
 
 const sigilCache = new Map();
 /** A Sigil Stone's icon: a dark rune slab with its sigil's mark in the stone's colour, more ornate by rank. */
@@ -65,10 +67,12 @@ export class GroundItem {
     if (this.kind === 'gold') return `${this.amount} Gold`;
     if (this.kind === 'item') return itemName(this.item);
     if (this.kind === 'potion') return this.item.name;
+    if (this.kind === 'key') return 'Abyssal Key';
     return null;
   }
   get color() {
     if (this.kind === 'gold') return '#ffd34a';
+    if (this.kind === 'key') return KEY_COLOR;
     if (this.kind === 'item' || this.kind === 'potion') return itemColor(this.item);
     return '#fff';
   }
@@ -83,7 +87,7 @@ export class GroundItem {
     const p = world.player;
     if (!p || p.dead) return true;
     const d = Math.hypot(p.x - this.x, p.y - this.y);
-    const magnet = this.kind === 'gold' ? 2.2 : this.kind.startsWith('orb') ? 3.2 : 0;
+    const magnet = this.kind === 'gold' ? 2.2 : this.kind.startsWith('orb') || this.kind === 'key' ? 3.2 : 0;
     if (magnet && d < magnet && this.t > 0.4) {
       const k = Math.min(1, dt * 9);
       this.x += (p.x - this.x) * k; this.y += (p.y - this.y) * k;
@@ -95,7 +99,7 @@ export class GroundItem {
         return false;
       }
     }
-    if (this.t > 120 && this.kind !== 'item') return false;
+    if (this.t > 120 && this.kind !== 'item' && this.kind !== 'key') return false; // (an Abyssal Key waits)
     // light pillars for good loot
     if (this.kind === 'item' && this.item.rarity >= 2) {
       const r = this.item.sealed ? SEAL_RARITY : this.item.rarity;
@@ -103,10 +107,12 @@ export class GroundItem {
       if (chance(dt * (r * 4))) sparkle(this.x, this.y, rand(4, 30), itemColor(this.item), 1, 0.2);
     }
     if (this.kind.startsWith('orb')) addLight(this.x, this.y, 1.8, 0.7);
+    if (this.kind === 'key') { addLight(this.x, this.y, 2.6, 0.8, 30, KEY_COLOR); if (chance(dt * 10)) sparkle(this.x, this.y, rand(6, 34), KEY_COLOR, 1, 0.25); }
     return true;
   }
   icon() {
     if (this.kind === 'item') return itemIcon(this.item);
+    if (this.kind === 'key') return keyIcon(48);
     if (this.kind === 'potion') return this._ic || (this._ic = potionIcon(this.item.color, 48)); // (kept per drop: it built a canvas a frame)
     if (this.kind === 'gold') return goldIcon(48, this.amount);
     return null;
@@ -127,8 +133,15 @@ export class GroundItem {
     }
     const img = this.icon();
     if (!img) return;
+    if (this.kind === 'key') { // a cyan column of light reaching for the sky, like a top-rarity drop
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.7;
+      const g = ctx.createLinearGradient(px, py - 110, px, py);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, KEY_COLOR);
+      ctx.fillStyle = g; ctx.fillRect(px - 9, py - 110, 18, 110);
+      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+    }
     const art = this.kind === 'item' && !this.item.sealed && ((this.item.art && artIcon(this.item)) || gearIcon(this.item));
-    const s = this.kind === 'gold' ? 20 : art ? 30 : 22;
+    const s = this.kind === 'gold' ? 20 : art ? 30 : this.kind === 'key' ? 26 : 22;
     if (this.kind === 'item' && this.item.rarity >= 2) {
       const col = itemColor(this.item), r = this.item.sealed ? SEAL_RARITY : this.item.rarity;
       ctx.globalCompositeOperation = 'lighter';
@@ -149,6 +162,31 @@ export class GroundItem {
 }
 
 const iconCache = new Map();
+export const KEY_COLOR = '#20e0ff';
+/** An Abyssal Key (docs/ENDGAME.md): a skeleton key of black iron with a cyan void-stone in its bow. */
+export function keyIcon(size = 48) {
+  const key = 'key|' + size;
+  let c = iconCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas'); c.width = c.height = size;
+  const x = c.getContext('2d'), s = size / 48;
+  const g = x.createRadialGradient(24 * s, 24 * s, 2, 24 * s, 24 * s, 26 * s);
+  g.addColorStop(0, 'rgba(32,224,255,0.5)'); g.addColorStop(1, 'rgba(32,224,255,0)');
+  x.fillStyle = g; x.fillRect(0, 0, size, size);
+  x.save(); x.translate(24 * s, 24 * s); x.rotate(-0.7);
+  x.strokeStyle = '#1a1c24'; x.lineWidth = 5 * s; x.lineCap = 'round';
+  x.beginPath(); x.moveTo(-6 * s, 0); x.lineTo(17 * s, 0); x.stroke(); // the shaft
+  x.beginPath(); x.moveTo(12 * s, 0); x.lineTo(12 * s, 6 * s); x.moveTo(17 * s, 0); x.lineTo(17 * s, 7 * s); x.stroke(); // the bit
+  x.strokeStyle = '#3a3e4c'; x.lineWidth = 2 * s;
+  x.beginPath(); x.moveTo(-6 * s, -1 * s); x.lineTo(17 * s, -1 * s); x.stroke();
+  x.fillStyle = '#1a1c24'; x.beginPath(); x.arc(-12 * s, 0, 8 * s, 0, TAU); x.fill(); // the bow
+  x.fillStyle = '#0a0c12'; x.beginPath(); x.arc(-12 * s, 0, 4.5 * s, 0, TAU); x.fill();
+  x.fillStyle = KEY_COLOR; x.beginPath(); x.arc(-12 * s, 0, 3 * s, 0, TAU); x.fill(); // the void-stone
+  x.fillStyle = '#ffffff'; x.fillRect(-13.5 * s, -1.5 * s, 1.5 * s, 1.5 * s);
+  x.restore();
+  iconCache.set(key, c);
+  return c;
+}
 /** A sealed treasure: a little iron-bound casket with a wax seal (the same for every sealed item, by design). */
 function sealedIcon(size) {
   const key = 'sealed|' + size;
@@ -186,7 +224,7 @@ export function itemIcon(item, size = 48) {
   const mat = MATERIALS[item.tier].color;
   const pal = { m: mat, w: '#ffffff', b: item.icon === 'shield' ? '#5a2a1a' : '#5a3a20', g: item.rarity >= 3 ? '#ffd040' : '#b08a3a', c: item.rarity >= 2 ? RARITY_COLORS[item.rarity] : '#8a6a40', e: '#ff4040', k: '#101010' };
   if (item.icon === 'orb') { pal.c = mat; pal.e = '#c060ff'; }
-  if (item.icon === 'staff' || item.icon === 'wand') { pal.c = ['#a0a0a0', '#60ff60', '#60a0ff', '#c060ff', '#ffa020', '#ff4058'][item.rarity]; pal.b = '#6a4a2a'; pal.e = '#ffffff'; }
+  if (item.icon === 'staff' || item.icon === 'wand') { pal.c = ['#a0a0a0', '#60ff60', '#60a0ff', '#c060ff', '#ffa020', '#ff4058', '#20e0ff'][item.rarity]; pal.b = '#6a4a2a'; pal.e = '#ffffff'; }
   c = replacementIcon('item_' + item.icon, size, mat) || (item.icon ? pixelSprite(item.icon, pal, 4) : null);
   iconCache.set(key, c);
   return c;
@@ -207,22 +245,26 @@ export function dropLoot(world, m) {
     for (let i = 0; i < n; i++) add('gold', { amount: Math.max(1, Math.round(goldPile(lvl) * rand(0.6, 1.4) * Math.sqrt(R) * (1 + st.goldFind / 100) * (world.goldMul || 1))) });
   }
   if (st.legendary.greed && chance(0.15)) for (let i = 0; i < 4; i++) add('gold', { amount: Math.round((2 + lvl) * goldScale(lvl) * (1 + st.goldFind / 100)) });
-  // orbs
-  if (chance(0.14 * Math.sqrt(R))) add('orb_hp', {});
-  if (chance(0.1 * Math.sqrt(R))) add('orb_mp', {});
+  // orbs (none under the Hunger of the Abyss Heresy)
+  if (heresyAllows('orb', p.char, world)) {
+    if (chance(0.14 * Math.sqrt(R))) add('orb_hp', {});
+    if (chance(0.1 * Math.sqrt(R))) add('orb_mp', {});
+  }
   // potions
   if (chance(0.035 * R)) add('potion', { item: potionItem(pick(['hp', 'hp', 'mp', 'mp', 'rejuv', 'fury'])) });
   // gear
   const items = rank === 'boss' ? randi(4, 6) + (world.depth % 10 === 0 ? 2 : 0) : rank === 'unique' ? randi(2, 3) : rank === 'champion' ? (chance(0.6) ? randi(1, 2) : 0) : (chance(0.085 * (world.lootMul || 1)) ? 1 : 0); // lootMul: omens (game/happenings.js)
   const bonus = rank === 'boss' ? 1.2 : rank === 'unique' ? 0.6 : rank === 'champion' ? 0.3 : 0;
-  const boost = world.raid || m.isRaid || m.isVelscour ? 3 : 1; // BOSS ROOMs triple the Covenant odds (data/relics.js)
+  const boost = (world.raid || m.isRaid || m.isVelscour ? 3 : 1) * (world.relicMul || 1); // BOSS ROOMs triple the Covenant odds (data/relics.js); Heresies raise them
   for (let i = 0; i < items; i++) {
     const ilvl = lvl + (rank === 'boss' ? 2 : rank === 'normal' ? 0 : 1) + randi(-1, 1);
     add('item', { item: maybeRelic(rollItem(ilvl, { mf: st.magicFind + (world.mfAdd || 0), bonus }), boost) });
   }
-  // Sigil Stones: rare from the rank and file, common from guardians
-  const sig = { normal: 0.004, champion: 0.03, unique: 0.08, boss: 0.45 }[rank] * (world.lootMul || 1);
+  // Sigil Stones: rare from the rank and file, common from guardians (Heresies: world.sigilMul)
+  const sig = { normal: 0.004, champion: 0.03, unique: 0.08, boss: 0.45 }[rank] * (world.lootMul || 1) * (world.sigilMul || 1);
   if (world.depth && chance(sig)) add('item', { item: rollSigil(world.depth, rank === 'boss' ? 1 : 0) });
+  // an Abyssal Key (docs/ENDGAME.md): BOSS ROOM bosses past depth 600 under Heresy rank 10, rift guardians from tier 10
+  if (m.isRaid && chance(keyChance(world, m))) add('key', {}); // (keyChance rolls once a boss: a raid boss pays out three dropLoots)
   // rings: a guardian usually drops one
   if ((rank === 'boss' && chance(0.6)) || (rank === 'unique' && chance(0.2))) add('item', { item: rollItem(lvl + 2, { slot: 'ring', mf: st.magicFind + (world.mfAdd || 0), bonus }) });
   // gems
@@ -266,7 +308,7 @@ export function drawLootLabels(ctx, world, mouse) {
   const placed = [];
   let shown = false;
   for (const l of world.loot) {
-    if (l.kind !== 'item' && l.kind !== 'potion' && !(l.kind === 'gold' && l.amount > 0)) continue;
+    if (l.kind !== 'item' && l.kind !== 'potion' && l.kind !== 'key' && !(l.kind === 'gold' && l.amount > 0)) continue;
     if (p && Math.hypot(p.x - l.x, p.y - l.y) > 14) continue;
     if (l.kind === 'gold' && !G.settings.showGoldLabels) continue;
     if (G.settings.hideItemNames) {

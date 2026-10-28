@@ -109,12 +109,17 @@ for (const [c, name] of Object.entries(TREE4_NAMES)) if (CLASSES[c].trees.length
  * slowest); this evens most of it out (the measured ratio ^0.85, noise kept from swinging it all the way), and the
  * melee classes keep ~15% more for standing in the crowd.
  */
-export const DMG_TUNE_AT = [5, 45, 160];
+// Past hero level 160 classes scale apart again: at depths 400-500 (heroes ~215-260, tools/tests/tuning.js, two runs each)
+// the Dragoon killed a normal in 0.28x the mean time and the Boomerang Knight 0.34x, the Carrion Witch 2.4x and the
+// Gunner 2.1x; level 300 takes half that gap (the square root of the ratio), every other class holds its level-160 value.
+// Measured again (three runs): the Gunner 0.99x and the Witch 1.3x, the Dragoon 0.61x and the Boomerang Knight 0.49x, so
+// those two took a second half-step.
+export const DMG_TUNE_AT = [5, 45, 160, 300];
 export const DMG_TUNE = {
-  paladin: [1.31, 1.27, 0.95], ranger: [0.74, 0.42, 0.53], wizard: [0.99, 0.6, 0.54], necromancer: [1.15, 1.23, 2.3],
-  barbarian: [1.63, 3.5, 2.38], dragoon: [0.98, 3.23, 3.2], totem_master: [0.95, 0.85, 1.48], death_knight: [0.96, 1.28, 1.66],
-  arcane_sorcerer: [0.77, 0.34, 0.25], carrion_witch: [1.13, 0.91, 1.36], bard: [0.69, 1.11, 1.28], slime_lord: [1.23, 0.69, 0.53],
-  boomerang_knight: [1.07, 0.74, 0.42], lancer: [1.32, 2.02, 1.48], dragon_knight: [1.35, 1.47, 1.83], gunner: [1.03, 0.68, 0.79],
+  paladin: [1.31, 1.27, 0.95, 0.95], ranger: [0.74, 0.42, 0.53, 0.53], wizard: [0.99, 0.6, 0.54, 0.54], necromancer: [1.15, 1.23, 2.3, 2.3],
+  barbarian: [1.63, 3.5, 2.38, 2.38], dragoon: [0.98, 3.23, 3.2, 1.33], totem_master: [0.95, 0.85, 1.48, 1.48], death_knight: [0.96, 1.28, 1.66, 1.66],
+  arcane_sorcerer: [0.77, 0.34, 0.25, 0.25], carrion_witch: [1.13, 0.91, 1.36, 2.12], bard: [0.69, 1.11, 1.28, 1.28], slime_lord: [1.23, 0.69, 0.53, 0.53],
+  boomerang_knight: [1.07, 0.74, 0.42, 0.17], lancer: [1.32, 2.02, 1.48, 1.48], dragon_knight: [1.35, 1.47, 1.83, 1.83], gunner: [1.03, 0.68, 0.79, 1.14],
 };
 
 export const ATTRS = {

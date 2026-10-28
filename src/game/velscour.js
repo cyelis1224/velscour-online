@@ -28,6 +28,8 @@ import { UI } from '../ui/ui.js';
 import { GroundItem } from './loot.js';
 import { makeHeirloom, makeCovenant } from '../data/relics.js';
 import { rollSigil, SIGIL_MAX, makeGem } from '../data/items.js';
+import { setupUnbound, unboundTick, courtBegin, courtGate, unboundSpoils, UNBOUND } from './unbound.js';
+import { legionGate } from './heresies.js';
 
 export const HP_MUL = 2;          // his life on top of a boss's x40 (tuned with tools/tests/velscour.js)
 export const DMG_MUL = 0.7;       // his hits: the fight runs ~4x longer than the old one, so each hurts less (tools/tests/balance.js BAL_BIOME=throne)
@@ -50,6 +52,7 @@ export function setupVelscour(world, m, gen) {
   // seated on his throne until the hero comes
   m.x = SEAT[0]; m.y = SEAT[1]; m.z = SEAT_Z; V.seated = true;
   world.addHazard(V);
+  if (world.unbound) setupUnbound(V); // the rematch's court and chains (game/unbound.js, docs/ENDGAME.md)
   return V;
 }
 
@@ -63,11 +66,12 @@ class VelscourFight {
   // ---------------------------------------------------------------- HUD line under the boss bar
   label() {
     if (!this.phase) return '';
-    const left = Math.max(0, Math.ceil(ENRAGE_T - this.t)), clock = ` · Execute ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    const left = Math.max(0, Math.ceil((this.enrageT || ENRAGE_T) - this.t)), clock = ` · Execute ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
     const live = (k) => this.parts.filter((c) => c.vk === k && !c.dead).length;
     const name = ['', 'The Lord Upon the Throne', 'The Four Seals', 'Crown of Hellfire', 'Into the Abyss', 'True Form', 'Bound to the Obelisks'][this.phase];
     const extra = this.phase === 2 ? ` — break the seals (${live('seal')} left)` : this.phase === 4 ? ` — break the Heart Shards (${live('shard')} left)` : this.phase === 6 ? ` — break the obelisks (${live('obelisk')} left)` : '';
-    return `Phase ${Math.min(5, this.phase === 6 ? 5 : this.phase)}/5 · ${name}${extra}${clock}`;
+    const pact = this.unbound && this.m.ward < 1 ? ' · Pact: slay his court' : ''; // Velscour Unbound (game/unbound.js)
+    return `Phase ${Math.min(5, this.phase === 6 ? 5 : this.phase)}/5 · ${name}${extra}${pact}${clock}`;
   }
 
   // ---------------------------------------------------------------- the loop
@@ -86,7 +90,7 @@ class VelscourFight {
     this.t += dt;
     this.pace(dt);
     // the clock
-    if (this.t > ENRAGE_T && (this.execT || 0) < this.t) {
+    if (this.t > (this.enrageT || ENRAGE_T) && (this.execT || 0) < this.t) {
       this.execT = this.t + 5;
       UI.centerMsg('YOUR TIME IS UP', 'Velscour ends this', 2.5);
       addEffect(new Column(p.x, p.y, '#ff1010', 1.2, 60, 400)); burst(p.x, p.y, 30, 'blood', 50, 6); sfx('thud'); sfx('roar');
@@ -98,9 +102,10 @@ class VelscourFight {
       case 2: this.p2(dt); break;
       case 3: this.p3(dt); if (frac <= 0.5 + 1e-6) this.startAbyss(); break;
       case 4: this.p4(dt); break;
-      case 5: this.p5(dt); if (frac <= 0.1 + 1e-6 && !this.bound) this.startChains(); break;
+      case 5: this.p5(dt); if (frac <= 0.1 + 1e-6 && !this.bound) this.startChains(); else if (this.unbound && this.bound && !this.bound2 && frac <= 0.05 + 1e-6) this.startChains(); break;
       case 6: this.p5(dt, true); this.p6(dt); break;
     }
+    if (this.unbound) unboundTick(this, dt); // the court, the Pact (game/unbound.js)
     for (const c of this.parts) if (c.vk === 'mirror' && !c.dead && this.t - c.born > 22) { c.dead = true; smoke(c.x, c.y, 0, '#301020', 6, 10); }
     this.parts = this.parts.filter((c) => !c.dead || c.vk === 'seal' || c.vk === 'shard' || c.vk === 'obelisk');
     return true;
@@ -152,9 +157,10 @@ class VelscourFight {
     m.patternQ = [];
     this.seal();
     if (w.onBossAwake) w.onBossAwake(m);
-    UI.centerMsg('DEMON LORD VELSCOUR', this.practice ? 'The last battle (practice)' : 'The last battle', 3.4);
+    UI.centerMsg(this.unbound ? 'VELSCOUR UNBOUND' : 'DEMON LORD VELSCOUR', this.unbound ? 'The Court of the Abyss rises with him' : this.practice ? 'The last battle (practice)' : 'The last battle', 3.4);
     UI.log('<b style="color:#ff4020">Velscour rises from his throne.</b> Five trials stand between you and the end of him.', '#ffb0a0');
     this.cd = { brand: 3, chain: 9, guard: 20 };
+    if (this.unbound) courtBegin(this);
   }
 
   /** Close the arena's mouth (the corridor at its south end) until he falls. */
@@ -274,26 +280,12 @@ class VelscourFight {
   }
   /** Legion of the Pit: a hellgate tears open beside him and demons climb out (at most eight of his alive at once). */
   legion() {
-    const m = this.m, w = this.world, p = this.p;
+    const m = this.m, w = this.world;
     const alive = w.creatures.filter((c) => c.pitSpawn && !c.dead).length;
     const n = Math.min(4, 8 - alive);
+    if (this.unbound && !this.hold && this.phase === 3 && courtGate(this)) return; // the second of his court climbs out of the first
     if (n <= 0 || this.hold) return;
-    const a = angleTo(m.x, m.y, p.x, p.y) + (Math.random() < 0.5 ? 1.2 : -1.2);
-    const [gx, gy] = w.map.nudge(m.x + Math.cos(a) * 3, m.y + Math.sin(a) * 3, 0.6);
-    addEffect(new Telegraph({ kind: 'circle', x: gx, y: gy, r: 1.8, dur: 1.2, color: '#ff4010' }), 'ground');
-    UI.log('<b style="color:#ff5020">Legion of the Pit</b>: Velscour tears open a hellgate and his demons climb out!', '#ffb090');
-    floatText(m.x, m.y, 160, 'RISE, MY LEGION', '#ff5020', 16, { life: 1.6 });
-    sfx('roar', 0.7);
-    w.addHazard({ t: 1.2, team: 'enemy', update(dt) {
-      this.t -= dt; if (this.t > 0) return true;
-      explosionFx(gx, gy, 2, 'fire', 'eruption'); addEffect(new Ring(gx, gy, 0.2, 2.2, 0.6, '#ff3010', 5)); sfx('summon');
-      for (let i = 0; i < n; i++) {
-        const [x, y] = w.map.randomNear(gx, gy, 1.6);
-        const d = makeMonster(w, i % 2 ? 'imp' : 'demon', w.biome, m.level - 2, i === 0 ? 'champion' : 'normal', x, y);
-        d.awake = true; d.aggro = p; d.maxHp *= 0.55; d.hp = d.maxHp; d.pitSpawn = true; d.name = i % 2 ? 'Pit Imp' : 'Pit Demon';
-        w.add(d); smoke(x, y, 0, '#200808', 5, 9);
-      }
-      return false; }, draw() {} });
+    legionGate(w, m, n, m.level, { src: true }); // the hellgate the Legion Heresy shares (game/heresies.js)
   }
   meteorSpiral() {
     const m = this.m, w = this.world;
@@ -342,15 +334,16 @@ class VelscourFight {
     this.hide();
     this.dark0 = w.darkK || 0; w.darkK = 0.93; w.night = true;
     UI.centerMsg('INTO THE ABYSS', 'Break the Heart Shards — stay near the lanterns', 3.4);
-    UI.log('The floor gives way to the dark. Three <b style="color:#ff3050">Heart Shards</b> drift in it: each one you break tears at Velscour. Stay near a <b style="color:#ffe08a">Soul Lantern</b>: the dark itself hurts.', '#ffc0c0');
+    const n = this.unbound ? 4 : 3, cut = this.unbound ? 0.04 : 0.05; // the Abyssal Crown: four shards, the same 15-16% in all
+    UI.log(`The floor gives way to the dark. ${n === 4 ? 'Four' : 'Three'} <b style="color:#ff3050">Heart Shards</b> drift in it: each one you break tears at Velscour. Stay near a <b style="color:#ffe08a">Soul Lantern</b>: the dark itself hurts.`, '#ffc0c0');
     this.cd = { shades: 3 };
     if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
-    for (let i = 0; i < 3; i++) {
-      const a0 = (i / 3) * TAU, R = 7;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * TAU, R = 7;
       const sh = this.crystal(C.x + Math.cos(a0) * R, C.y + Math.sin(a0) * R * 0.8, { vk: 'shard', name: 'Heart Shard', color: '#ff3050', hp: 0.035, h: 40, fly: true,
         tick: (c, dt) => { c.a = (c.a ?? a0) + dt * 0.12; const tx = C.x + Math.cos(c.a) * R, ty = C.y + Math.sin(c.a) * R * 0.8; if (w.map.walkable(tx, ty)) { c.x = tx; c.y = ty; } } });
       sh.netId = `vel_shard_${i}`;
-      sh.onDeath = () => { if (m.dead) return; const cut = m.maxHp * 0.05; m.hp = Math.max(m.maxHp * 0.3, m.hp - cut); this.lastHp = m.hp; addEffect(new Column(sh.x, sh.y, '#ff3050', 1, 60, 300)); floatText(sh.x, sh.y, 80, '-5% VELSCOUR', '#ff6080', 16, { life: 1.6 }); sfx('explode'); };
+      sh.onDeath = () => { if (m.dead) return; m.hp = Math.max(m.maxHp * 0.3, m.hp - m.maxHp * cut); this.lastHp = m.hp; addEffect(new Column(sh.x, sh.y, '#ff3050', 1, 60, 300)); floatText(sh.x, sh.y, 80, `-${Math.round(cut * 100)}% VELSCOUR`, '#ff6080', 16, { life: 1.6 }); sfx('explode'); };
     }
   }
   p4(dt) {
@@ -367,7 +360,7 @@ class VelscourFight {
     });
     // the dark: away from a lantern it hurts, more the longer the hero stays out
     const nearL = LANTERNS.some(([x, y]) => dist(p.x, p.y, x, y) < 4.5);
-    if (!nearL && this.p4t > 12) { this.dread = (this.dread || 0) + dt; if (this.dread > 0.5) { this.dread = 0; hit(this.m, p, p.maxHp * 0.015, 'shadow', { dot: true, silent: true }); } }
+    if (!nearL && this.p4t > 12 && !p.st.legendary.dreadless) { this.dread = (this.dread || 0) + dt; if (this.dread > 0.5) { this.dread = 0; hit(this.m, p, p.maxHp * 0.015, 'shadow', { dot: true, silent: true }); } } // (dreadless: the Mantle of the Unbound)
     const left = this.parts.filter((c) => c.vk === 'shard' && !c.dead).length;
     if (!left || this.p4t > 75) this.endAbyss(left);
   }
@@ -407,7 +400,7 @@ class VelscourFight {
   apocalypse() {
     const m = this.m, w = this.world, V = this;
     const spots = [];
-    for (let tries = 0; spots.length < 3 && tries < 200; tries++) {
+    for (let tries = 0, n = this.unbound ? 2 : 3; spots.length < n && tries < 200; tries++) { // the Abyssal Crown: two circles
       const a = rand(TAU), r = rand(3, 10), x = C.x + Math.cos(a) * r, y = C.y + Math.sin(a) * r * 0.8;
       if (w.map.walkable(x, y) && inArena(x, y, 0.8) && spots.every(([u, v]) => dist(u, v, x, y) > 6)) spots.push([x, y]);
     }
@@ -434,24 +427,27 @@ class VelscourFight {
   }
   startChains() {
     const m = this.m, w = this.world;
-    this.bound = true; this.phase = 6; this.gate = 0.1;
+    const again = this.bound; // the Unbound Chains: a second binding at 5%
+    this.bound = true; this.phase = 6; this.gate = again ? 0.05 : 0.1;
+    if (again) this.bound2 = true;
     this.hold = true; m.invuln = 1e9; m.targetable = false;
-    UI.centerMsg('BOUND TO THE OBELISKS', 'Break the four obelisks!', 3);
-    UI.log('Velscour chains himself to the four obelisks and drinks their strength. Break them all.', '#ffd0a0');
+    UI.centerMsg(again ? 'THE UNBOUND CHAINS' : 'BOUND TO THE OBELISKS', again ? 'The obelisks rise again — break them!' : 'Break the four obelisks!', 3);
+    UI.log(again ? 'The chains will not stay broken: Velscour binds himself to four fresh obelisks.' : 'Velscour chains himself to the four obelisks and drinks their strength. Break them all.', '#ffd0a0');
     if (G.room && !G.game?.isDungeonAuthority(w.depth)) return;
     for (let i = 0; i < OBELISKS.length; i++) {
       const [ox, oy] = OBELISKS[i];
       const [x, y] = w.map.nudge(ox + 0.5 + Math.sign(C.x - ox) * 1.2, oy + 0.5 + Math.sign(C.y - oy) * 1.2, 0.45);
-      const ob = this.crystal(x, y, { vk: 'obelisk', name: 'Bound Obelisk', color: '#d0d0d0', hp: 0.02, h: 50,
+      const ob = this.crystal(x, y, { vk: 'obelisk', name: 'Bound Obelisk', color: '#d0d0d0', hp: this.unbound ? UNBOUND.obelisk : 0.02, h: 50,
         tick: (c, dt) => { if ((c.beamT = (c.beamT || 0) - dt) <= 0) { c.beamT = 0.2; addEffect(new Bolt(c.x, c.y, 50, m.x, m.y, 120, '#e0e0e0', 0.2, 2)); } } });
       ob.netId = `vel_obelisk_${i}`;
     }
   }
   p6(dt) {
     if (this.parts.some((c) => c.vk === 'obelisk' && !c.dead)) return;
-    this.hold = false; this.m.invuln = 0; this.m.targetable = true; this.gate = 0;
+    const more = this.unbound && !this.bound2; // Velscour Unbound binds himself once more at 5%
+    this.hold = false; this.m.invuln = 0; this.m.targetable = true; this.gate = more ? 0.05 : 0;
     this.phase = 5;
-    UI.centerMsg('FINISH HIM', 'The chains are broken', 2.4);
+    UI.centerMsg(more ? 'THE CHAINS SNAP' : 'FINISH HIM', more ? 'He is not finished' : 'The chains are broken', 2.4);
     addEffect(new Ring(this.m.x, this.m.y, 0.3, 6, 0.8, '#ffffff', 6)); sfx('explode');
   }
 
@@ -495,10 +491,11 @@ class VelscourFight {
     for (const c of this.parts) c.dead = true;
     w.darkK = this.dark0 ?? w.darkK;
     UI.log(`Velscour falls after ${Math.floor(this.t / 60)}:${String(Math.floor(this.t % 60)).padStart(2, '0')}.`, '#ffd0a0');
-    (G.velscourLog || (G.velscourLog = [])).push({ t: this.t, phase: this.phase, practice: this.practice });
+    (G.velscourLog || (G.velscourLog = [])).push({ t: this.t, phase: this.phase, practice: this.practice, unbound: !!this.unbound });
     if (this.practice || !w.player) return;
     const lvl = m.level + 2, drop = (it) => it && w.addLoot(new GroundItem(m.x + rand(-1, 1), m.y + rand(-1, 1), 'item', { item: it }));
     drop(makeHeirloom(lvl)); drop(makeCovenant(lvl)); drop(makeGem('sig', Math.min(SIGIL_MAX, 15 + Math.floor(rand(0, 5))))); drop(rollSigil(w.depth, 2));
+    if (this.unbound) unboundSpoils(this, lvl, drop); // an Unbound Heirloom, maybe the Crown (game/unbound.js)
   }
   /** The boss's own AI pauses while he hovers, hides or is bound (game/monster.js bossUpdate). */
   holdBoss() { const m = this.m; if (!this.hold && !this.seated) return false; m.moving = false; return true; }

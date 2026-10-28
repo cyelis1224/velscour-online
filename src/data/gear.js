@@ -123,7 +123,7 @@ export const GEAR_FX = [
 ];
 
 /** Chance a body armor of each rarity rolls an effect (at its own tier, or one below now and then). */
-export const FX_CHANCE = [0, 0, 0.45, 1, 1, 1];
+export const FX_CHANCE = [0, 0, 0.45, 1, 1, 1, 1];
 
 /** Glow colour of a look: the effect's own, else the finish's, else the rarity colour. */
 export function fxColor(fx, pal, rarity) {

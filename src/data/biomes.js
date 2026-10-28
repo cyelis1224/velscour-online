@@ -110,7 +110,7 @@ export const BIOMES = [
     torch: '#ff4000', fog: '#1e0400',
   },
   {
-    id: 'abyss', name: 'Abyssal Rift', palette: { colorize: [232, 0.5], light: -0.1, contrast: 1.15 }, dark: 0.86, light: 7,
+    id: 'abyss', name: 'Abyssal Chasm', palette: { colorize: [232, 0.5], light: -0.1, contrast: 1.15 }, dark: 0.86, light: 7,
     ambient: { type: 'mote', color: '#6080ff' }, mon: { hue: 200, sat: 1.2, light: -0.05 }, el: 'light', blood: '#2040c0',
     adj: ['Abyssal', 'Deepborn', 'Starless'], roster: ['eye', 'wraith', 'elemental', 'worm', 'spider', 'demon', 'slime', 'knight', 'gargoyle', 'cultist', 'bat', 'abomination'],
     torch: '#6080ff', fog: '#02041a',

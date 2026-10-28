@@ -21,6 +21,7 @@ import { dropLoot } from './loot.js';
 import { UI } from '../ui/ui.js';
 import { madnessReady } from './mayhem.js';
 import { SIGS, SIG_NAMES, PASSIVES } from './raidsigs.js';
+import { heresyRaid, worldHeresies } from './heresies.js';
 
 // ------------------------------------------------------------------------------------------------ the bosses
 // art: bestiary art ids (one is picked); fx: their projectile look; adds: archetypes that come to their aid;
@@ -570,7 +571,9 @@ export const raidHpMul = (depth) => 0.35 + Math.min(depth, 500) * 0.0004;
 // bring a fourth phase and more modifiers, and every hero died in its first depth-100 room at 2.7; was 3.6 when the
 // fights lasted 20 s, not two minutes)
 export const raidHitMul = (depth) => 2.7 * (1 - 0.3 * clamp((depth - 10) / 90, 0, 1));
-/** opts.tpl / opts.art: a given template (copied, maybe renamed) and look instead of a random one (game/tower.js). */
+/** opts.tpl / opts.art: a given template (copied, maybe renamed) and look instead of a random one (game/tower.js).
+ *  opts.court: one of Velscour Unbound's court (game/unbound.js): it never seals the arena or announces a BOSS ROOM.
+ *  opts.hp / opts.dmg: multipliers on a BOSS ROOM's. */
 export function makeRaidBoss(world, arena, depth, level, opts = {}) {
   const c = G.char;
   const tpl = opts.tpl || pick(RAID_BOSSES.filter((b) => b.id !== (c && c.lastRaid)));
@@ -578,6 +581,8 @@ export function makeRaidBoss(world, arena, depth, level, opts = {}) {
   const artId = opts.art || pick(tpl.art.filter((id) => ART_BY_ID[id]));
   const art = ART_BY_ID[artId];
   const mods = rollMods(depth);
+  const fifth = worldHeresies(world).includes('fifth'); // the Fifth Phase Heresy: one more modifier (and a phase, below)
+  if (fifth) { const more = Object.keys(RAID_MODS).filter((k) => !mods.includes(k) && k !== tpl.innate); if (more.length) mods.push(pick(more)); }
   if (tpl.innate && !mods.includes(tpl.innate)) mods.unshift(tpl.innate);
   const has = (k) => mods.includes(k);
   const m = makeMonster(world, art.arch, world.biome, level, 'boss', arena.cx + 4, arena.cy, 0, { art: artId, swap: null });
@@ -585,13 +590,15 @@ export function makeRaidBoss(world, arena, depth, level, opts = {}) {
   Object.assign(m, {
     ai: 'raid', el: tpl.el, res: { [tpl.el]: 0.4, ...(m.undead ? { poison: 0.5, shadow: 0.3 } : null) },
     scale: has('colossal') ? 2.75 : 2.4, r: 1.05, atkReach: 0.35, speed: 2.4 * (tpl.spd || 1) * (has('colossal') ? 0.88 : 1), atkCd: 1.3,
-    maxHp: B.hp * 26 * raidHpMul(depth) * (has('colossal') ? 1.35 : 1) * (tpl.hp || 1) * 1.3, dmg: raidHitMul(depth) * B.dmg * (has('empowered') ? 1.25 : 1), xp: B.xp * 60,
+    maxHp: B.hp * 26 * raidHpMul(depth) * (has('colossal') ? 1.35 : 1) * (tpl.hp || 1) * 1.3 * (opts.hp || 1), dmg: raidHitMul(depth) * B.dmg * (has('empowered') ? 1.25 : 1) * (opts.dmg || 1), xp: B.xp * 60,
     name: tpl.name.toUpperCase(), title: tpl.title, aura: elem(tpl.el).glow, affixes: has('vampiric') ? ['vampiric'] : [],
     moves: null, patterns: [], isRaid: true, ward: 1, aggroRange: 0,
   });
   m.hp = m.maxHp;
   m.raid = new Raid(m, tpl, arena, depth, mods);
   m.raid.artId = artId;
+  if (opts.court) { m.raid.court = true; m.raid.announced = true; m.raid.sealed = true; m.raidPriority = 6; } // (sealed: it never seals the mouth of the arena)
+  if (fifth && !opts.court) heresyRaid(m.raid);
   m.onDeath = () => m.raid.onDeath();
   return m;
 }

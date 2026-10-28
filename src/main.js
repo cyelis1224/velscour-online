@@ -13,6 +13,9 @@ import { Cloud } from './game/cloud.js';
 import { Vendor } from './ui/vendor.js';
 import { Stash } from './ui/stash.js';
 import { Reliquary } from './ui/reliquary.js';
+import { Heresies } from './ui/heresies.js';
+import { Rifts } from './ui/rifts.js';
+import { Marks } from './ui/marks.js';
 import { game } from './game/game.js';
 import { dropBakes } from './game/render.js';
 import { controls } from './game/controls.js';
@@ -140,6 +143,7 @@ async function boot() {
   UI.vendor = Vendor;
   UI.stash = Stash;
   UI.reliquary = Reliquary;
+  UI.heresies = Heresies; UI.rifts = Rifts; UI.marks = Marks; // the Endgame's panels (docs/ENDGAME.md)
   window.addEventListener('error', (e) => reportError(e.error || e.message));
   window.addEventListener('unhandledrejection', (e) => reportError(e.reason));
   window.addEventListener('beforeunload', () => { if (G.char) game.autosave(); });

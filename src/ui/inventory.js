@@ -15,6 +15,9 @@ import { heroPortrait } from '../core/gearart.js';
 import { openSeal } from './sealed.js';
 import { glyphOf } from '../data/relics.js';
 import { noteFind } from '../game/reliquary.js';
+import { marksTotal, marksFree, capXp } from '../game/marks.js';
+import { heresyRankOf } from '../game/heresies.js';
+import { endgameUnlocked } from '../game/endgame.js';
 import { sparkle, floatText } from '../gfx/vfx.js';
 
 const DOLL = { head: [2, 1], weapon: [1, 2], body: [2, 2], offhand: [3, 2], hands: [1, 3], legs: [2, 3], feet: [2, 4], ring1: [4, 1], ring2: [4, 2], ring3: [4, 3], ring4: [4, 4] };
@@ -371,12 +374,12 @@ function statsBlock() {
   const p = G.player, c = G.char, st = p.st, C = CLASSES[c.classId];
   const box = el('div', 'col');
   box.style.minWidth = '210px';
-  const need = xpToNext(c.level);
-  box.appendChild(el('div', '', `<b style="font-family:Cinzel;color:#ffe2a0;font-size:16px">${escapeHtml(c.name)}</b><div class="dim">Level ${c.level} ${C.name}</div><div class="dim" style="font-size:12px">XP ${fmtInt(c.xp)} / ${fmtInt(need)}</div>`));
+  const need = xpToNext(c.level), mk = capXp(c);   // at the cap: XP towards the next Infernal Mark
+  box.appendChild(el('div', '', `<b style="font-family:Cinzel;color:#ffe2a0;font-size:16px">${escapeHtml(c.name)}</b><div class="dim">Level ${c.level} ${C.name}</div><div class="dim" style="font-size:12px">${mk ? `Next Infernal Mark ${fmtInt(mk.xp)} / ${fmtInt(mk.need)} XP` : `XP ${fmtInt(c.xp)} / ${fmtInt(need)}`}</div>`));
   const attrs = el('div', '');
   for (const k of ['str', 'dex', 'vit', 'int']) {
     const row = el('div', 'attr-row');
-    row.innerHTML = `<span title="${ATTRS[k].desc}">${ATTRS[k].name}${C.primary === k ? ' <span style="color:#ffd34a" title="Primary: +1% damage per point">★</span>' : ''}</span><b>${st[k]}</b>`;
+    row.innerHTML = `<span title="${ATTRS[k].desc}">${ATTRS[k].name}${C.primary === k ? ' <span style="color:#ffd34a" title="Primary: +1% damage per point">★</span>' : ''}</span><b>${Math.round(st[k])}</b>`;
     if (c.statPoints > 0) {
       const plus = el('button', 'plus', '+');
       plus.title = 'Shift-click: +5 · Ctrl-click: every point';
@@ -418,9 +421,13 @@ function statsBlock() {
   if (st.fortitude > 1) rows.push(['Fortitude', `+${Math.round((st.fortitude - 1) * 100)}% Life`]);
   if (st.extraProj) rows.push(['Extra Projectiles', '+' + Math.floor(st.extraProj)]);
   if (st.skillsAll) rows.push(['All Skills', '+' + Math.floor(st.skillsAll)]);
+  if (marksTotal()) rows.push(['Infernal Marks', `${marksTotal()} (${marksFree()} free)`]);
+  if (heresyRankOf(c)) rows.push(['Heresy rank', String(heresyRankOf(c))]);
+  if (c.keys) rows.push(['Abyssal Keys', `${c.keys}`]);
   for (const [k, v] of rows) g.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
   box.appendChild(g);
   box.appendChild(el('div', 'dim', `Kills ${fmtInt(c.kills || 0)} · Deaths ${c.deaths || 0} · Deepest ${c.deepest || 0}`));
+  if (endgameUnlocked(c)) { const mb = el('button', 'btn small', 'Infernal Marks'); mb.onclick = () => { sfx('ui'); G.ui.marks.open(); }; box.appendChild(mb); }
   return box;
 }
 

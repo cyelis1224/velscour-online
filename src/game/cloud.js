@@ -9,6 +9,7 @@
 import { G } from '../state.js';
 import { heroesByClass, replaceClassHero, classSaves, savesReadable, onSaveChange } from './save.js';
 import { backupHeroes } from './herobackup.js';
+import { endgame, adoptEndgame, sameEndgame, fixEndgame, mergeEndgame, onEndgameChange } from './endgame.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
 const CONFIG = {
@@ -63,6 +64,37 @@ function firebaseBackend() {
         return { ok: true };
       });
     },
+    // the Endgame's account record (game/endgame.js) and the Abyssal Rifts' honour board (game/leaderboard.js)
+    account(uid) {
+      const ref = fs.doc(db, 'users', uid, 'account', 'endgame');
+      return fs.runTransaction(db, async (t) => { const d = await t.get(ref); return d.exists() ? d.data() : null; });
+    },
+    /** Write the record if the document still holds `expect` (what the merge read): { ok } or { ok: false }. */
+    putAccount(uid, rec, expect) {
+      const ref = fs.doc(db, 'users', uid, 'account', 'endgame');
+      return fs.runTransaction(db, async (t) => {
+        if (expect !== undefined) { const d = await t.get(ref); if (!sameEndgame(d.exists() ? d.data() : null, expect)) return { ok: false }; }
+        t.set(ref, { ...rec, at: fs.serverTimestamp() });
+        return { ok: true };
+      });
+    },
+    async board(cls) {
+      const out = [];
+      (await fs.getDocs(fs.collection(db, 'boards', cls, 'entries'))).forEach((d) => { out.push({ uid: d.id, ...d.data() }); });
+      return out;
+    },
+    /** Post a run unless the entry already holds a better one (a higher tier, or the same tier as fast): { ok, kept }. */
+    putBoard(cls, uid, rec) {
+      const ref = fs.doc(db, 'boards', cls, 'entries', uid);
+      return fs.runTransaction(db, async (t) => {
+        const d = await t.get(ref), cur = d.exists() ? d.data() : null;
+        if (cur && !(rec.tier > cur.tier || (rec.tier === cur.tier && rec.time < cur.time))) return { ok: false, kept: true };
+        t.set(ref, { ...rec, at: fs.serverTimestamp() });
+        return { ok: true, kept: false };
+      });
+    },
+    /** Take this player's entry off a class's board (a hero that took Velscour's gift, game/deathgift.js). */
+    delBoard(cls, uid) { return fs.deleteDoc(fs.doc(db, 'boards', cls, 'entries', uid)); },
   };
   function fromDoc(r) { return { ...r, gz: r.gz && r.gz.toUint8Array ? r.gz.toUint8Array() : r.gz || null }; }
 }
@@ -180,13 +212,47 @@ async function syncAll() {
     }
   }
   for (const cls of Object.keys(st.base)) if (!st.base[cls]) delete st.base[cls];
+  // a hero that took Velscour's gift (game/deathgift.js) is never listed: its class's entry comes off the honour board
+  for (const [cls, h] of Object.entries(heroesByClass())) if (h.cheated && be.delBoard) try { await be.delBoard(cls, st.uid); } catch (e) { console.warn('Honour board:', e); }
+  try { await syncAccount(); } catch (e) { if (/offline|unavailable|network|fetch/i.test(String(e && (e.code || e.message)))) throw e; console.warn('Cloud save (account):', e); }
   st.last = Date.now();
   saveState();
   setStatus(err ? 'error' : Cloud.conflicts.size ? 'conflict' : 'ok', err);
 }
+/** The Endgame's account record (game/endgame.js): merged three ways like the heroes, against st.endBase (the record
+ * this device last synced; none on a first sign-in), so Marks earned on two devices apart add up and nothing is ever
+ * lost; then written back when the merge changed the cloud's copy (only if the cloud still holds what was read). */
+async function syncAccount() {
+  if (!st.uid || !be.account) return;
+  accountDirty = false;
+  try {
+    for (let tries = 0; ; tries++) {
+      const cloud = await be.account(st.uid);
+      adoptEndgame(cloud, st.endBase);                 // this device's record plus what the cloud gained since the base
+      st.endBase = mergeEndgame(cloud, st.endBase);    // the record here holds the cloud's now (a damaged cloud copy lowers no base)
+      saveState();
+      const rec = fixEndgame(endgame());
+      if (cloud && sameEndgame(cloud, rec)) return;
+      const r = await be.putAccount(st.uid, rec, cloud);
+      if (r && r.ok === false && tries < 3) continue;  // another device wrote in between: merge again
+      st.endBase = rec;
+      saveState();
+      return;
+    }
+  } catch (e) { accountDirty = true; throw e; }
+}
+let accountDirty = false, accountT = 0;
+const ACCOUNT_DELAY = 60e3;
+onEndgameChange(() => {
+  if (!st.uid) return;
+  accountDirty = true;
+  if (!ready) return;
+  if (!accountT) accountT = setTimeout(() => { accountT = 0; if (accountDirty) queue(syncAccount); }, ACCOUNT_DELAY);
+});
 async function flush() {
   if (!st.uid) return;
   clearTimeout(pushT); pushT = 0;
+  if (accountDirty) { clearTimeout(accountT); accountT = 0; try { await syncAccount(); } catch (e) { console.warn('Cloud save (account):', e); } }
   if (!savesReadable()) { setStatus('error', UNREADABLE); return; }
   const local = heroesByClass();
   for (const cls of [...dirty]) {
@@ -223,6 +289,16 @@ export const Cloud = {
   /** fn(what): 'status' | 'change' (local heroes were replaced from the cloud) | 'conflict' | 'idle'. */
   on(fn) { listeners.push(fn); },
   useBackend(b) { be = b; ready = null; },
+  /** The backend once it is connected (the honour board reads through it), else null. */
+  get backend() { return be && ready ? be : null; },
+  /** The honour board of a class (game/leaderboard.js): every entry, as stored. Loads the SDK (a signed-out reader
+   * too: the board is public); throws when Google can't be reached. */
+  async board(cls) { await this.preload(); return be.board ? be.board(cls) : []; },
+  /** This player's entry on a class's board (signed in, connected): the backend's { ok, kept }, or false. */
+  async putBoard(cls, rec) { if (!st.uid || !ready) return false; await ready; return be && be.putBoard ? be.putBoard(cls, st.uid, rec) : false; },
+  get uid() { return st.uid; },
+  /** Take this player's entry of a class off the board (signed in, connected): true once it is gone. */
+  async delBoard(cls) { if (!st.uid || !ready) return false; await ready; if (!be || !be.delBoard) return false; await be.delBoard(cls, st.uid); return true; },
   /** Load the SDK (the settings dialog calls this so the sign-in popup opens inside the tap). */
   preload() {
     if (!ready) {
@@ -245,7 +321,7 @@ export const Cloud = {
     await this.preload();
     const u = await be.signIn();
     if (!u) return;
-    if (u.uid !== st.uid) { st.base = {}; st.deleted = {}; }   // a new account (or after a sign-out): everything merges afresh
+    if (u.uid !== st.uid) { st.base = {}; st.deleted = {}; st.endBase = null; }   // a new account (or after a sign-out): everything merges afresh
     Object.assign(st, { uid: u.uid, name: u.name, email: u.email });
     saveState();
     await this.sync(true);

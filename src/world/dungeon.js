@@ -166,18 +166,19 @@ function generateCastleKeepLayout(depth, biome, tileset, seed, layout) {
   };
 }
 
-export function generateDungeon(depth, biome, tileset, seed) {
+/** opts.raid: a BOSS ROOM arena whatever the depth; opts.small: a 4 x 4 chunk maze (Abyssal Rifts, docs/ENDGAME.md). */
+export function generateDungeon(depth, biome, tileset, seed, opts = {}) {
   if (depth === FINAL_DEPTH || biome.id === 'throne') return generateThrone(biome, tileset, seed); // the throne at any depth: "final boss" practice
-  if (biome.id === 'castle_keep' && !isRaidDepth(depth)) {
+  const raid = opts.raid ?? isRaidDepth(depth);
+  if (biome.id === 'castle_keep' && !raid) {
     const layout = CASTLE_KEEP_LAYOUTS[Math.abs((depth - 1) % CASTLE_KEEP_LAYOUTS.length)];
     return generateCastleKeepLayout(depth, biome, tileset, seed, layout);
   }
   const rng = new RNG(seed);
-  const raid = isRaidDepth(depth);
   // a raid level's maze is a little smaller: the boss fight takes the time
   const style = STYLES[biome.style] || STYLES.crypt, nextTheme = themeDeck(biome, rng);
-  const CW = clamp(4 + Math.floor(depth / 14) + rng.int(0, 1) - (raid ? 1 : 0), 4, 8);
-  const CH = clamp(4 + Math.floor(depth / 18) + rng.int(0, 1), 4, 7);
+  const CW = opts.small ? 4 : clamp(4 + Math.floor(depth / 14) + rng.int(0, 1) - (raid ? 1 : 0), 4, 8);
+  const CH = opts.small ? 4 : clamp(4 + Math.floor(depth / 18) + rng.int(0, 1), 4, 7);
   const W = CW * S + 2 + (raid ? ARENA_GAP + ARENA_W + 2 : 0), H = Math.max(CH * S + 2, raid ? ARENA_H + 6 : 0);
   const map = new TileMap(W, H);
   const ci = (x, y) => y * CW + x;
@@ -321,7 +322,7 @@ export function generateDungeon(depth, biome, tileset, seed) {
   const roster = biome.roster;
   const rnd = () => rng.next();
   const looks = rollLooks(biome, rnd); // this level's bestiary: which art and palette swap each archetype gets
-  const dens = density(depth);
+  const dens = density(depth) * (opts.density || 1); // opts.density: Abyssal Rifts thin the packs (data/rifts.js RIFT_DENSITY)
   const pickArch = () => {
     // earlier roster entries are a bit more common
     const i = Math.floor(Math.pow(rng.next(), 1.35) * roster.length);

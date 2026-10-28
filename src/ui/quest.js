@@ -6,6 +6,10 @@ import { BIOME_BY_ID } from '../data/biomes.js';
 import { isRaidDepth } from '../world/dungeon.js';
 import { FINAL_DEPTH } from '../data/depth.js';
 import { commissionsHtml } from '../game/commissions.js';
+import { endgameUnlocked } from '../game/endgame.js';
+import { heresyRankOf, heresiesOf, heresyText } from '../game/heresies.js';
+import { riftOpen, fmtTime } from '../game/rifts.js';
+import { marksTotal, marksFree } from '../game/marks.js';
 
 const step = (done, html) => `<div class="q-step${done ? ' done' : ''}"><i>${done ? '&#10004;' : '&#9670;'}</i><span>${html}</span></div>`;
 const nextRaid = (d) => { let n = Math.max(5, Math.ceil(d / 5) * 5); if (n === FINAL_DEPTH) n += 5; return n; };
@@ -117,6 +121,17 @@ export function renderQuest(body) {
   if (deepest >= FINAL_DEPTH) h += step(true, 'Velscour has fallen. The Endless Torment goes on below.');
   else h += step(false, `Next boss room: <b>Depth ${nextRaid(Math.max(c.depth, (w && w.depth) || 1))}</b>`);
   h += '</div>';
+  // the Endgame (docs/ENDGAME.md)
+  if (endgameUnlocked(c)) {
+    const rank = heresyRankOf(c), R = w && w.rift;
+    h += '<div class="q-sec"><h3>The Endgame</h3>';
+    if (R) h += step(R.done, `<b style="color:#20e0ff">Abyssal Rift Tier ${R.tier}</b> — ${R.done ? 'closed' : R.failed ? 'collapsed' : R.guardian ? 'slay the Guardian' : `${R.pct}% of the quota`} · ${fmtTime(R.left)} left`);
+    h += step(false, `Heresy rank <b>${rank}</b>${rank ? ` (${escapeHtml(heresyText(heresiesOf(c)))})` : ' — none embraced; the Altar of Heresy stands by the plaza'}`);
+    h += step(c.rifts.best > 0, `Abyssal Rifts: best Tier <b>${c.rifts.best || 0}</b>, Tier ${riftOpen(c)} open${c.rifts.best ? ` · ${c.rifts.runs || 0} runs, ${c.rifts.fails || 0} collapsed` : ''}`);
+    h += step(c.unbound.wins > 0, `Velscour Unbound: <b>${Math.min(3, c.keys)}/3</b> Abyssal Keys${c.unbound.wins ? ` · beaten ${c.unbound.wins}x` : ''}`);
+    h += step(false, `Infernal Marks: <b>${marksTotal()}</b> (${marksFree()} free)`);
+    h += '</div>';
+  } else if (deepest >= FINAL_DEPTH - 50) h += `<div class="q-sec"><h3>The Endgame</h3>${step(false, 'Slay Velscour at Depth 500: the Altar of Heresy and the Abyssal Rift gate open for every hero.')}</div>`;
   const raids = Object.keys(c.cleared || {}).map(Number).filter((d) => isRaidDepth(d)).sort((a, b) => a - b);
   h += `<div class="q-sec"><h3>Boss Rooms Conquered</h3>${raids.length ? `<div class="q-raids">${raids.map((d) => `<span>${d}</span>`).join('')}</div>` : '<div class="dim">None yet. Every 5th depth ends in one.</div>'}</div>`;
   h += `<div class="q-sec dim">Depths cleared: ${Object.keys(c.cleared || {}).length} &middot; Foes slain: ${fmtInt(c.kills || 0)} &middot; Deaths: ${c.deaths || 0}</div>`;
