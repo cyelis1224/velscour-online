@@ -15,7 +15,7 @@ import { creditsScreen } from './credits.js';
 import { RARITY } from '../data/items.js';
 import { FILTER_ROWS, lootFilter } from '../game/lootfilter.js';
 import { Cloud } from '../game/cloud.js';
-import { initTitleUpdater, checkForUpdates, showUpdateDialog, CLIENT_VERSION, getClientVersion, hardReload } from './updater.js';
+import { initTitleUpdater, checkForUpdates, showUpdateDialog, compareVersions, CLIENT_VERSION, getClientVersion, hardReload } from './updater.js';
 export { hardReload };
 
 let current = null;
@@ -406,8 +406,43 @@ export function gameModeScreen(charInfo, fresh = false, onBack = () => {}) {
     <p class="gamemode-card-desc">Enter the tavern lobby to socialize, whisper other adventurers, and create or join cooperative party rooms.</p>
     <button class="btn big gamemode-action-btn gamemode-btn-online">Enter Lobby</button>
   `;
-  const launchMP = () => {
+  let checkingMpVersion = false;
+  const launchMP = async () => {
+    if (checkingMpVersion) return;
     sfx('ui');
+    const onlineBtn = mpCard.querySelector('.gamemode-btn-online');
+    const origText = onlineBtn ? onlineBtn.textContent : 'Enter Lobby';
+    if (onlineBtn) {
+      onlineBtn.disabled = true;
+      onlineBtn.textContent = 'Verifying Version…';
+    }
+    checkingMpVersion = true;
+
+    try {
+      const updateInfo = await checkForUpdates({ force: true });
+      const currentVer = getClientVersion();
+      const serverVer = updateInfo?.serverVersion;
+      const isOutdated = !!(updateInfo && (updateInfo.hasUpdate || (serverVer && compareVersions(serverVer, currentVer) > 0)));
+
+      if (isOutdated) {
+        if (onlineBtn) {
+          onlineBtn.disabled = false;
+          onlineBtn.textContent = origText;
+        }
+        checkingMpVersion = false;
+        showUpdateDialog(updateInfo);
+        return;
+      }
+    } catch (err) {
+      console.warn('[Online] Version verification error:', err);
+    }
+
+    if (onlineBtn) {
+      onlineBtn.disabled = false;
+      onlineBtn.textContent = origText;
+    }
+    checkingMpVersion = false;
+
     G.game.selectAndEnterLobby(charInfo, fresh, () => gameModeScreen(charInfo, fresh, onBack));
   };
   mpCard.onclick = launchMP;

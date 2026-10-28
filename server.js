@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.1' };
+    return { version: '1.1.2' };
   }
 }
 
@@ -64,6 +64,20 @@ function formatBytes(bytes) {
   if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
   if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   return (bytes / 1024).toFixed(0) + ' KB';
+}
+
+function compareVersions(v1, v2) {
+  if (!v1 || !v2) return 0;
+  const p1 = String(v1).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const p2 = String(v2).replace(/^v/i, '').split('.').map(n => parseInt(n, 10) || 0);
+  const len = Math.max(p1.length, p2.length);
+  for (let i = 0; i < len; i++) {
+    const a = p1[i] || 0;
+    const b = p2[i] || 0;
+    if (a > b) return 1;
+    if (a < b) return -1;
+  }
+  return 0;
 }
 
 function getBuildArtifacts() {
@@ -410,6 +424,8 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Enforced version synchronization for Online Multiplayer mode with direct one-click update prompts",
+        "Lobby auto-reconnect on foreground resume, WebSocket keepalive heartbeat, and 90-second host room grace period",
         "Endgame expansion: Heresies of the Hollow, Abyssal Rifts, Velscour Unbound, and Infernal Marks",
         "Global Abyssal Rift leaderboard and honour board integration",
         "Interactive mobile pinch-to-zoom gesture support with smooth camera zoom scaling",
@@ -421,8 +437,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.1'}`,
-          filename: `Velscour-${pkg.version || '1.1.1'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.2'}`,
+          filename: `Velscour-${pkg.version || '1.1.2'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -474,7 +490,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.1'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.2'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -787,6 +803,18 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
+        const serverVer = getPackageInfo().version || '1.1.2';
+        if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
+          ws.send(JSON.stringify({
+            type: 'version_outdated',
+            serverVersion: serverVer,
+            clientVersion: msg.clientVersion,
+            message: `Your client version (v${msg.clientVersion}) is outdated. Please update to v${serverVer} to play online.`
+          }));
+          ws.close();
+          break;
+        }
+
         clientData.name = (msg.name || 'Hero').slice(0, 24);
         clientData.classId = msg.classId || 'paladin';
         clientData.level = parseInt(msg.level, 10) || 1;
@@ -828,7 +856,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.0.1',
+          serverVersion: getPackageInfo().version || '1.1.2',
         }));
 
         if (reconnectedRoom) {

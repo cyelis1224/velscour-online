@@ -1,5 +1,6 @@
 // Client networking controller for VELSCOUR Online
 import { G } from '../state.js';
+import { getClientVersion } from '../ui/updater.js';
 
 class NetworkManager {
   constructor() {
@@ -163,6 +164,7 @@ function serializeGearItem(item, slot) {
         title: this.charData.level >= 50 ? 'Matriarch' : this.charData.level >= 20 ? 'Slayer' : 'Hero',
         reconnectId: this.myId,
         reconnectRoom: activeRoom || null,
+        clientVersion: getClientVersion(),
         gear: {
           head: serializeGearItem(this.charData.equip?.head, 'head'),
           body: serializeGearItem(this.charData.equip?.body, 'body'),
@@ -292,14 +294,33 @@ function serializeGearItem(item, slot) {
         this.channelPlayers = msg.players || [];
         this.rooms = msg.rooms || [];
         if (msg.serverVersion) {
-          import('../ui/updater.js').then(({ checkForUpdates, compareVersions, CLIENT_VERSION }) => {
-            if (compareVersions(msg.serverVersion, CLIENT_VERSION) > 0) {
-              checkForUpdates({ force: true }).catch(() => {});
+          import('../ui/updater.js').then(({ checkForUpdates, compareVersions, getClientVersion, showUpdateDialog }) => {
+            const currentVer = getClientVersion();
+            if (compareVersions(msg.serverVersion, currentVer) > 0) {
+              checkForUpdates({ force: true }).then((info) => {
+                if (info && (info.hasUpdate || compareVersions(info.serverVersion, currentVer) > 0)) {
+                  this.disconnect();
+                  showUpdateDialog(info);
+                }
+              }).catch(() => {});
             }
           }).catch(() => {});
         }
         this.emit('lobby_welcome', msg);
         this.emit('lobby_update', { players: this.channelPlayers, rooms: this.rooms, channel: msg.channel });
+        break;
+
+      case 'version_outdated':
+        import('../ui/updater.js').then(({ checkForUpdates, showUpdateDialog }) => {
+          checkForUpdates({ force: true }).then((info) => {
+            this.disconnect();
+            showUpdateDialog(info);
+          }).catch(() => {
+            this.disconnect();
+          });
+        }).catch(() => {
+          this.disconnect();
+        });
         break;
 
       case 'lobby_update':

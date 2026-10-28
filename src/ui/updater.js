@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.1';
+export const CURRENT_BUILD_VERSION = '1.1.2';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,15 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.1' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.2' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.1' : currentVer,
+          version: forceTestUpdate ? '1.1.2' : currentVer,
           changelog: [
+            'Enforced version synchronization for Online Multiplayer mode with direct one-click update prompts',
+            'Lobby auto-reconnect on foreground resume, WebSocket keepalive heartbeat, and 90-second host room grace period',
             'Built-in automatic updater with in-game download & installation',
             'Immersive fullscreen Android display with hidden status bars',
             'Seamless Google Account sign-in on Desktop and Android',
