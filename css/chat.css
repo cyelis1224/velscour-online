@@ -22,7 +22,7 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  z-index: 25;
+  z-index: 6;
   font-family: 'Alegreya Sans', sans-serif;
   transition: background 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
   pointer-events: auto;
@@ -617,7 +617,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  z-index: 24;
+  z-index: 6;
   box-shadow: 0 2px 8px rgba(0,0,0,0.7);
   transition: transform 0.15s, background 0.15s;
 }

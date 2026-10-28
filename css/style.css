@@ -117,6 +117,7 @@ button {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 10;
 }
 
 #hud>* {
@@ -520,7 +521,7 @@ button {
   align-items: center;
   gap: 10px;
   pointer-events: auto;
-  z-index: 10;
+  z-index: 6;
 }
 
 .special-btn {
@@ -2342,6 +2343,7 @@ body.touch #sealed-btn i {
   justify-content: center;
   gap: 10px;
   padding: 10px;
+  z-index: 30;
 }
 
 .panel {
@@ -2990,6 +2992,7 @@ body.touch .reliquary-panel .codex-cell {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 40;
 }
 
 .screen {
@@ -3706,6 +3709,7 @@ body.touch .reliquary-panel .codex-cell {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 15;
 }
 
 #joy-base {
