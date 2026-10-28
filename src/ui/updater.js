@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.3';
+export const CURRENT_BUILD_VERSION = '1.1.4';
 
 /**
  * Returns the effective client version.
@@ -168,12 +168,12 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.3' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.4' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.3' : currentVer,
+          version: forceTestUpdate ? '1.1.4' : currentVer,
           changelog: [
             'Shared multiplayer Heresies: portal activator sets party Heresies and biomes for deterministic enemy synchronization',
             'Resolved multiplayer monster authority symmetry and split-monster replication',
