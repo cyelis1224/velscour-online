@@ -3856,11 +3856,13 @@ body.touch.portrait #hud-bar {
   left: 50%;
 }
 
+body.touch #hud.compact-mobile #hud-img,
 body.touch.portrait #hud-img {
   display: none;
 }
 
-.portrait-orb-frame {
+.portrait-orb-frame,
+.mobile-orb-frame {
   position: absolute;
   z-index: 2;
   display: none;

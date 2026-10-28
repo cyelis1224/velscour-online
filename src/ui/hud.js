@@ -167,11 +167,12 @@ export const HUD = {
     rail.classList.toggle('hidden', compact);
     const size = innerHeight > innerWidth ? 38 : 42;
     const bar = $('#hud-bar').getBoundingClientRect();
-    if (portrait) {
+    if (compact) {
+      img.style.display = 'none';
       if (!this.portraitOrbFrames) {
         const makeFrame = (name, src) => {
           const frame = new Image();
-          frame.className = 'portrait-orb-frame';
+          frame.className = 'portrait-orb-frame mobile-orb-frame';
           frame.alt = '';
           frame.draggable = false;
           frame.src = src;
@@ -184,45 +185,78 @@ export const HUD = {
           makeFrame('mana', 'assets/ui/hud-orb-mana.webp'),
         ];
       }
-      const frameW = Math.max(74, Math.min(98, innerWidth * .24));
+
+      const potionSize = portrait ? 36 : 40;
+      const potionGap = portrait ? 4 : 6;
+      const potionRowW = potionSize * 4 + potionGap * 3;
+      const x0 = (bar.width - potionRowW) / 2;
+      const potionY = bar.height - potionSize - (portrait ? 10 : 8);
+      const potionCenterY = potionY + potionSize / 2;
+
+      const frameW = portrait ? 60 : 68;
       const scale = frameW / 270;
       const frameH = 296 * scale;
-      const inset = Math.max(5, innerWidth * .015);
-      const x = [inset, innerWidth - frameW - inset];
-      const y = bar.height - frameH;
-      this.portraitOrbFrames.forEach((frame, i) => Object.assign(frame.style, {
-        display: 'block', left: `${x[i]}px`, top: `${y}px`, width: `${frameW}px`, height: `${frameH}px`,
-      }));
+      const orbGap = portrait ? 4 : 8;
+
+      const lifeFrameX = x0 - orbGap - frameW;
+      const manaFrameX = x0 + potionRowW + orbGap;
+      const frameY = potionCenterY - 145.5 * scale;
+
+      this.portraitOrbFrames[0].style.cssText = `display:block;left:${lifeFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
+      this.portraitOrbFrames[1].style.cssText = `display:block;left:${manaFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
+
       const [lifeGeo, manaGeo] = A.hudGeo.orbs;
       const orbPos = [
-        { frameX: x[0], cx: lifeGeo.cx, cy: lifeGeo.cy, r: lifeGeo.r },
-        { frameX: x[1], cx: manaGeo.cx - 1730, cy: manaGeo.cy, r: manaGeo.r },
+        { frameX: lifeFrameX, cx: lifeGeo.cx, cy: lifeGeo.cy, r: lifeGeo.r },
+        { frameX: manaFrameX, cx: manaGeo.cx - 1730, cy: manaGeo.cy, r: manaGeo.r },
       ];
-      const placePortraitOrb = (cover, text, p) => {
+      const placeOrb = (cover, text, p) => {
         const cx = p.frameX + p.cx * scale;
-        const cy = y + p.cy * scale;
+        const cy = frameY + p.cy * scale;
         const diameter = p.r * 2 * scale;
         Object.assign(cover.style, { left: `${cx - diameter / 2}px`, top: `${cy - diameter / 2}px`, width: `${diameter}px`, height: `${diameter}px` });
-        Object.assign(text.style, { left: `${cx - 42}px`, top: `${cy - 7}px`, width: '84px', fontSize: '10px' });
+        Object.assign(text.style, { left: `${cx - 42}px`, top: `${cy - 7}px`, width: '84px', fontSize: portrait ? '9.5px' : '10.5px' });
       };
-      placePortraitOrb($('#life-cover'), $('#life-text'), orbPos[0]);
-      placePortraitOrb($('#mana-cover'), $('#mana-text'), orbPos[1]);
+      placeOrb($('#life-cover'), $('#life-text'), orbPos[0]);
+      placeOrb($('#mana-cover'), $('#mana-text'), orbPos[1]);
+
+      this.slots.forEach((s) => {
+        const potion = typeof s.map === 'string';
+        if (potion) s.icon.style.opacity = '1';
+        s.d.classList.toggle('hidden', !potion);
+        if (potion) {
+          Object.assign(s.d.style, {
+            left: `${x0 + POTIONS.indexOf(s.map) * (potionSize + potionGap)}px`,
+            top: `${potionY}px`,
+            width: `${potionSize}px`,
+            height: `${potionSize}px`,
+          });
+        }
+      });
     } else {
-      if (this.portraitOrbFrames) this.portraitOrbFrames.forEach((frame) => { frame.style.display = 'none'; });
+      img.style.display = '';
+      img.src = 'assets/ui/hud.webp';
+      if (this.portraitOrbFrames) {
+        this.portraitOrbFrames.forEach((frame) => { frame.style.display = 'none'; });
+      }
       this.placeOrbs(A.hudGeo);
-    }
-    const gap = 8, x0 = (bar.width - (size * 4 + gap * 3)) / 2, y = bar.height - size - (innerHeight > innerWidth ? 10 : 8);
-    this.slots.forEach((s) => {
-      const potion = typeof s.map === 'string';
-      if (potion) s.icon.style.opacity = compact ? '1' : '0';
-      s.d.classList.toggle('hidden', compact && !potion);
-      if (compact && potion) Object.assign(s.d.style, { left: `${x0 + POTIONS.indexOf(s.map) * (size + gap)}px`, top: `${y}px`, width: `${size}px`, height: `${size}px` });
-      else {
+
+      this.slots.forEach((s) => {
+        const potion = typeof s.map === 'string';
+        if (potion) s.icon.style.opacity = '0';
+        s.d.classList.remove('hidden');
         const g = A.hudGeo, m = SLOT_MAP.indexOf(s.map);
         const slot = g.slots[m];
-        if (slot) Object.assign(s.d.style, { left: `${(slot.x / g.w) * 100}%`, top: `${(slot.y / g.h) * 100}%`, width: `${(slot.w / g.w) * 100}%`, height: `${(slot.h / g.h) * 100}%` });
-      }
-    });
+        if (slot) {
+          Object.assign(s.d.style, {
+            left: `${(slot.x / g.w) * 100}%`,
+            top: `${(slot.y / g.h) * 100}%`,
+            width: `${(slot.w / g.w) * 100}%`,
+            height: `${(slot.h / g.h) * 100}%`,
+          });
+        }
+      });
+    }
   },
 
   refreshStatic() {
