@@ -205,14 +205,13 @@ export const HUD = {
 
       // Move potions up and position XP bar below them extending between the HP and MP orbs
       const xpTrackH = portrait ? 8 : 9;
-      const potionToXpGap = portrait ? 4 : 5;
-      const bottomPadding = portrait ? 6 : 5;
+      const bottomPadding = portrait ? 3 : 2; // lowered by 3px
       const xpTrackY = bar.height - xpTrackH - bottomPadding;
+      const potionToXpGap = portrait ? 7 : 8; // keeps potions in place while giving xp bar 3px more separation
       const potionY = xpTrackY - potionToXpGap - potionSize;
 
       // Vertically center the orbs to bracket both the potions and the XP bar
-      const clusterH = potionSize + potionToXpGap + xpTrackH;
-      const clusterCenterY = potionY + clusterH / 2;
+      const clusterCenterY = (potionY + xpTrackY + xpTrackH) / 2;
       const frameY = clusterCenterY - 145.5 * scale;
 
       // Extend XP bar between HP and MP orbs (tucking slightly under their outer decorative bezels)
