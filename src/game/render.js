@@ -14,6 +14,7 @@ import { townFrame, townFrameOf, townMotion, isLying, TOWN_FRAME_W, TOWN_FRAME_H
 import { drawEmote } from '../gfx/emotes.js';
 import { drawTownProp, TOWN_PROP_KINDS } from '../gfx/townprops.js';
 import { drawTownSpeech } from './townspeech.js';
+import { drawPlayerChatBubbles } from './playerbubble.js';
 import { homunculusPose } from '../gfx/homunculus.js';
 import { enemyImage } from '../core/enemyart.js';
 import { drawPetCorpse } from '../core/petart.js';
@@ -989,6 +990,7 @@ export function renderWorld(ctx, world) {
     G.lootBoxes = drawLootLabels(ctx, world, G.input && G.input.lastPointerType === 'mouse' ? G.input.mouse : null);
   } else G.lootBoxes = [];
   drawTexts(ctx);
+  if (!G.cine) drawPlayerChatBubbles(ctx, world);
   drawCine(ctx, W, H);
   // Keep capacity without retaining creatures/loot that have left the world.
   for (const item of pool) item.o = null;

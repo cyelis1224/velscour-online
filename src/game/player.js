@@ -531,6 +531,15 @@ export class Player extends Creature {
     if (this.phoenixCd > 0) this.phoenixCd -= dt;
     if (this.furyT > 0) this.furyT -= dt;
     if (this.noRageT > 0) this.noRageT -= dt;
+    if (this.chatTimer > 0) {
+      this.chatTimer -= dt;
+      this.chatAge = (this.chatAge || 0) + dt;
+      if (this.chatTimer <= 0) {
+        this.chatBubble = null;
+        this.chatTimer = 0;
+        this.chatAge = 0;
+      }
+    }
     if (this.classId === 'bard' && this.world) bardUpdate(this, dt);
     if (this.classId === ASTRONOMER && this.world) astroUpdate(this, dt);
     if (this.world) sigUpdate(this, dt);

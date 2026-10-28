@@ -33,6 +33,7 @@ export class RemotePlayer extends Creature {
     this.targetY = this.y;
     this.chatBubble = null;
     this.chatTimer = 0;
+    this.chatAge = 0;
 
     this.gearArt = null;
     this._gearKey = null;
@@ -102,6 +103,7 @@ export class RemotePlayer extends Creature {
   showChat(text) {
     this.chatBubble = text;
     this.chatTimer = 4.5;
+    this.chatAge = 0;
   }
 
   update(dt) {
@@ -111,7 +113,12 @@ export class RemotePlayer extends Creature {
 
     if (this.chatTimer > 0) {
       this.chatTimer -= dt;
-      if (this.chatTimer <= 0) this.chatBubble = null;
+      this.chatAge = (this.chatAge || 0) + dt;
+      if (this.chatTimer <= 0) {
+        this.chatBubble = null;
+        this.chatTimer = 0;
+        this.chatAge = 0;
+      }
     }
 
     // Smooth movement interpolation toward target
@@ -159,11 +166,6 @@ export class RemotePlayer extends Creature {
 
     // Overhead Nameplate & Health Bar
     this.drawRemoteOverhead(ctx, px, py - 68 - z);
-
-    // Chat bubble if talking
-    if (this.chatBubble) {
-      this.drawChatBubble(ctx, px, py - 95 - z, this.chatBubble);
-    }
   }
 
   drawRemoteOverhead(ctx, x, y) {

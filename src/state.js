@@ -39,6 +39,8 @@ export const G = {
     showHeroStats: true, // show/hide the #hero-stats div
     showTargetBox: true, // show/hide the #target-box div
     showTargetSprite: true, // choose if target-box shows the target sprite or not
+    showChatBubbles: true, // player chat bubbles over heads (and offscreen edge pointers)
+    chatInSideLog: true, // show player chat messages in left-hand notifications log
   },
 };
 

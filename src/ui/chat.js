@@ -987,6 +987,7 @@ export const GameChat = {
     if (G.player) {
       G.player.chatBubble = msg;
       G.player.chatTimer = 4.5;
+      G.player.chatAge = 0;
     }
     const myName = G.char?.name || 'Hero';
     // Optimistic local add

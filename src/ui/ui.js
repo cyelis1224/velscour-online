@@ -98,11 +98,13 @@ export const UI = {
   },
 
   logParty(from, text) {
+    if (G.settings?.chatInSideLog === false) return;
     const formatted = `<span style="color:#60c8ff;font-weight:600">[Party] ${escapeHtml(from)}:</span> <span style="color:#e6f0fa">${escapeHtml(text)}</span>`;
     this.log(formatted, null, true);
   },
 
   logWhisper(from, text) {
+    if (G.settings?.chatInSideLog === false) return;
     const formatted = `<span style="color:#ff80df;font-weight:600">[Whisper] ${escapeHtml(from)}:</span> <span style="color:#fae6f5">${escapeHtml(text)}</span>`;
     this.log(formatted, null, true);
   },
