@@ -5,6 +5,7 @@ import { sfx } from '../core/audio.js';
 import { A, potionIcon } from '../core/assets.js';
 import { UI, $, droppable } from './ui.js';
 import { skillIconURL } from './icons.js';
+import { CLASSES } from '../data/classes.js';
 import { SKILLS, effLevel, manaCost, rageCost, cooldown, CLASS_SKILLS } from '../data/skills.js';
 import { xpToNext } from '../game/player.js';
 import { drawMinimap } from '../game/render.js';
@@ -62,6 +63,9 @@ export const HUD = {
     $('#madness-btn').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); unleashMadness(); });
     $('#smite-btn').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); toggleSmite(); });
     $('#sealed-btn').addEventListener('click', (e) => { e.stopPropagation(); sfx('ui'); openNextSeal(); });
+    const toggleXpDetails = (e) => { e.stopPropagation(); $('#xp-text')?.classList.toggle('show-full'); };
+    $('#xp-track')?.addEventListener('pointerdown', toggleXpDetails);
+    $('#xp-text')?.addEventListener('pointerdown', toggleXpDetails);
     // the spectator's dials: auto-play's stance and the Greed lever (game/autoplay.js STANCES, game/greed.js)
     for (const b of document.querySelectorAll('#stance button')) b.addEventListener('click', (e) => { e.stopPropagation(); if (!G.char) return; G.char.stance = b.dataset.st; sfx('ui'); UI.log(`Auto-play stance: <b>${STANCES[b.dataset.st].name}</b>.`, '#8fe0ff'); });
     for (const b of document.querySelectorAll('#greed .gr-btn')) b.addEventListener('click', (e) => { e.stopPropagation(); sfx('ui'); setGreed(greedOf() + +b.dataset.d); });
@@ -161,10 +165,9 @@ export const HUD = {
     const portrait = G.touch && innerHeight > innerWidth;
     const compact = G.touch && (portrait || !G.settings.mobileSkillBar);
     document.body.classList.toggle('compact-mobile-hud', compact);
-    const hud = $('#hud'), img = $('#hud-img'), xp = $('#xp-track'), rail = $('#hud-rail');
+    const hud = $('#hud'), img = $('#hud-img'), xp = $('#xp-track'), xpText = $('#xp-text'), rail = $('#hud-rail');
     hud.classList.toggle('compact-mobile', compact);
     img.src = compact ? 'assets/ui/hud-orbs.webp' : 'assets/ui/hud.webp';
-    xp.classList.toggle('hidden', compact);
     rail.classList.toggle('hidden', compact);
     const size = innerHeight > innerWidth ? 38 : 42;
     const bar = $('#hud-bar').getBoundingClientRect();
@@ -193,6 +196,36 @@ export const HUD = {
       const x0 = (bar.width - potionRowW) / 2;
       const potionY = bar.height - potionSize - (portrait ? 10 : 8);
       const potionCenterY = potionY + potionSize / 2;
+
+      // Position XP Bar and Level/Class Text directly above the centered potion row
+      const xpTrackH = portrait ? 5 : 6;
+      const xpTrackY = potionY - xpTrackH - (portrait ? 4 : 5);
+      const xpTextH = 13;
+      const xpTextY = xpTrackY - xpTextH - 1;
+
+      if (xp) {
+        Object.assign(xp.style, {
+          left: '50%',
+          transform: 'translateX(-50%)',
+          top: `${xpTrackY}px`,
+          width: `${potionRowW}px`,
+          height: `${xpTrackH}px`,
+          display: 'block',
+        });
+      }
+
+      if (xpText) {
+        Object.assign(xpText.style, {
+          left: '50%',
+          transform: 'translateX(-50%)',
+          top: `${xpTextY}px`,
+          width: 'max-content',
+          maxWidth: '85vw',
+          height: `${xpTextH}px`,
+          display: 'flex',
+          fontSize: portrait ? '8.5px' : '9.5px',
+        });
+      }
 
       const frameW = portrait ? 60 : 68;
       const scale = frameW / 270;
@@ -241,6 +274,9 @@ export const HUD = {
         this.portraitOrbFrames.forEach((frame) => { frame.style.display = 'none'; });
       }
       this.placeOrbs(A.hudGeo);
+
+      if (xp) xp.removeAttribute('style');
+      if (xpText) xpText.removeAttribute('style');
 
       this.slots.forEach((s) => {
         const potion = typeof s.map === 'string';
@@ -340,7 +376,16 @@ export const HUD = {
     set('madt', on ? `MADNESS ${Math.ceil(c.madT)}s` : ready ? 'Madness — ready' : `Madness ${Math.floor((c.madness || 0) * 100)}%`, (v) => { $('#mad-text').textContent = v; });
     const need = xpToNext(c.level);
     set('xp', Math.round((c.xp / need) * 1000) / 10, (v) => { $('#xp-fill').style.width = v + '%'; });
-    set('xpt', `Level ${c.level} · ${fmtInt(c.xp)} / ${fmtInt(need)} XP`, (v) => { $('#xp-text').textContent = v; });
+    const clsName = (CLASSES[c.classId] && CLASSES[c.classId].name) || (p && p.cls && p.cls.name) || 'Hero';
+    const xpPct = Math.floor(clamp((c.xp / (need || 1)), 0, 1) * 100);
+    const shortText = `Level ${c.level} ${clsName}`;
+    const fullText = `Level ${c.level} ${clsName} · ${fmtInt(c.xp)} / ${fmtInt(need)} XP (${xpPct}%)`;
+    set('xpt', `${shortText}|${fullText}`, () => {
+      const elText = $('#xp-text');
+      if (elText) {
+        elText.innerHTML = `<span class="xp-text-short">${escapeHtml(shortText)}</span><span class="xp-text-full">${escapeHtml(fullText)}</span>`;
+      }
+    });
     for (const s of this.slots) {
       if (typeof s.map === 'string') {
         const n = c.potions[s.map] || 0;

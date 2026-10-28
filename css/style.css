@@ -166,6 +166,8 @@ button {
   top: 83.2%;
   height: 7%;
   overflow: hidden;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 #xp-fill {
@@ -179,20 +181,55 @@ button {
 #xp-text {
   position: absolute;
   z-index: 4;
-  left: 0;
-  right: 0;
-  top: 81%;
-  text-align: center;
-  font: 700 10px var(--font-head);
-  color: var(--gold);
-  text-shadow: 0 0 3px #000, 0 0 3px #000;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .2s;
+  left: 17.5%;
+  width: 65%;
+  top: 83.2%;
+  height: 7%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 9.5px/1 var(--font-head);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--gold-bright, #ffe2a0);
+  text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  opacity: 0.95;
+  transition: color 0.15s ease, opacity 0.15s ease, text-shadow 0.15s ease;
 }
 
-#hud-bar:hover #xp-text {
+#xp-text .xp-text-full {
+  display: none;
+}
+
+#xp-text .xp-text-short {
+  display: inline;
+}
+
+#hud-bar:hover #xp-text,
+#xp-track:hover ~ #xp-text,
+#xp-text:hover,
+#xp-text.show-full {
   opacity: 1;
+  color: #ffffff;
+  text-shadow: 0 0 3px #000, 0 0 5px #000, 0 0 8px rgba(255, 211, 106, 0.45);
+}
+
+#hud-bar:hover #xp-text .xp-text-short,
+#xp-track:hover ~ #xp-text .xp-text-short,
+#xp-text:hover .xp-text-short,
+#xp-text.show-full .xp-text-short {
+  display: none;
+}
+
+#hud-bar:hover #xp-text .xp-text-full,
+#xp-track:hover ~ #xp-text .xp-text-full,
+#xp-text:hover .xp-text-full,
+#xp-text.show-full .xp-text-full {
+  display: inline;
 }
 
 .orb-cover {
@@ -3960,10 +3997,39 @@ body.touch .stash-panel {
 
 /* Portrait uses the same game canvas with a compact orb and potion HUD. The mobile skill cluster
    moves into the lower-right safe area, leaving the left side clear for the thumb joystick. */
-body.touch #hud.compact-mobile #hud-rail,
-body.touch #hud.compact-mobile #xp-track,
-body.touch #hud.compact-mobile #xp-text {
+body.touch #hud.compact-mobile #hud-rail {
   display: none;
+}
+
+body.touch #hud.compact-mobile #xp-track {
+  display: block;
+  position: absolute;
+  z-index: 5;
+  background: #0d0806;
+  border: 1px solid rgba(160, 120, 60, 0.65);
+  border-radius: 3px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.8), inset 0 0 3px #000;
+  pointer-events: auto;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+body.touch #hud.compact-mobile #xp-text {
+  display: flex;
+  position: absolute;
+  z-index: 6;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  font: 700 9px/1 var(--font-head);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--gold-bright, #ffe2a0);
+  text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
+  opacity: 0.95;
 }
 
 body.touch #hud.compact-mobile .orb-text {
