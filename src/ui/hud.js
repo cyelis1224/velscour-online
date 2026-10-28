@@ -194,38 +194,6 @@ export const HUD = {
       const potionGap = portrait ? 4 : 6;
       const potionRowW = potionSize * 4 + potionGap * 3;
       const x0 = (bar.width - potionRowW) / 2;
-      const potionY = bar.height - potionSize - (portrait ? 10 : 8);
-      const potionCenterY = potionY + potionSize / 2;
-
-      // Position XP Bar and Level/Class Text directly above the centered potion row
-      const xpTrackH = portrait ? 5 : 6;
-      const xpTrackY = potionY - xpTrackH - (portrait ? 4 : 5);
-      const xpTextH = 13;
-      const xpTextY = xpTrackY - xpTextH - 1;
-
-      if (xp) {
-        Object.assign(xp.style, {
-          left: '50%',
-          transform: 'translateX(-50%)',
-          top: `${xpTrackY}px`,
-          width: `${potionRowW}px`,
-          height: `${xpTrackH}px`,
-          display: 'block',
-        });
-      }
-
-      if (xpText) {
-        Object.assign(xpText.style, {
-          left: '50%',
-          transform: 'translateX(-50%)',
-          top: `${xpTextY}px`,
-          width: 'max-content',
-          maxWidth: '85vw',
-          height: `${xpTextH}px`,
-          display: 'flex',
-          fontSize: portrait ? '8.5px' : '9.5px',
-        });
-      }
 
       const frameW = portrait ? 60 : 68;
       const scale = frameW / 270;
@@ -234,7 +202,54 @@ export const HUD = {
 
       const lifeFrameX = x0 - orbGap - frameW;
       const manaFrameX = x0 + potionRowW + orbGap;
-      const frameY = potionCenterY - 145.5 * scale;
+
+      // Move potions up and position XP bar below them extending between the HP and MP orbs
+      const xpTrackH = portrait ? 8 : 9;
+      const potionToXpGap = portrait ? 4 : 5;
+      const bottomPadding = portrait ? 6 : 5;
+      const xpTrackY = bar.height - xpTrackH - bottomPadding;
+      const potionY = xpTrackY - potionToXpGap - potionSize;
+
+      // Vertically center the orbs to bracket both the potions and the XP bar
+      const clusterH = potionSize + potionToXpGap + xpTrackH;
+      const clusterCenterY = potionY + clusterH / 2;
+      const frameY = clusterCenterY - 145.5 * scale;
+
+      // Extend XP bar between HP and MP orbs (tucking slightly under their outer decorative bezels)
+      const tuck = portrait ? 4 : 6;
+      const xpLeft = lifeFrameX + frameW - tuck;
+      const xpRight = manaFrameX + tuck;
+      const xpWidth = xpRight - xpLeft;
+
+      if (xp) {
+        Object.assign(xp.style, {
+          left: `${xpLeft}px`,
+          top: `${xpTrackY}px`,
+          width: `${xpWidth}px`,
+          height: `${xpTrackH}px`,
+          transform: 'none',
+          display: 'block',
+        });
+      }
+
+      if (xpText) {
+        Object.assign(xpText.style, {
+          left: `${xpLeft}px`,
+          top: `${xpTrackY}px`,
+          width: `${xpWidth}px`,
+          height: `${xpTrackH}px`,
+          transform: 'none',
+          display: 'flex',
+          fontSize: portrait ? '8px' : '9px',
+        });
+      }
+
+      // Keep gauge-box (Rage, Madness, Smite meters) floating cleanly above the potions
+      const gaugeBox = $('#gauge-box');
+      if (gaugeBox) {
+        gaugeBox.style.top = 'auto';
+        gaugeBox.style.bottom = `${bar.height - potionY + 6}px`;
+      }
 
       this.portraitOrbFrames[0].style.cssText = `display:block;left:${lifeFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
       this.portraitOrbFrames[1].style.cssText = `display:block;left:${manaFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
@@ -277,6 +292,11 @@ export const HUD = {
 
       if (xp) xp.removeAttribute('style');
       if (xpText) xpText.removeAttribute('style');
+      const gaugeBox = $('#gauge-box');
+      if (gaugeBox) {
+        gaugeBox.style.top = '';
+        gaugeBox.style.bottom = '';
+      }
 
       this.slots.forEach((s) => {
         const potion = typeof s.map === 'string';

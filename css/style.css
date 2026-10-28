@@ -4004,7 +4004,7 @@ body.touch #hud.compact-mobile #hud-rail {
 body.touch #hud.compact-mobile #xp-track {
   display: block;
   position: absolute;
-  z-index: 5;
+  z-index: 3;
   background: #0d0806;
   border: 1px solid rgba(160, 120, 60, 0.65);
   border-radius: 3px;
@@ -4024,12 +4024,16 @@ body.touch #hud.compact-mobile #xp-text {
   cursor: pointer;
   white-space: nowrap;
   user-select: none;
-  font: 700 9px/1 var(--font-head);
-  letter-spacing: 0.8px;
+  font: 700 8.5px/1 var(--font-head);
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--gold-bright, #ffe2a0);
   text-shadow: 0 0 2px #000, 0 0 4px #000, 0 1px 2px #000;
   opacity: 0.95;
+}
+
+body.touch #hud.compact-mobile #xp-text.show-full {
+  font-size: 7.5px;
 }
 
 body.touch #hud.compact-mobile .orb-text {
@@ -4042,6 +4046,14 @@ body.touch #hud.compact-mobile .potion-slot {
   border-radius: 8px;
   background: rgba(17, 9, 5, .84);
   box-shadow: 0 1px 6px #000, inset 0 0 8px rgba(218, 145, 45, .2);
+}
+
+body.touch #hud.compact-mobile #gauge-box,
+body.touch.portrait #hud.compact-mobile #gauge-box {
+  top: auto;
+  bottom: 68px;
+  width: min(88vw, 320px);
+  z-index: 9;
 }
 
 body.touch.portrait {
@@ -4062,7 +4074,7 @@ body.touch.portrait #hud-img {
 .portrait-orb-frame,
 .mobile-orb-frame {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   display: none;
   pointer-events: none;
 }
