@@ -1038,9 +1038,9 @@ wss.on('connection', (ws) => {
           break;
         }
 
-        const pool = ['catacombs', 'flesh', 'blood_temple', 'forsaken_wilds', 'castle', 'sea_of_sand', 'dark_forest', 'desert_temple', 'crypt', 'shadow', 'obsidian', 'halls'];
+        const pool = ['catacombs', 'castle_keep', 'frozen', 'ice_temple', 'molten', 'fungal', 'sunken', 'blood', 'ashen', 'void', 'gilded', 'plague', 'crystal', 'desert', 'shadow', 'forge', 'abyss', 'thorn', 'storm', 'obsidian', 'flesh', 'serpent', 'shattered', 'library', 'sewers', 'necropolis', 'cathedral', 'amber', 'desert_temple', 'hell', 'astral_plane', 'heavenly'];
         const defaultBiome = pool[Math.abs(((seed * 31 + depth * 7919) ^ 0x5bd1e995) | 0) % pool.length];
-        const initialBiome = (msg.biome && msg.biome !== 'town') ? msg.biome : defaultBiome;
+        const initialBiome = msg.biome || 'town';
         const initialDungeonSeed = (((seed * 31 + depth * 7919) ^ 0x41c64e6d) >>> 0) || 1234567;
 
         const roomData = {
@@ -1052,6 +1052,7 @@ wss.on('connection', (ws) => {
           seed,
           townSeed: seed,
           dungeonSeed: initialDungeonSeed,
+          heresies: Array.isArray(msg.heresies) ? msg.heresies : [],
           startTime: Date.now(),
           hostId: clientData.id,
           hostName: clientData.name,
@@ -1327,12 +1328,14 @@ wss.on('connection', (ws) => {
           if (msg.biome) room.biome = msg.biome;
           if (msg.seed) room.dungeonSeed = msg.seed;
           if (msg.mixId !== undefined) room.mixId = msg.mixId || null;
+          if (Array.isArray(msg.heresies)) room.heresies = msg.heresies;
           broadcastToRoom(clientData.room, {
             type: 'room_depth_sync',
             depth: room.depth,
             biome: room.biome,
             seed: room.dungeonSeed,
             mixId: room.mixId,
+            heresies: room.heresies || [],
             sourcePlayerId: clientData.id,
             sourcePlayerName: clientData.name,
           });
@@ -1348,12 +1351,14 @@ wss.on('connection', (ws) => {
           if (typeof msg.depth === 'number' && msg.depth > 0) {
             room.depth = msg.depth;
           }
+          room.biome = 'town';
           broadcastToRoom(clientData.room, {
             type: 'room_depth_sync',
             depth: room.depth,
             biome: room.biome,
             seed: room.dungeonSeed,
             mixId: room.mixId,
+            heresies: room.heresies || [],
             sourcePlayerId: clientData.id,
             sourcePlayerName: clientData.name,
           });

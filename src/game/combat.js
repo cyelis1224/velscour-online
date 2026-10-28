@@ -258,7 +258,7 @@ export function kill(tgt, src, info = {}) {
     explosionFx(tgt.x, tgt.y, 1.6, 'fire', 'explosion');
     if (world.player && Math.hypot(world.player.x - tgt.x, world.player.y - tgt.y) < 1.8) hit(tgt, world.player, tgt.dmg * 1.5, 'fire', {});
   }
-  if (tgt.split && tgt.scale > 0.6 && tgt.spawnChild) { tgt.spawnChild(); tgt.spawnChild(); }
+  if (tgt.split && tgt.scale > 0.6 && tgt.spawnChild && (!G.room || G.game?.isDungeonAuthority(world?.depth))) { tgt.spawnChild(); tgt.spawnChild(); }
   if (byPlayer && world) {
     world.kills++;
     const p = G.player;

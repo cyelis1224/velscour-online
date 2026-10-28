@@ -426,6 +426,7 @@ function serializeGearItem(item, slot) {
           if (msg.biome) this.currentRoom.biome = msg.biome;
           if (msg.seed) this.currentRoom.dungeonSeed = msg.seed;
           if (msg.mixId !== undefined) this.currentRoom.mixId = msg.mixId;
+          if (Array.isArray(msg.heresies)) this.currentRoom.heresies = msg.heresies;
         }
         this.emit('room_depth_sync', msg);
         break;
@@ -797,7 +798,7 @@ function serializeGearItem(item, slot) {
     });
   }
 
-  sendRoomDepthUpdate(depth, biome, seed, mixId = null) {
+  sendRoomDepthUpdate(depth, biome, seed, mixId = null, heresies = null) {
     if (!this.currentRoom) return;
     this.send({
       type: 'room_depth_update',
@@ -805,10 +806,11 @@ function serializeGearItem(item, slot) {
       biome,
       seed,
       mixId,
+      heresies: Array.isArray(heresies) ? heresies : undefined,
     });
   }
 
-  sendDungeonTransition(depth, biome, seed, mixId = null) {
+  sendDungeonTransition(depth, biome, seed, mixId = null, heresies = null) {
     if (!this.currentRoom) return;
     this.send({
       type: 'game_dungeon_transition',
@@ -816,6 +818,7 @@ function serializeGearItem(item, slot) {
       biome,
       seed,
       mixId,
+      heresies: Array.isArray(heresies) ? heresies : undefined,
     });
   }
 

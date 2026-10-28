@@ -106,7 +106,7 @@ export function heresyTick(world, dt) {
   if (world.legionT !== undefined && !p.dead && !(world.boss && world.boss.awake && !world.boss.dead) && (world.legionT -= dt) <= 0) {
     world.legionT = rand(40, 55);
     const alive = world.creatures.filter((c) => c.pitSpawn && !c.dead).length;
-    if (alive < 8) legionGate(world, p, Math.min(4, 8 - alive, 2 + Math.floor(rand(0, 3))), depthLevel(world.depth || 1));
+    if (alive < 8 && (!G.room || G.game?.isDungeonAuthority(world.depth))) legionGate(world, p, Math.min(4, 8 - alive, 2 + Math.floor(rand(0, 3))), depthLevel(world.depth || 1));
   }
 }
 /**

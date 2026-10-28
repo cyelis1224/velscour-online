@@ -58,7 +58,12 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
 
     // Enter lobby
     await p1.click('button:has-text("Continue")');
+    await p1.waitForSelector('button:has-text("Enter Lobby")');
+    await p1.click('button:has-text("Enter Lobby")');
+
     await p2.click('button:has-text("Continue")');
+    await p2.waitForSelector('button:has-text("Enter Lobby")');
+    await p2.click('button:has-text("Enter Lobby")');
 
     await p1.waitForSelector('#d2-lobby');
     await p2.waitForSelector('#d2-lobby');
@@ -107,10 +112,10 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
       window.VELSCOUR.G.player.y = portal.y;
     });
 
-    // Set dungeon destination to catacombs so it has an exit guardian boss
+    // Set dungeon destination to catacombs and give P1 the 'twins' Heresy
     await p1.evaluate(() => {
       window.VELSCOUR.G.char.nextBiome = 'catacombs';
-      if (window.VELSCOUR.G.room) window.VELSCOUR.G.room.biome = 'catacombs';
+      window.VELSCOUR.G.char.heresy = { on: ['twins'] };
     });
     await p1.waitForFunction(() => {
       const portal = window.VELSCOUR.G.world.portals[0];
@@ -118,9 +123,20 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     }, null, { timeout: 10000 });
     console.log('Both players verified at portal proximity.');
 
-    // P1 enters portal into dungeon
+    // P1 activates portal into dungeon
     console.log('P1 activating portal to dungeon...');
     await p1.evaluate(() => {
+      window.VELSCOUR.game.enterDungeon();
+    });
+
+    // P2 waits for room_depth_sync to propagate P1's choice and heresies
+    await p2.waitForFunction(() => {
+      return window.VELSCOUR.G.room?.biome === 'catacombs' && window.VELSCOUR.G.room?.heresies?.includes('twins');
+    }, null, { timeout: 5000 });
+    console.log('P2 successfully received synced biome (catacombs) and Heresies (twins) from P1!');
+
+    // P2 enters dungeon
+    await p2.evaluate(() => {
       window.VELSCOUR.game.enterDungeon();
     });
 

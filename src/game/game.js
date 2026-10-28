@@ -88,7 +88,7 @@ import { updateAutomapPartyRoster } from '../ui/partyroster.js';
 import { GameChat } from '../ui/chat.js';
 // the Endgame (docs/ENDGAME.md): Heresies, Abyssal Rifts, Velscour Unbound, Infernal Marks
 import { endgameUnlocked, unlockEndgame } from './endgame.js';
-import { heresySpawns, heresyWorld, heresyBegin, heresyTick, heresiesOf, worldRank, MARKS_RANK } from './heresies.js';
+import { heresySpawns, heresyWorld, heresyBegin, heresyTick, heresiesOf, heresyRank, worldRank, MARKS_RANK } from './heresies.js';
 import { createRiftRun, riftTick, riftOpen, riftDepth, riftLevel, fmtTime, riftLeave, RIFT_QUOTA, RIFT_DENSITY } from './rifts.js';
 import { unboundReady, spendKeys, keysOf } from './unbound.js';
 import { grantMarks, saveMarkXp } from './marks.js';
@@ -494,11 +494,13 @@ function attachNetListeners() {
       }
       if (data.seed) G.room.dungeonSeed = data.seed;
       if (data.mixId !== undefined) G.room.mixId = data.mixId;
+      if (Array.isArray(data.heresies)) G.room.heresies = data.heresies;
       if (net.currentRoom) {
         net.currentRoom.depth = G.room.depth;
         net.currentRoom.biome = G.room.biome;
         net.currentRoom.dungeonSeed = G.room.dungeonSeed;
         net.currentRoom.mixId = G.room.mixId;
+        net.currentRoom.heresies = G.room.heresies;
       }
     }
     // If local player had the exit portal choice dialog open on previous floor, refresh it with the selected choice!
@@ -749,6 +751,15 @@ export const game = {
     if (!myId) return true;
     const hostId = G.room.hostId || G.room.players?.[0]?.id;
     if (hostId === myId) return true;
+    // If the room host is present at this dungeon depth, host is always the authority
+    if (G.remotePlayers && hostId) {
+      const hostRp = G.remotePlayers.get(hostId);
+      const st = hostRp?._lastState;
+      if (st && st.worldKind === 'dungeon' && st.depth === depth) {
+        return false;
+      }
+    }
+    // Host is not present at this depth; fallback to lowest ID among players at this depth
     let lowestId = myId;
     if (G.remotePlayers) {
       for (const [id, rp] of G.remotePlayers.entries()) {
@@ -936,6 +947,9 @@ export const game = {
     if (room && room.biome && room.biome !== 'town' && BIOME_BY_ID[room.biome]) {
       return BIOME_BY_ID[room.biome];
     }
+    if (fallbackBiomeId && BIOME_BY_ID[fallbackBiomeId]) {
+      return BIOME_BY_ID[fallbackBiomeId];
+    }
     if (room) {
       const pool = BIOMES.filter((b) => !b.overworld && !b.beta && b.id !== 'throne');
       const s = room.seed || room.townSeed || 1;
@@ -1119,10 +1133,14 @@ export const game = {
       G.room.dungeonSeed = dungeonSeed;
       G.room.depth = depth;
       G.room.biome = biome.id;
-      if (net.connected && !fromNetwork && isNew) {
-        const mix = mixPartner(biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next());
-        G.room.mixId = mix ? mix.id : null;
-        net.sendRoomDepthUpdate(depth, biome.id, dungeonSeed, G.room.mixId);
+      // If room heresies haven't been established for this depth, adopt the portal activator's heresies
+      if (!G.room.heresies || isNew) {
+        G.room.heresies = heresiesOf(c);
+      }
+      const mix = G.room.mixId ? BIOME_BY_ID[G.room.mixId] : (dungeonSeed ? mixPartner(biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next()) : null);
+      G.room.mixId = mix ? mix.id : null;
+      if (net.connected && !fromNetwork) {
+        net.sendRoomDepthUpdate(depth, biome.id, dungeonSeed, G.room.mixId, G.room.heresies);
       }
     }
     const mix = G.room ? (G.room.mixId ? BIOME_BY_ID[G.room.mixId] : (dungeonSeed ? mixPartner(biome, () => new RNG(dungeonSeed ^ 0x3d17a892).next()) : null)) : mixPartner(biome);
@@ -1198,7 +1216,10 @@ export const game = {
     const lvl = depthLevel(depth);
     world.unbound = biome.id === 'throne' && !!G.unboundNext; G.unboundNext = false; // Velscour Unbound (game/unbound.js)
     world.practice = biome.id === 'throne' && depth !== FINAL_DEPTH && !world.unbound; // "final boss" from the skull: Velscour at this depth
-    const heresies = heresyBegin(world, c); // the Heresies (game/heresies.js): twinned packs now, BOSS ROOM phases, the rest as monsters appear
+    const heresies = G.room ? (G.room.heresies || []) : heresyBegin(world, c);
+    if (G.room) {
+      world.heresy = { ids: heresies, rank: heresyRank(heresies) };
+    }
     const monRng = G.room ? new RNG(seed ^ 0x5bf03641) : null;
     const rndVal = () => (monRng ? monRng.next() : Math.random());
     let monsterSeq = 1;
@@ -1470,8 +1491,9 @@ export const game = {
         G.room.biome = cd.id;
         G.room.dungeonSeed = dungeonSeed;
         G.room.mixId = mixId;
+        G.room.heresies = heresiesOf(c);
         if (net.connected) {
-          net.sendRoomDepthUpdate(next, cd.id, dungeonSeed, mixId);
+          net.sendRoomDepthUpdate(next, cd.id, dungeonSeed, mixId, G.room.heresies);
         }
       }
       if (cd.omen !== undefined) c.nextOmen = cd.omen || 'none'; else delete c.nextOmen;
