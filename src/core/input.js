@@ -1,5 +1,7 @@
 // Keyboard, mouse and touch input.
-import { G } from '../state.js';
+import { G, saveSettings } from '../state.js';
+import { camera } from './view.js';
+import { clamp } from './util.js';
 
 const GAME_KEYS = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyW', 'KeyA', 'KeyS', 'KeyD']);
 
@@ -118,8 +120,39 @@ export function initInput(canvas) {
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
   canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') input.mouse.inside = false; });
-  canvas.addEventListener('wheel', (e) => {
+  let saveTimer = null;
+  const debouncedSaveSettings = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveTimer = null; saveSettings(); }, 300);
+  };
+
+  const onWheel = (e) => {
     if (G.mode !== 'game') return;
-    G.settings.zoom = Math.min(1.6, Math.max(0.7, (G.settings.zoom || 1) * (e.deltaY > 0 ? 0.94 : 1.06)));
-  }, { passive: true });
+    const target = e.target;
+    // Don't zoom if scrolling inside interactive UI panels, dialogs, chat, or form controls
+    if (target && target.closest && target.closest('.panel, .dialog-box, .screen, #chat-panel, #chat-box, #chat-history, select, textarea, input')) {
+      return;
+    }
+    // Check if target or any ancestor is a scrollable container
+    let el = target;
+    while (el && el !== document.body && el !== document.documentElement && el !== canvas) {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        const style = window.getComputedStyle(el);
+        if (style.overflowY === 'auto' || style.overflowY === 'scroll') return;
+      }
+      el = el.parentElement;
+    }
+
+    e.preventDefault();
+    const dy = clamp(e.deltaMode === 1 ? e.deltaY * 33 : (e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY), -300, 300);
+    const factor = Math.exp(-dy * 0.001);
+    const current = G.settings.zoom || 1;
+    const next = clamp(Math.round(current * factor * 100) / 100, 0.7, 1.6);
+    if (Math.abs(next - current) > 0.001) {
+      G.settings.zoom = next;
+      camera.computeZoom();
+      debouncedSaveSettings();
+    }
+  };
+  window.addEventListener('wheel', onWheel, { passive: false });
 }
