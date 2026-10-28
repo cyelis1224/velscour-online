@@ -223,6 +223,21 @@ function attachNetListeners() {
     }
   });
 
+  net.on('player_disconnected', (data) => {
+    UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName || 'A player')}</b> lost connection (waiting for reconnect...).`, '#ffd860');
+  });
+
+  net.on('player_reconnected', (data) => {
+    UI.log(`<b style="color:#7ab8ff">${escapeHtml(data.playerName || 'A player')}</b> reconnected!`, '#48e868');
+  });
+
+  net.on('room_reconnected', (data) => {
+    if (data && data.room) {
+      G.room = data.room;
+      UI.log(`Link restored to room <b style="color:#ffd860">${escapeHtml(data.room.name)}</b>!`, '#48e868');
+    }
+  });
+
   net.on('game_player_state', (state) => {
     if (!G.world || state.id === net.myId) return;
     if (!G.remotePlayers) G.remotePlayers = new Map();

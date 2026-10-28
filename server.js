@@ -583,6 +583,7 @@ let clientIdSeq = 1;
 const clients = new Map(); // ws -> clientData
 const rooms = new Map();   // roomName -> roomData
 const DEFAULT_CHANNEL = 'Velscour En-1';
+const ROOM_GRACE_PERIOD_MS = 90000; // 90s grace period before tearing down an empty room on unexpected disconnect
 
 function broadcastToChannel(channel, msg, excludeWs = null) {
   const json = typeof msg === 'string' ? msg : JSON.stringify(msg);
@@ -623,20 +624,24 @@ function getRoomList() {
   const list = [];
   const now = Date.now();
   for (const [name, r] of rooms) {
+    const activePlayers = r.players.filter(p => !p.disconnected);
     list.push({
       name,
       hasPassword: !!r.password,
       maxPlayers: r.maxPlayers,
       playerCount: r.players.length,
+      activeCount: activePlayers.length,
       hostName: r.hostName,
       depth: r.depth,
       biome: r.biome,
       elapsed: Math.floor((now - r.startTime) / 1000),
+      isHostAway: activePlayers.length === 0,
       players: r.players.map(p => ({
         name: p.name,
         classId: p.classId,
         level: p.level,
         title: p.title,
+        disconnected: !!p.disconnected,
       })),
     });
   }
@@ -772,14 +777,49 @@ wss.on('connection', (ws) => {
     try { msg = JSON.parse(raw); } catch (e) { return; }
 
     switch (msg.type) {
+      case 'ping': {
+        clientData.lastSeen = Date.now();
+        ws.send(JSON.stringify({ type: 'pong', time: Date.now() }));
+        break;
+      }
+
       case 'enter_lobby': {
+        if (msg.reconnectId) {
+          clientData.id = msg.reconnectId;
+        }
         clientData.name = (msg.name || 'Hero').slice(0, 24);
         clientData.classId = msg.classId || 'paladin';
         clientData.level = parseInt(msg.level, 10) || 1;
         clientData.title = msg.title || (clientData.level >= 50 ? 'Matriarch' : clientData.level >= 20 ? 'Slayer' : 'Hero');
         clientData.gear = msg.gear || null;
-        clientData.room = null;
         clientData.channel = DEFAULT_CHANNEL;
+        clientData.disconnected = false;
+
+        // Check if reconnecting to an existing room still in its grace period
+        let reconnectedRoom = null;
+        if (msg.reconnectRoom && rooms.has(msg.reconnectRoom)) {
+          const room = rooms.get(msg.reconnectRoom);
+          if (room) {
+            if (room.cleanupTimer) {
+              clearTimeout(room.cleanupTimer);
+              room.cleanupTimer = null;
+            }
+            clientData.room = room.name;
+            const existingIdx = room.players.findIndex(p => p.id === clientData.id || p.name === clientData.name);
+            if (existingIdx >= 0) {
+              room.players[existingIdx] = clientData;
+            } else {
+              room.players.push(clientData);
+            }
+            if (room.hostId === clientData.id || room.hostName === clientData.name || room.players.length === 1) {
+              room.hostId = clientData.id;
+              room.hostName = clientData.name;
+            }
+            reconnectedRoom = room;
+          }
+        } else {
+          clientData.room = null;
+        }
 
         // Send welcome packet
         ws.send(JSON.stringify({
@@ -790,6 +830,34 @@ wss.on('connection', (ws) => {
           rooms: getRoomList(),
           serverVersion: getPackageInfo().version || '1.0.1',
         }));
+
+        if (reconnectedRoom) {
+          ws.send(JSON.stringify({
+            type: 'room_reconnected',
+            room: {
+              name: reconnectedRoom.name,
+              seed: reconnectedRoom.seed,
+              townSeed: reconnectedRoom.townSeed || reconnectedRoom.seed,
+              dungeonSeed: reconnectedRoom.dungeonSeed || null,
+              depth: reconnectedRoom.depth,
+              biome: reconnectedRoom.biome,
+              hostId: reconnectedRoom.hostId,
+              players: reconnectedRoom.players.map(p => ({
+                id: p.id,
+                name: p.name,
+                classId: p.classId,
+                level: p.level,
+                title: p.title,
+                gear: p.gear,
+              })),
+            },
+          }));
+          broadcastToRoom(reconnectedRoom.name, {
+            type: 'player_reconnected',
+            playerId: clientData.id,
+            playerName: clientData.name,
+          }, ws);
+        }
 
         // Send Diablo 2 Battle.net welcome system lines
         const totalOnline = clients.size;
@@ -1065,6 +1133,7 @@ wss.on('connection', (ws) => {
           });
 
           if (room.players.length === 0) {
+            if (room.cleanupTimer) clearTimeout(room.cleanupTimer);
             rooms.delete(roomName);
           } else if (room.hostId === clientData.id) {
             room.hostId = room.players[0].id;
@@ -1271,22 +1340,39 @@ wss.on('connection', (ws) => {
     if (clientData.room) {
       const room = rooms.get(clientData.room);
       if (room) {
-        room.players = room.players.filter(p => p.id !== clientData.id);
-        broadcastToRoom(clientData.room, {
-          type: 'player_left_room',
-          playerId: clientData.id,
-          playerName: clientData.name,
-        });
-        if (room.players.length === 0) {
-          rooms.delete(clientData.room);
-        } else if (room.hostId === clientData.id) {
-          room.hostId = room.players[0].id;
-          room.hostName = room.players[0].name;
+        const p = room.players.find(pl => pl.id === clientData.id);
+        if (p) {
+          p.disconnected = true;
+          p.disconnectedAt = Date.now();
+        }
+        const activePlayers = room.players.filter(pl => !pl.disconnected);
+        if (activePlayers.length === 0) {
+          // Grace period: keep room alive for 90s so minimized host/player can return!
+          if (!room.cleanupTimer) {
+            const roomName = clientData.room;
+            room.cleanupTimer = setTimeout(() => {
+              const r = rooms.get(roomName);
+              if (r && r.players.every(pl => pl.disconnected)) {
+                rooms.delete(roomName);
+                broadcastLobbyUpdate();
+              }
+            }, ROOM_GRACE_PERIOD_MS);
+          }
+        } else {
           broadcastToRoom(clientData.room, {
-            type: 'host_migrated',
-            hostId: room.hostId,
-            hostName: room.hostName,
+            type: 'player_disconnected',
+            playerId: clientData.id,
+            playerName: clientData.name,
           });
+          if (room.hostId === clientData.id) {
+            room.hostId = activePlayers[0].id;
+            room.hostName = activePlayers[0].name;
+            broadcastToRoom(clientData.room, {
+              type: 'host_migrated',
+              hostId: room.hostId,
+              hostName: room.hostName,
+            });
+          }
         }
       }
     }

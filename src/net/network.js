@@ -12,9 +12,15 @@ class NetworkManager {
     this.rooms = [];
     this.myId = null;
     this.charData = null;
+    this.activeRoomName = null;
     this.pingInterval = null;
     this.simTimer = null;
     this.broadcastChannel = null;
+    this.shouldReconnect = false;
+    this.reconnectAttempts = 0;
+    this.reconnectTimer = null;
+    this.lastPingTime = 0;
+    this.lastPongTime = 0;
 
     if (typeof BroadcastChannel !== 'undefined') {
       try {
@@ -23,6 +29,19 @@ class NetworkManager {
       } catch (err) {
         console.warn('BroadcastChannel not available', err);
       }
+    }
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.handleForegroundResume();
+        }
+      });
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', () => this.handleForegroundResume());
+      window.addEventListener('pageshow', () => this.handleForegroundResume());
+      window.addEventListener('online', () => this.handleForegroundResume());
     }
   }
 
@@ -60,11 +79,16 @@ class NetworkManager {
     }
   }
 
-  connect(charData) {
-    this.charData = charData;
-    this.myId = 'player_' + Math.random().toString(36).slice(2, 9);
+  connect(charData, isReconnect = false) {
+    if (charData) this.charData = charData;
+    if (!this.charData) return;
+    this.myId = this.myId || ('player_' + Math.random().toString(36).slice(2, 9));
+    this.shouldReconnect = true;
+    if (!isReconnect) {
+      this.reconnectAttempts = 0;
+    }
 
-    // Clean up existing connection & simulated timers
+    // Clean up existing connection & timers
     if (this.ws) {
       this.ws.onopen = null;
       this.ws.onmessage = null;
@@ -109,7 +133,7 @@ class NetworkManager {
       this.ws = new WebSocket(url);
     } catch (e) {
       console.warn('WebSocket connect error, using offline/simulated lobby', e);
-      this.startSimulatedMode();
+      if (!isReconnect) this.startSimulatedMode();
       return;
     }
 
@@ -128,24 +152,33 @@ function serializeGearItem(item, slot) {
     this.ws.onopen = () => {
       this.connected = true;
       this.simulated = false;
+      this.reconnectAttempts = 0;
+      this.startHeartbeat();
+      const activeRoom = this.activeRoomName || (this.currentRoom ? this.currentRoom.name : null) || (G.room ? G.room.name : null);
       this.send({
         type: 'enter_lobby',
-        name: charData.name,
-        classId: charData.classId,
-        level: charData.level,
-        title: charData.level >= 50 ? 'Matriarch' : charData.level >= 20 ? 'Slayer' : 'Hero',
+        name: this.charData.name,
+        classId: this.charData.classId,
+        level: this.charData.level,
+        title: this.charData.level >= 50 ? 'Matriarch' : this.charData.level >= 20 ? 'Slayer' : 'Hero',
+        reconnectId: this.myId,
+        reconnectRoom: activeRoom || null,
         gear: {
-          head: serializeGearItem(charData.equip?.head, 'head'),
-          body: serializeGearItem(charData.equip?.body, 'body'),
-          weapon: serializeGearItem(charData.equip?.weapon, 'weapon'),
+          head: serializeGearItem(this.charData.equip?.head, 'head'),
+          body: serializeGearItem(this.charData.equip?.body, 'body'),
+          weapon: serializeGearItem(this.charData.equip?.weapon, 'weapon'),
         },
       });
-      this.emit('connected', { url });
+      this.emit('connected', { url, isReconnect });
     };
 
     this.ws.onmessage = (event) => {
       let data;
       try { data = JSON.parse(event.data); } catch (e) { return; }
+      if (data.type === 'pong') {
+        this.lastPongTime = Date.now();
+        return;
+      }
       this.handleServerMessage(data);
     };
 
@@ -158,20 +191,71 @@ function serializeGearItem(item, slot) {
       }
       if (wasConnected) {
         this.emit('disconnected', {});
-      }
-      // If we could not connect to server, start simulated/local multiplayer exactly once
-      if (!wasConnected && !this.simulated) {
+        if (this.shouldReconnect) {
+          this.scheduleReconnect();
+        }
+      } else if (!this.simulated && !isReconnect) {
+        // If initial connection failed on first launch
         this.startSimulatedMode();
       }
     };
 
     this.ws.onerror = (err) => {
-      // Do NOT trigger startSimulatedMode here, because onclose immediately follows onerror in all browsers
       console.warn('WebSocket error', err);
     };
   }
 
+  startHeartbeat() {
+    if (this.pingInterval) clearInterval(this.pingInterval);
+    this.pingInterval = setInterval(() => {
+      if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.lastPingTime = Date.now();
+        this.send({ type: 'ping' });
+      }
+    }, 12000);
+  }
+
+  scheduleReconnect() {
+    if (!this.shouldReconnect || !this.charData) return;
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    const delay = Math.min(1000 * Math.pow(1.4, this.reconnectAttempts), 6000);
+    this.reconnectAttempts++;
+    this.emit('reconnecting', { attempt: this.reconnectAttempts, delay });
+    this.reconnectTimer = setTimeout(() => {
+      if (this.shouldReconnect && (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN)) {
+        this.connect(this.charData, true);
+      }
+    }, delay);
+  }
+
+  handleForegroundResume() {
+    if (!this.shouldReconnect && G.mode !== 'lobby' && !G.room) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    const isOpen = this.connected && this.ws && this.ws.readyState === WebSocket.OPEN;
+    if (!isOpen) {
+      this.reconnectAttempts = 0;
+      const char = this.charData || G.char;
+      if (char) {
+        this.connect(char, true);
+      }
+    } else {
+      this.send({ type: 'ping' });
+      if (G.mode === 'lobby') {
+        this.send({ type: 'refresh_lobby' });
+      }
+    }
+  }
+
   disconnect() {
+    this.shouldReconnect = false;
+    this.activeRoomName = null;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
@@ -197,7 +281,6 @@ function serializeGearItem(item, slot) {
     this.currentRoom = null;
     this.channelPlayers = [];
     this.rooms = [];
-    this.myId = null;
     this.emit('disconnected', {});
   }
 
@@ -229,8 +312,18 @@ function serializeGearItem(item, slot) {
         this.emit('chat', msg);
         break;
 
+      case 'room_reconnected':
+        this.currentRoom = msg.room;
+        this.activeRoomName = msg.room.name;
+        this.emit('room_reconnected', msg.room);
+        if (G.mode === 'lobby') {
+          this.emit('room_joined', msg.room);
+        }
+        break;
+
       case 'room_joined':
         this.currentRoom = msg.room;
+        this.activeRoomName = msg.room.name;
         this.emit('room_joined', msg.room);
         break;
 
@@ -505,12 +598,15 @@ function serializeGearItem(item, slot) {
   }
 
   refreshLobby() {
-    if (this.connected) {
+    if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.send({ type: 'refresh_lobby' });
+    } else if (this.charData) {
+      this.connect(this.charData, true);
     }
   }
 
   createRoom(opts) {
+    this.activeRoomName = opts.name || `${this.charData?.name}'s Game`;
     if (this.connected) {
       this.send({
         type: 'create_room',
@@ -545,6 +641,7 @@ function serializeGearItem(item, slot) {
   }
 
   joinRoom(name, password = '') {
+    this.activeRoomName = name;
     if (this.connected) {
       this.send({ type: 'join_room', name, password });
     } else {
@@ -578,10 +675,11 @@ function serializeGearItem(item, slot) {
   }
 
   leaveRoom() {
+    this.activeRoomName = null;
+    this.currentRoom = null;
     if (this.connected) {
       this.send({ type: 'leave_room' });
     }
-    this.currentRoom = null;
   }
 
   sendPlayerState(state) {

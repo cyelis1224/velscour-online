@@ -514,7 +514,7 @@ button {
    -------------------------------------------------------------------------- */
 #special-actions {
   position: absolute;
-  left: max(16px, calc(50% - var(--hud-w) * 0.5 - 124px));
+  left: max(8px, calc(50% - var(--hud-w) * 0.5 - 86px));
   bottom: 16px;
   display: flex;
   flex-direction: row;
@@ -4116,9 +4116,10 @@ body.touch {
   --hud-w: min(56vw, calc(100vh * 1.25));
 }
 
-/* nudge the bar left, clear of the skill buttons and their page flip */
+/* Center the bottom HUD bar */
 body.touch #hud-bar {
-  left: calc(50% - 4vw);
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 body.touch #minimap-wrap {

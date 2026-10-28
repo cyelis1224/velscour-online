@@ -20,6 +20,9 @@ function detachLobbyListeners() {
     net.off('room_joined', activeLobbyListeners.onRoomJoined);
     net.off('connected', activeLobbyListeners.onConnected);
     net.off('disconnected', activeLobbyListeners.onDisconnected);
+    if (activeLobbyListeners.onReconnecting) {
+      net.off('reconnecting', activeLobbyListeners.onReconnecting);
+    }
     activeLobbyListeners = null;
   }
 }
@@ -397,7 +400,8 @@ export function openLobby(char, onBack) {
 
       const lockIcon = r.hasPassword ? '<span style="color:#ff8030;font-size:11px">&#128274; </span>' : '';
       const depthBadge = `<span class="d2-room-depth" style="color:#d4a359;font-size:12px;font-weight:normal;margin-left:6px;">[Depth ${r.depth || 1}]</span>`;
-      row.innerHTML = `<span>${lockIcon}${escapeHtml(r.name)} ${depthBadge}</span><span>${r.playerCount}/${r.maxPlayers}</span>`;
+      const awayBadge = r.isHostAway ? '<span style="color:#ffd860;font-size:11px;font-style:italic;margin-left:4px;">(Away)</span>' : '';
+      row.innerHTML = `<span>${lockIcon}${escapeHtml(r.name)} ${depthBadge}${awayBadge}</span><span>${r.playerCount}/${r.maxPlayers}</span>`;
 
       row.onclick = () => {
         sfx('ui');
@@ -437,14 +441,19 @@ export function openLobby(char, onBack) {
     playersEl.innerHTML = '';
     for (const p of r.players || []) {
       const pRow = el('div', 'd2-prev-player-item');
-      pRow.innerHTML = `&bull; <b>${escapeHtml(p.name)}</b> <span class="d2-prev-player-sub">Level ${p.level} ${CLASSES[p.classId]?.name || p.classId}</span>`;
+      const awayTag = p.disconnected ? ' <span style="color:#ffd860;font-size:10px;font-style:italic">(Reconnecting...)</span>' : '';
+      pRow.innerHTML = `&bull; <b>${escapeHtml(p.name)}</b> <span class="d2-prev-player-sub">Level ${p.level} ${CLASSES[p.classId]?.name || p.classId}${awayTag}</span>`;
       playersEl.appendChild(pRow);
     }
   }
 
   cancelJoinBtn.onclick = () => {
     sfx('ui');
-    net.refreshLobby();
+    if (!net.connected) {
+      net.connect(char);
+    } else {
+      net.refreshLobby();
+    }
     renderRoomList(net.rooms);
   };
 
@@ -533,6 +542,9 @@ export function openLobby(char, onBack) {
     const hostLabel = (net && net.targetHost) || 'velscour.dagyr.me:8123';
     if (net.connected) {
       sub.innerHTML = `<span style="color:#48e868;font-weight:700">&#9679; ONLINE</span> &middot; Multiplayer Realm &middot; <span style="color:#a8977c">Host: ${hostLabel}</span>`;
+    } else if (net.shouldReconnect) {
+      const attemptStr = net.reconnectAttempts > 0 ? ` (Attempt ${net.reconnectAttempts})` : '';
+      sub.innerHTML = `<span style="color:#ffd860;font-weight:700">&#8635; RECONNECTING${attemptStr}...</span> &middot; Re-establishing link to <span style="color:#ffd860">${hostLabel}</span>`;
     } else {
       sub.innerHTML = `<span style="color:#ffb040;font-weight:700">&#9675; OFFLINE (Simulated)</span> &middot; Connecting to <span style="color:#ffd860">${hostLabel}</span>`;
     }
@@ -569,14 +581,16 @@ export function openLobby(char, onBack) {
 
   const onConnected = () => updateConnectionBadge();
   const onDisconnected = () => updateConnectionBadge();
+  const onReconnecting = () => updateConnectionBadge();
 
-  activeLobbyListeners = { onChat, onLobbyUpdate, onRoomError, onRoomJoined, onConnected, onDisconnected };
+  activeLobbyListeners = { onChat, onLobbyUpdate, onRoomError, onRoomJoined, onConnected, onDisconnected, onReconnecting };
   net.on('chat', onChat);
   net.on('lobby_update', onLobbyUpdate);
   net.on('room_error', onRoomError);
   net.on('room_joined', onRoomJoined);
   net.on('connected', onConnected);
   net.on('disconnected', onDisconnected);
+  net.on('reconnecting', onReconnecting);
 
   // Initial render
   updateConnectionBadge();

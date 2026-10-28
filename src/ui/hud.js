@@ -265,7 +265,7 @@ export const HUD = {
         const lifeScreenLeft = hudBarRect.left + lifeFrameX;
         const specW = portrait ? 96 : 112;
         if (lifeScreenLeft > specW + 10) {
-          const leftPos = Math.max(12, Math.floor((lifeScreenLeft - specW) / 2));
+          const leftPos = Math.max(8, lifeScreenLeft - specW - 8);
           spec.style.left = `${leftPos}px`;
           spec.style.bottom = `${hudBarRect.height - potionY - potionSize}px`;
           spec.classList.remove('compact-portrait');
