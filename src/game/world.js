@@ -211,6 +211,20 @@ export class World {
     const maxSimDistSq = 28 * 28;
     for (const c of this.creatures) {
       if (c === p || c.dead) continue;
+      // on non-authority clients in multiplayer dungeon, smoothly interpolate monster position to net target every frame
+      if (c.team === 'enemy' && c.netTargetX != null && G.room && !(G.game && G.game.isDungeonAuthority(this.depth))) {
+        const dx = c.netTargetX - c.x;
+        const dy = c.netTargetY - c.y;
+        const d = Math.hypot(dx, dy);
+        if (d > 0.02) {
+          const step = Math.min(1, dt * 14);
+          c.x += dx * step;
+          c.y += dy * step;
+          c.moving = true;
+        } else {
+          c.moving = false;
+        }
+      }
       // only simulate creatures near the action (near any active player or awake, or bosses)
       if (c.team === 'enemy' && !c.awake && !c.isRaid && c.rank !== 'boss' && c !== this.boss) {
         const nearPlayer = activePlayers.some(pl => dist2(c.x, c.y, pl.x, pl.y) <= maxSimDistSq);

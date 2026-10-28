@@ -396,6 +396,10 @@ function serializeGearItem(item, slot) {
         this.emit('game_monsters_state', msg);
         break;
 
+      case 'dungeon_killed_sync':
+        this.emit('dungeon_killed_sync', msg);
+        break;
+
       case 'game_monster_spawn':
         this.emit('game_monster_spawn', msg);
         break;
@@ -512,7 +516,7 @@ function serializeGearItem(item, slot) {
       {
         name: 'Tal Set4ur Ber',
         hasPassword: true,
-        maxPlayers: 8,
+        maxPlayers: 4,
         playerCount: 3,
         hostName: 'Xplicittt',
         depth: 30,
@@ -527,7 +531,7 @@ function serializeGearItem(item, slot) {
       {
         name: 'Trist 3',
         hasPassword: false,
-        maxPlayers: 8,
+        maxPlayers: 4,
         playerCount: 3,
         hostName: 'Rawr Kill Npc',
         depth: 3,
@@ -542,7 +546,7 @@ function serializeGearItem(item, slot) {
       {
         name: 'Drop Park City',
         hasPassword: false,
-        maxPlayers: 8,
+        maxPlayers: 4,
         playerCount: 1,
         hostName: 'DropBot',
         depth: 0,
@@ -553,7 +557,7 @@ function serializeGearItem(item, slot) {
       {
         name: 'Xxbaal-24',
         hasPassword: false,
-        maxPlayers: 8,
+        maxPlayers: 4,
         playerCount: 2,
         hostName: 'BaalRunner',
         depth: 55,
@@ -638,7 +642,7 @@ function serializeGearItem(item, slot) {
         type: 'create_room',
         name: opts.name,
         password: opts.password,
-        maxPlayers: opts.maxPlayers || 8,
+        maxPlayers: opts.maxPlayers || 4,
         depth: Math.max(1, parseInt(opts.depth, 10) || 1),
         biome: opts.biome || 'town',
         seed: Math.floor(Math.random() * 1e9) + 1,
@@ -716,7 +720,7 @@ function serializeGearItem(item, slot) {
     });
   }
 
-  sendSkillCast(skillId, x, y, targetId = null) {
+  sendSkillCast(skillId, x, y, targetId = null, level = 1) {
     if (!this.currentRoom) return;
     this.send({
       type: 'game_skill_cast',
@@ -724,6 +728,7 @@ function serializeGearItem(item, slot) {
       x,
       y,
       targetId,
+      level,
     });
   }
 
@@ -744,11 +749,20 @@ function serializeGearItem(item, slot) {
     });
   }
 
-  sendMonstersState(monsters, depth = 0) {
+  sendMonstersState(monsters, depth = 0, killed = []) {
     if (!this.currentRoom) return;
     this.send({
       type: 'game_monsters_state',
       monsters,
+      depth,
+      killed,
+    });
+  }
+
+  requestDungeonState(depth = 1) {
+    if (!this.currentRoom) return;
+    this.send({
+      type: 'request_dungeon_state',
       depth,
     });
   }

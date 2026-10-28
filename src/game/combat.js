@@ -107,11 +107,15 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
   if (tgt.vel) dmg = tgt.vel.absorb(dmg); // Velscour's life gates and damage cap (game/velscour.js)
 
   const byHero = !tgt.isPlayer && tgt.team !== 'player' && (fromPlayer || (src && src.team === 'player'));
+  if (src?.isRemotePlayer) {
+    if (!o.silent && el) hitSpark(tgt.x, tgt.y, 28, el);
+    return;
+  }
   if (byHero) Meter.add(Math.min(dmg, Math.max(0, tgt.hp)));
   if (byHero && src && src.isPlayer && !o.dot) G.lastHit = tgt; // the HUD's target window
   if (byHero && src && src.isPlayer && o.sk && !o.dot) classHitFx(src, tgt, o.sk, el); // the class's own splash (gfx/classfx.js)
   tgt.hp -= dmg;
-  if (G.room && byHero && !o.fromNetwork && net.connected) {
+  if (G.room && byHero && !o.fromNetwork && !src?.isRemotePlayer && net.connected) {
     net.sendMonsterHit(tgt.idx || 0, dmg, crit, el, tgt.x, tgt.y, tgt.netId, tgt.hp <= 0, G.world?.kind, G.world?.depth || 0);
   }
   if (tgt.isPlayer && !o.dot && src && src !== tgt && tgt.st.procs && tgt.st.procs.length) relicProc(tgt, 'hurt', src, dmg);
@@ -228,6 +232,22 @@ export function kill(tgt, src, info = {}) {
   tgt.dead = true;
   tgt.hp = 0;
   const world = tgt.world;
+  if (tgt.team === 'enemy') {
+    const kId = tgt.netId || tgt.idx;
+    if (kId != null) {
+      if (world) {
+        if (!world.killedMonsterIds) world.killedMonsterIds = new Set();
+        world.killedMonsterIds.add(kId);
+      }
+      if (G.room) {
+        if (!G.room.killedMonsters) G.room.killedMonsters = new Map();
+        const d = (world && world.depth) || G.room.depth || 1;
+        let set = G.room.killedMonsters.get(d);
+        if (!set) { set = new Set(); G.room.killedMonsters.set(d, set); }
+        set.add(kId);
+      }
+    }
+  }
   const owner = src && src.owner ? src.owner : src;
   const byPlayer = owner && (owner.isPlayer || owner.team === 'player');
   if (tgt.onDeath) tgt.onDeath(src);

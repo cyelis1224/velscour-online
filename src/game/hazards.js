@@ -540,8 +540,8 @@ export class Whirl {
     // The Barbarian's full 100 Rage lasts ten seconds while spinning.
     if (this.rage) {
       s.rage = Math.max(0, (s.rage || 0) - 10 * dt);
-      s.char.rage = s.rage;
-      if (s.rage <= 0) { s.channel = null; return false; }
+      if (s.char) s.char.rage = s.rage;
+      if (s.rage <= 0 && !s.isRemotePlayer) { s.channel = null; return false; }
     }
     // While spinning, honor the normal autopilot waypoint / manual movement vector.
     // Never drive straight at an old target through a room's walls.

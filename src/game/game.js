@@ -346,7 +346,7 @@ function attachNetListeners() {
     if (!G.world || data.playerId === net.myId) return;
     const rp = G.remotePlayers?.get(data.playerId);
     if (rp && rp.world === G.world && G.world.creatures.includes(rp)) {
-      rp.onCastSkill(data.skillId, data.x, data.y);
+      rp.onCastSkill(data.skillId, data.x, data.y, data.targetId, data.level);
     }
   });
 
@@ -382,7 +382,10 @@ function attachNetListeners() {
 
     for (const mon of data.monsters || []) {
       let existing = G.world.creatures.find(c => c.team === 'enemy' && (c.netId === mon.netId || (mon.idx && c.idx === mon.idx)));
-      if (existing) continue;
+      if (existing) {
+        existing.ambusher = true;
+        continue;
+      }
 
       const m = makeMonster(G.world, mon.arch || 'ghoul', G.world.biome, mon.lvl || 1, mon.rank || 'normal', mon.x, mon.y, 0, mon.look);
       m.netId = mon.netId;
@@ -489,6 +492,10 @@ function attachNetListeners() {
           applyTrait(m, tr);
         }
       }
+      if (data.ambusher) {
+        m.ambusher = true;
+        m.hunter = true;
+      }
       if (G.world.raid && (data.name?.includes('Royal Guard') || data.arch?.includes('colossus') || data.isRaidAdd)) {
         G.world.raid.minions.push(m);
       }
@@ -496,6 +503,10 @@ function attachNetListeners() {
 
     m.netId = data.netId;
     if (data.idx) m.idx = data.idx;
+    if (data.ambusher) {
+      m.ambusher = true;
+      m.hunter = true;
+    }
     m.fromNetwork = true;
     G.world.add(m);
 
@@ -508,6 +519,27 @@ function attachNetListeners() {
     if (!G.world || !G.world.creatures || G.world.kind !== 'dungeon') return;
     if (data.depth && data.depth !== G.world.depth) return;
     if (game.isDungeonAuthority(G.world.depth)) return;
+
+    // Purge monsters that were already killed on the authority
+    if (Array.isArray(data.killed) && data.killed.length > 0) {
+      if (!G.world.killedMonsterIds) G.world.killedMonsterIds = new Set();
+      for (const kId of data.killed) {
+        G.world.killedMonsterIds.add(kId);
+        if (G.room) {
+          if (!G.room.killedMonsters) G.room.killedMonsters = new Map();
+          let set = G.room.killedMonsters.get(G.world.depth);
+          if (!set) { set = new Set(); G.room.killedMonsters.set(G.world.depth, set); }
+          set.add(kId);
+        }
+      }
+      G.world.creatures = G.world.creatures.filter(c => {
+        if (c.team !== 'enemy' || c.dead) return true;
+        if (c.netId && G.world.killedMonsterIds.has(c.netId)) return false;
+        if (c.idx != null && G.world.killedMonsterIds.has(c.idx)) return false;
+        return true;
+      });
+    }
+
     for (const s of data.monsters || []) {
       let m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && (c.netId === s.id || c.idx === s.id));
       if (!m && s.id && s.hp > 0 && (s.arch || s.isWard || s.vk)) {
@@ -528,6 +560,7 @@ function attachNetListeners() {
           static: s.static,
           fly: s.fly,
           color: s.color,
+          ambusher: !!s.ambusher,
         });
         m = G.world.creatures.find(c => c.team === 'enemy' && !c.dead && (c.netId === s.id || c.idx === s.id));
       }
@@ -549,16 +582,34 @@ function attachNetListeners() {
             }
           }
           if (s.f !== undefined) m.facing = s.f;
+          m.netTargetX = s.x;
+          m.netTargetY = s.y;
           const d2 = dist2(m.x, m.y, s.x, s.y);
-          if (d2 > 9) {
+          if (d2 > 16) {
             m.x = s.x;
             m.y = s.y;
-          } else if (d2 > 0.04) {
-            m.x += (s.x - m.x) * 0.4;
-            m.y += (s.y - m.y) * 0.4;
           }
         }
       }
+    }
+  });
+
+  net.on('dungeon_killed_sync', (data) => {
+    if (!G.room) return;
+    if (!G.room.killedMonsters) G.room.killedMonsters = new Map();
+    let set = G.room.killedMonsters.get(data.depth);
+    if (!set) { set = new Set(); G.room.killedMonsters.set(data.depth, set); }
+    for (const id of data.killed || []) set.add(id);
+
+    if (G.world && G.world.kind === 'dungeon' && G.world.depth === data.depth) {
+      if (!G.world.killedMonsterIds) G.world.killedMonsterIds = new Set();
+      for (const id of data.killed || []) G.world.killedMonsterIds.add(id);
+      G.world.creatures = G.world.creatures.filter(c => {
+        if (c.team !== 'enemy' || c.dead) return true;
+        if (c.netId && set.has(c.netId)) return false;
+        if (c.idx != null && set.has(c.idx)) return false;
+        return true;
+      });
     }
   });
 
@@ -1236,6 +1287,9 @@ export const game = {
     setTimeout(async () => {
       try { await this.loadLevelArt(biome, mix); } catch (e) { console.warn(e); }
       try {
+        if (G.room && net.connected) {
+          net.requestDungeonState(depth);
+        }
         this.buildDungeon(depth, biome, mix);
         // the level's monster art (set 2 sheets load per level); a failed sheet falls back to pixel sprites
         const w = G.world;
@@ -1342,6 +1396,19 @@ export const game = {
         if (trait && (i === 0 || ['hunter', 'phaser', 'burrower'].includes(trait))) applyTrait(m, trait);
         if (s.champ && i === 0) makeElite(m, 'champion', depth, world, rndVal);
         world.add(m);
+      }
+    }
+    if (G.room && G.room.killedMonsters) {
+      const killed = G.room.killedMonsters.get(depth);
+      if (killed && killed.size > 0) {
+        if (!world.killedMonsterIds) world.killedMonsterIds = new Set();
+        for (const id of killed) world.killedMonsterIds.add(id);
+        world.creatures = world.creatures.filter(c => {
+          if (c.team !== 'enemy') return true;
+          if (c.netId && killed.has(c.netId)) return false;
+          if (c.idx != null && killed.has(c.idx)) return false;
+          return true;
+        });
       }
     }
     world.roster = [...new Set(gen.spawns.filter((s) => s.arch && !['raid', 'boss'].includes(s.rank)).map((s) => s.arch))];
@@ -2095,30 +2162,42 @@ export const game = {
               }
             }
           }
+          const equipHead = G.char?.equip?.head;
+          const equipBody = G.char?.equip?.body;
+          const gearKey = (equipHead ? equipHead.base + (equipHead.look ? equipHead.look.join(',') : '') : '') + '|' +
+                          (equipBody ? equipBody.base + (equipBody.look ? equipBody.look.join(',') : '') : '');
+          const gearChanged = (!this._lastSentGearKey || this._lastSentGearKey !== gearKey || (this._gearHeartbeatT = (this._gearHeartbeatT || 0) + 0.05) > 3.0);
+          if (gearChanged) {
+            this._lastSentGearKey = gearKey;
+            this._gearHeartbeatT = 0;
+          }
+          const gearPayload = gearChanged ? {
+            head: equipHead ? {
+              slot: 'head',
+              type: 'gear',
+              base: equipHead.base,
+              rarity: equipHead.rarity ?? 0,
+              ilvl: equipHead.ilvl ?? 1,
+              look: Array.isArray(equipHead.look) ? [...equipHead.look] : null,
+            } : null,
+            body: equipBody ? {
+              slot: 'body',
+              type: 'gear',
+              base: equipBody.base,
+              rarity: equipBody.rarity ?? 0,
+              ilvl: equipBody.ilvl ?? 1,
+              look: Array.isArray(equipBody.look) ? [...equipBody.look] : null,
+            } : null,
+          } : null;
+
           net.sendPlayerState({
             name: G.char?.name || 'Hero',
             classId: p.classId,
             level: G.char?.level || 1,
-            gear: {
-              head: G.char?.equip?.head ? {
-                slot: 'head',
-                type: 'gear',
-                base: G.char.equip.head.base,
-                rarity: G.char.equip.head.rarity ?? 0,
-                ilvl: G.char.equip.head.ilvl ?? 1,
-                look: Array.isArray(G.char.equip.head.look) ? [...G.char.equip.head.look] : null,
-              } : null,
-              body: G.char?.equip?.body ? {
-                slot: 'body',
-                type: 'gear',
-                base: G.char.equip.body.base,
-                rarity: G.char.equip.body.rarity ?? 0,
-                ilvl: G.char.equip.body.ilvl ?? 1,
-                look: Array.isArray(G.char.equip.body.look) ? [...G.char.equip.body.look] : null,
-              } : null,
-            },
+            gear: gearPayload,
             x: p.x,
             y: p.y,
+            z: Math.round(p.z || 0),
             vx: p.vx || 0,
             vy: p.vy || 0,
             facing: p.facing || 0,
@@ -2138,7 +2217,7 @@ export const game = {
       if (G.room && w.kind === 'dungeon' && p && !p.dead) {
         if (this.isDungeonAuthority(w.depth)) {
           monSyncT += dt;
-          if (monSyncT >= 0.15) {
+          if (monSyncT >= 0.08) {
             monSyncT = 0;
             const monSync = [];
             const activePlayers = [{ x: p.x, y: p.y }];
@@ -2173,12 +2252,13 @@ export const game = {
                     rank: m.rank,
                     color: m.aura || (m.pal ? m.pal.a : null),
                     affixes: m.affixes ? [...m.affixes] : null,
+                    ambusher: !!m.ambusher,
                   });
                 }
               }
             }
-            if (monSync.length > 0) {
-              net.sendMonstersState(monSync, w.depth);
+            if (monSync.length > 0 || (w.killedMonsterIds && w.killedMonsterIds.size > 0)) {
+              net.sendMonstersState(monSync, w.depth, Array.from(w.killedMonsterIds || []));
             }
           }
         }

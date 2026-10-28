@@ -1,4 +1,3 @@
-// Remote player entity representing other online players in the world
 import { Creature, RIM } from '../game/creature.js';
 import { CLASSES } from '../data/classes.js';
 import { isoX, isoY, camera } from '../core/view.js';
@@ -10,6 +9,10 @@ import { RemoteSummon } from './remotesummon.js';
 import { G } from '../state.js';
 import { sigOf, sigUpdate, sigCast, SIGNATURES } from '../game/signature.js';
 import { effects } from '../gfx/vfx.js';
+import { castSkill } from '../game/skillrun.js';
+import { castArtFx } from '../gfx/artfx.js';
+import { SKILLS } from '../data/skills.js';
+import { angleTo } from '../core/util.js';
 
 export class RemotePlayer extends Creature {
   constructor(info) {
@@ -31,6 +34,7 @@ export class RemotePlayer extends Creature {
 
     this.targetX = this.x;
     this.targetY = this.y;
+    this.targetZ = 0;
     this.chatBubble = null;
     this.chatTimer = 0;
     this.chatAge = 0;
@@ -39,9 +43,40 @@ export class RemotePlayer extends Creature {
     this._gearKey = null;
     this.summons = new Map();
 
+    this.st = {
+      areaPct: 0,
+      extraProj: 0,
+      projSpeed: 0,
+      pierce: 0,
+      chainPlus: 0,
+      splitChance: 0,
+      goldFind: 0,
+      status: null,
+      legendary: {},
+      procs: [],
+    };
+    this.char = {
+      level: this.level,
+      rage: 100,
+      skills: {},
+    };
+
     if (this.gear) {
       this.updateGear(this.gear);
     }
+  }
+
+  skillDamage(sk, L = 1) {
+    return [0, 0];
+  }
+  mastery(sk) {
+    return 1;
+  }
+  augFor(sk) {
+    return null;
+  }
+  speedMul() {
+    return 1;
   }
 
   async updateGear(gear) {
@@ -66,13 +101,14 @@ export class RemotePlayer extends Creature {
   }
 
   updateFromNetwork(state) {
-    if (typeof state.x === 'number') this.targetX = state.x;
-    if (typeof state.y === 'number') this.targetY = state.y;
+    if (typeof state.x === 'number') { this.targetX = state.x; this.extrapolateT = 0; }
+    if (typeof state.y === 'number') { this.targetY = state.y; this.extrapolateT = 0; }
+    if (typeof state.z === 'number') this.targetZ = state.z;
     if (typeof state.vx === 'number') this.vx = state.vx;
     if (typeof state.vy === 'number') this.vy = state.vy;
     if (typeof state.facing === 'number') this.facing = state.facing;
     if (typeof state.flip === 'boolean') this.flip = state.flip;
-    if (typeof state.moving === 'boolean') this.moving = state.moving;
+    if (typeof state.moving === 'boolean') this.netMoving = state.moving;
     if (typeof state.animT === 'number') this.animT = state.animT;
     if (typeof state.hp === 'number') this.hp = state.hp;
     if (typeof state.maxHp === 'number') this.maxHp = state.maxHp;
@@ -121,22 +157,46 @@ export class RemotePlayer extends Creature {
       }
     }
 
-    // Smooth movement interpolation toward target
-    const dx = this.targetX - this.x;
-    const dy = this.targetY - this.y;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist > 5) {
-      // Teleport if too far
-      this.x = this.targetX;
-      this.y = this.targetY;
-    } else if (dist > 0.02) {
-      const step = Math.min(1, dt * 14);
-      this.x += dx * step;
-      this.y += dy * step;
+    // Smooth movement interpolation toward target unless actively channelled (e.g. Leap, Whirl, Dash)
+    if (this.channel) {
       this.moving = true;
     } else {
-      this.moving = false;
+      // Predictive dead-reckoning extrapolation between network packets (capped at 80ms)
+      if (this.netMoving && (this.vx || this.vy) && (this.extrapolateT = (this.extrapolateT || 0) + dt) < 0.08) {
+        this.targetX += this.vx * dt;
+        this.targetY += this.vy * dt;
+      }
+
+      const dx = this.targetX - this.x;
+      const dy = this.targetY - this.y;
+      const dist = Math.hypot(dx, dy);
+
+      if (dist > 5) {
+        // Teleport if too far
+        this.x = this.targetX;
+        this.y = this.targetY;
+        this.moving = false;
+      } else if (dist > 0.015) {
+        // Adaptive multi-tier rate: fast catch-up when behind, smooth glide close-up
+        const rate = dist > 1.2 ? 22 : dist > 0.35 ? 18 : 14;
+        const step = Math.min(1, dt * rate);
+        this.x += dx * step;
+        this.y += dy * step;
+        this.moving = true;
+      } else {
+        this.x = this.targetX;
+        this.y = this.targetY;
+        this.moving = !!this.netMoving;
+      }
+
+      if (typeof this.targetZ === 'number') {
+        const dz = this.targetZ - this.z;
+        if (Math.abs(dz) > 0.5) {
+          this.z += dz * Math.min(1, dt * 20);
+        } else {
+          this.z = this.targetZ;
+        }
+      }
     }
 
     if (this.world) {
@@ -223,18 +283,51 @@ export class RemotePlayer extends Creature {
     ctx.restore();
   }
 
-  onCastSkill(skillId, tx, ty) {
-    sfx('swing');
-    sparkle(this.x, this.y, 16, this.cls.color || '#ffd860', 10, 0.4);
+  onCastSkill(skillId, tx, ty, targetId = null, level = 1) {
+    const sk = SKILLS[skillId];
     if (tx !== undefined && ty !== undefined) {
-      burst(tx, ty, 12, this.cls.color || '#ff8030', 16, 2);
+      this.aim = [tx, ty];
+      this.face(angleTo(this.x, this.y, tx, ty));
     }
-    if (this.sig) {
-      const cid = this.classId === 'deathknight' ? 'death_knight' : this.classId;
-      const M = SIGNATURES[cid] || SIGNATURES[this.classId];
-      if (M && M.cast) {
-        M.cast(this, this.sig.s, { id: skillId, kind: 'melee' }, 1, tx, ty);
+    if (!sk) {
+      sfx('swing');
+      sparkle(this.x, this.y, 16, this.cls.color || '#ffd860', 10, 0.4);
+      if (tx !== undefined && ty !== undefined) {
+        burst(tx, ty, 12, this.cls.color || '#ff8030', 16, 2);
       }
+      return;
+    }
+
+    this.lastEl = sk.el;
+
+    // Play skill art FX animation strip
+    try {
+      castArtFx(this, sk, tx, ty);
+    } catch (e) {
+      console.warn('RemotePlayer castArtFx error:', e);
+    }
+
+    // Play class signature cast
+    if (this.sig) {
+      try {
+        const cid = this.classId === 'deathknight' ? 'death_knight' : this.classId;
+        const M = SIGNATURES[cid] || SIGNATURES[this.classId];
+        if (M && M.cast) {
+          M.cast(this, this.sig.s, sk, level || 1, tx, ty);
+        }
+      } catch (e) {}
+    }
+
+    // Execute skill hazard/visual replication
+    const w = this.world || G.world;
+    if (sk.kind !== 'summon' && w) {
+      try {
+        castSkill(this, sk, level || 1, tx, ty, { remote: true });
+      } catch (e) {
+        console.warn('RemotePlayer castSkill error:', e);
+      }
+    } else {
+      sfx('swing');
     }
   }
 

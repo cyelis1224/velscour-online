@@ -450,7 +450,7 @@ export class Player extends Creature {
     if (sk.id === 'barbarian.0.0') this.bashCastSerial++;
     const ok = castSkill(this, sk, L, tx, ty);
     if (ok === false) { this.mana += cost; this.cooldowns[sk.id] = 0; return false; }
-    if (G.room) net.sendSkillCast(sk.id, tx, ty, target?.id || null);
+    if (G.room) net.sendSkillCast(sk.id, tx, ty, target?.id || null, L);
     if (rageCost(sk)) { this.rage -= rageCost(sk); this.char.rage = this.rage; }
     // Attacks build Rage; no passive regeneration. Hits award most of the resource.
     if (this.classId === 'barbarian' && sk.attack) this.gainRage(sk.id === 'barbarian.0.0' ? 3 : sk.kind === 'whirl' ? 0 : 0.7);

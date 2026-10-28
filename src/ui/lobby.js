@@ -167,8 +167,8 @@ export function openLobby(char, onBack) {
         <div class="d2-input-group">
           <label>MAX PLAYERS</label>
           <select class="d2-input" id="d2-create-max">
-            <option value="8" selected>8 Players</option>
-            <option value="4">4 Players</option>
+            <option value="4" selected>4 Players (Party)</option>
+            <option value="3">3 Players (Trio)</option>
             <option value="2">2 Players (Duo)</option>
           </select>
         </div>
@@ -472,7 +472,7 @@ export function openLobby(char, onBack) {
     const name = ($('#d2-create-name')?.value || '').trim();
     const pass = ($('#d2-create-pass')?.value || '').trim();
     const depth = parseInt($('#d2-create-depth')?.value, 10) || Math.max(1, char.depth || 1);
-    const maxPlayers = parseInt($('#d2-create-max')?.value, 10) || 8;
+    const maxPlayers = parseInt($('#d2-create-max')?.value, 10) || 4;
 
     if (!name) {
       UI.dialog({ title: 'Game Name Required', html: '<p>Please enter a name for your game.</p>', buttons: [{ label: 'OK' }] });

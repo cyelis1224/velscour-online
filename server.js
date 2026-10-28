@@ -779,6 +779,9 @@ function handlePlayersList(ws, clientData) {
 }
 
 wss.on('connection', (ws) => {
+  if (ws._socket && ws._socket.setNoDelay) {
+    ws._socket.setNoDelay(true);
+  }
   const clientId = 'c_' + (clientIdSeq++);
   const clientData = {
     id: clientId,
@@ -1035,7 +1038,7 @@ wss.on('connection', (ws) => {
         const rawName = String(msg.name || '').trim();
         const roomName = (rawName || `${clientData.name}'s Game`).slice(0, 24);
         const password = String(msg.password || '').trim();
-        const maxPlayers = Math.max(2, Math.min(8, parseInt(msg.maxPlayers, 10) || 8));
+        const maxPlayers = Math.max(2, Math.min(4, parseInt(msg.maxPlayers, 10) || 4));
         const depth = Math.max(1, parseInt(msg.depth, 10) || 1);
         const biome = msg.biome || 'town';
         const seed = parseInt(msg.seed, 10) || (Math.floor(Math.random() * 1e9) + 1);
@@ -1065,6 +1068,7 @@ wss.on('connection', (ws) => {
           hostName: clientData.name,
           players: [clientData],
           groundLoot: new Map(),
+          killedMonsters: new Map(),
         };
         rooms.set(roomName, roomData);
         clientData.room = roomName;
@@ -1079,6 +1083,7 @@ wss.on('connection', (ws) => {
             depth: roomData.depth,
             biome: roomData.biome,
             hostId: roomData.hostId,
+            maxPlayers: roomData.maxPlayers,
             players: roomData.players.map(p => ({
               id: p.id,
               name: p.name,
@@ -1153,6 +1158,7 @@ wss.on('connection', (ws) => {
             depth: room.depth,
             biome: room.biome,
             hostId: room.hostId,
+            maxPlayers: room.maxPlayers,
             players: room.players.map(p => ({
               id: p.id,
               name: p.name,
@@ -1230,13 +1236,44 @@ wss.on('connection', (ws) => {
       case 'game_monster_hit': {
         if (!clientData.room) break;
         msg.sourceId = clientData.id;
+        const room = rooms.get(clientData.room);
+        if (room && msg.killed) {
+          if (!room.killedMonsters) room.killedMonsters = new Map();
+          const d = msg.depth || room.depth || 1;
+          let set = room.killedMonsters.get(d);
+          if (!set) { set = new Set(); room.killedMonsters.set(d, set); }
+          if (msg.netId) set.add(msg.netId);
+          if (msg.monsterIdx != null) set.add(msg.monsterIdx);
+        }
         broadcastToRoom(clientData.room, msg, ws);
         break;
       }
 
       case 'game_monsters_state': {
         if (!clientData.room) break;
+        const room = rooms.get(clientData.room);
+        if (room && Array.isArray(msg.killed)) {
+          if (!room.killedMonsters) room.killedMonsters = new Map();
+          const d = msg.depth || room.depth || 1;
+          let set = room.killedMonsters.get(d);
+          if (!set) { set = new Set(); room.killedMonsters.set(d, set); }
+          for (const kid of msg.killed) set.add(kid);
+        }
         broadcastToRoom(clientData.room, msg, ws);
+        break;
+      }
+
+      case 'request_dungeon_state': {
+        if (!clientData.room) break;
+        const room = rooms.get(clientData.room);
+        if (!room) break;
+        const d = msg.depth || room.depth || 1;
+        const set = room.killedMonsters ? room.killedMonsters.get(d) : null;
+        ws.send(JSON.stringify({
+          type: 'dungeon_killed_sync',
+          depth: d,
+          killed: set ? Array.from(set) : [],
+        }));
         break;
       }
 
@@ -1352,7 +1389,10 @@ wss.on('connection', (ws) => {
         if (room && (room.hostId === clientData.id || room.players.some(p => p.id === clientData.id))) {
           if (typeof msg.depth === 'number' && msg.depth > 0) room.depth = msg.depth;
           if (msg.biome) room.biome = msg.biome;
-          if (msg.seed) room.dungeonSeed = msg.seed;
+          if (msg.seed && room.dungeonSeed !== msg.seed) {
+            room.dungeonSeed = msg.seed;
+            room.killedMonsters?.clear();
+          }
           if (msg.mixId !== undefined) room.mixId = msg.mixId || null;
           if (Array.isArray(msg.heresies)) room.heresies = msg.heresies;
           broadcastToRoom(clientData.room, {
@@ -1362,6 +1402,7 @@ wss.on('connection', (ws) => {
             seed: room.dungeonSeed,
             mixId: room.mixId,
             heresies: room.heresies || [],
+            killed: Array.from(room.killedMonsters?.get(room.depth) || []),
             sourcePlayerId: clientData.id,
             sourcePlayerName: clientData.name,
           });
