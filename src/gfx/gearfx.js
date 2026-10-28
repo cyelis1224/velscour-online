@@ -113,6 +113,8 @@ export function drawGearFx(ctx, p, fx, col, layer, art) {
       ctx.globalAlpha = alpha * fx.glow * (0.75 + Math.sin(t * 3) * 0.25);
       ctx.translate(art.x, art.y);
       if (art.flip) ctx.scale(-1, 1);
+      if (art.rot) ctx.rotate(art.rot);
+      if (art.sx || art.sy) ctx.scale(art.sx || 1, art.sy || 1);
       ctx.drawImage(g, art.dx - pad, art.dy - pad, g.width * art.k, g.height * art.k);
       ctx.restore();
     }

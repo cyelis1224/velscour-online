@@ -604,6 +604,7 @@ export function helpDialog() {
     <div>Tap the world: move / attack / talk</div>
     <div>Right cluster: skills (hold to repeat, long-press to change; the &#8644; button flips to the second page of skills)</div>
     <div>Tap potions on the bar to drink</div>
+    <div>Pinch with two fingers: zoom in and out</div>
     <div><b style="color:#ffe2a0">Goal</b></div>
     <div>Enter the portal in town. Find the exit of each depth — it is sealed until its guardian falls.</div>
     <div>Die and you restart a few depths back (the start of the previous five), keeping everything else.</div>

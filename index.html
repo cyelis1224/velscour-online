@@ -77,6 +77,26 @@
       <div class="lu-voice"><div id="lu-l1"></div><div id="lu-l2"></div></div>
     </div>
     <div id="log"></div>
+    <div id="special-actions">
+      <button id="madness-btn" class="special-btn madness hidden" type="button" aria-label="Unleash Madness" title="Unleash MADNESS (G): double damage and double speed for 30 seconds">
+        <canvas class="special-icon" width="64" height="64"></canvas>
+        <svg class="special-ring" viewBox="0 0 54 54">
+          <circle class="ring-track" cx="27" cy="27" r="23"></circle>
+          <circle class="ring-fill" cx="27" cy="27" r="23"></circle>
+        </svg>
+        <div class="special-badge">G</div>
+        <div class="special-status">0%</div>
+      </button>
+      <button id="smite-btn" class="special-btn smite hidden" type="button" aria-label="Divine Smite" title="SMITE (F): arm it, then click or tap where the heavens should strike">
+        <canvas class="special-icon" width="64" height="64"></canvas>
+        <svg class="special-ring" viewBox="0 0 54 54">
+          <circle class="ring-track" cx="27" cy="27" r="23"></circle>
+          <circle class="ring-fill" cx="27" cy="27" r="23"></circle>
+        </svg>
+        <div class="special-badge">F</div>
+        <div class="special-status">0%</div>
+      </button>
+    </div>
     <div id="hud-bar">
       <div id="hud-rail"></div>
       <div id="xp-track" title="Experience Bar"><div id="xp-fill"></div></div>
@@ -88,14 +108,8 @@
       <div id="xp-text" title="Experience: Character Level & Class (hover or click to view XP)"></div>
       <div id="hud-slots"></div>
       <div id="gauge-box">
-        <div id="gauge-buttons">
-          <button id="madness-btn" class="hidden" title="Unleash MADNESS (G): double damage and double speed for 30 seconds">MADNESS</button>
-          <button id="smite-btn" class="hidden" title="SMITE (F): arm it, then click or tap where the heavens should strike">SMITE</button>
-        </div>
         <div id="gauge-container">
           <div id="barbarian-rage" class="class-gauge gauge-rage hidden" aria-label="Barbarian Rage"><div id="barbarian-rage-fill" class="gauge-fill"></div><span id="barbarian-rage-text" class="gauge-text">Rage 0%</span></div>
-          <div id="mad-track" class="class-gauge gauge-madness" aria-label="Madness"><div id="mad-fill" class="gauge-fill"></div><span id="mad-text" class="gauge-text">Madness</span></div>
-          <div id="smite-track" class="class-gauge gauge-smite" aria-label="Smite"><div id="smite-fill" class="gauge-fill"></div><span id="smite-text" class="gauge-text">Smite</span></div>
         </div>
       </div>
       <div id="madness" class="hidden" style="display:none" aria-hidden="true"></div>

@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.0.9' };
+    return { version: '1.1.1' };
   }
 }
 
@@ -410,17 +410,17 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
-        "Refined mobile HUD layout: full-width experience bar positioned cleanly below potions",
-        "Class gauges (Rage, Madness, Smite) elevated above hotkeys to prevent visual overlap",
-        "Streamlined party HP roster integrated into HUD overview",
-        "Smooth camera zoom with mouse wheel and interactive container protection",
+        "Interactive mobile pinch-to-zoom gesture support with smooth camera zoom scaling",
+        "NPC-style walking bounce animation with organic squash, stretch, stride sway, and idle breathing",
+        "Dedicated round buttons for Smite and Madness with procedural canvas artwork and circular SVG charge rings",
+        "Streamlined bottom-left special ability action cluster positioned cleanly beside the HP orb",
         "Anti-cache automatic updater delivery for Android APK and desktop platforms"
       ],
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.0.9'}`,
-          filename: `Velscour-${pkg.version || '1.0.9'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.1'}`,
+          filename: `Velscour-${pkg.version || '1.1.1'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -472,7 +472,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.0.9'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.1'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }

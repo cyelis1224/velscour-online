@@ -352,20 +352,44 @@ export class Creature {
     // appear animation
     if (rising) { const k = this.spawnT < 0.22 ? 0.35 + this.spawnT / 0.22 * 0.65 : 1; w *= k; if (this.spawnT >= 0.22) { const t = (this.spawnT - 0.22) / 0.28; h *= 1 + 0.3 * Math.sin(t * Math.PI); w *= 1 - 0.15 * Math.sin(t * Math.PI); } }
     else if (this.spawnT < 0.3) { const k = this.spawnT / 0.3; w *= k; h *= k; }
-    let bob = this.moving ? Math.abs(Math.sin(this.animT * 9)) * 2.2 : Math.sin(this.animT * 2) * 0.6;
-    let squash = this.moving ? 1 + Math.sin(this.animT * 18) * 0.03 : 1;
-    if (this.hop) { // slimes: stretch in the air, splat on landing; a slow wobble at rest
-      const s = this.moving ? Math.sin(this.animT * 8) : 0;
-      bob = Math.max(0, s) * 7 * this.scale;
-      squash = this.moving ? 1 + (s > 0 ? s * 0.14 : s * 0.22) : 1 + Math.sin(this.animT * 3) * 0.04;
-      w *= 2 - squash;
+    let bob, squash, sx = 1, sy = 1, rot = 0, lean = 0;
+    const isHero = !!(this.isPlayer || this.isRemotePlayer);
+    if (isHero) {
+      const running = this.moving && ((this.speed * (this.speedMul ? this.speedMul() : 1) > 5.5) || (this.char && this.char.madT > 0));
+      const f = running ? 13 : 9;
+      if (this.moving) {
+        bob = Math.abs(Math.sin(this.animT * f)) * (running ? 4.2 : 2.8);
+        const s = Math.sin(this.animT * f * 2) * (running ? 0.05 : 0.035);
+        sy = 1 + s;
+        sx = 1 - s * 0.6;
+        rot = Math.sin(this.animT * f) * (running ? 0.035 : 0.045);
+        lean = running ? 0.07 : 0.02;
+      } else {
+        const b = Math.sin(this.animT * 2.1);
+        sy = 1 + b * 0.012;
+        sx = 1 - b * 0.006;
+        bob = Math.sin(this.animT * 2) * 0.6;
+      }
+      squash = sy;
+    } else {
+      bob = this.moving ? Math.abs(Math.sin(this.animT * 9)) * 2.2 : Math.sin(this.animT * 2) * 0.6;
+      squash = this.moving ? 1 + Math.sin(this.animT * 18) * 0.03 : 1;
+      if (this.hop) { // slimes: stretch in the air, splat on landing; a slow wobble at rest
+        const s = this.moving ? Math.sin(this.animT * 8) : 0;
+        bob = Math.max(0, s) * 7 * this.scale;
+        squash = this.moving ? 1 + (s > 0 ? s * 0.14 : s * 0.22) : 1 + Math.sin(this.animT * 3) * 0.04;
+        w *= 2 - squash;
+      }
     }
     const fly = this.fly ? 16 + Math.sin(this.animT * 3) * 4 : 0;
     const z = this.z + fly + bob;
     // shadow (none under Velscour's Mirror of Sin copies: game/velscour.js)
     if (!this.noShadow) {
       ctx.fillStyle = 'rgba(0,0,0,0.38)';
-      ctx.beginPath(); ctx.ellipse(px, py, Math.max(8, Math.min(w, h) * 0.32), Math.max(4, Math.min(w, h) * 0.14), 0, 0, TAU); ctx.fill();
+      const sw = Math.max(8, Math.min(w, h) * 0.32);
+      const sh = Math.max(4, Math.min(w, h) * 0.14);
+      const bobR = isHero ? bob * 0.5 : 0;
+      ctx.beginPath(); ctx.ellipse(px, py, Math.max(4, sw - bobR), Math.max(2, sh - bobR * 0.35), 0, 0, TAU); ctx.fill();
     }
     // elite aura
     if (this.aura) {
@@ -384,19 +408,34 @@ export class Creature {
     ctx.save();
     if (this.alpha !== undefined) ctx.globalAlpha = this.alpha;
     const ti = tinted(img, this.tintFilter());
-    if (this.flip) {
-      ctx.translate(dx + w, dy); ctx.scale(-1, 1);
-      this.drawRim(ctx, img, 0, 0, img.width, img.height, 0, 0, w, h * squash);
-      ctx.drawImage(ti, 0, 0, w, h * squash);
-    } else { this.drawRim(ctx, img, 0, 0, img.width, img.height, dx, dy, w, h * squash); ctx.drawImage(ti, dx, dy, w, h * squash); }
-    if (this.flash > 0) {
-      const f = this.flashImage(img);
-      ctx.globalAlpha = Math.min(1, this.flash * 8) * 0.85;
-      if (f) {
-        if (this.flip) ctx.drawImage(f, 0, 0, w, h * squash); else ctx.drawImage(f, dx, dy, w, h * squash);
-      } else {
-        ctx.globalCompositeOperation = 'lighter';
-        if (this.flip) ctx.drawImage(img, 0, 0, w, h * squash); else ctx.drawImage(img, dx, dy, w, h * squash);
+    if (isHero) {
+      ctx.translate(px + lx, py + ly - z);
+      if (this.flip) ctx.scale(-1, 1);
+      ctx.rotate(rot + (this.moving ? lean : 0));
+      ctx.scale(sx, sy);
+      this.drawRim(ctx, img, 0, 0, img.width, img.height, -w * 0.5, -h, w, h);
+      ctx.drawImage(ti, -w * 0.5, -h, w, h);
+      if (this.flash > 0) {
+        const f = this.flashImage(img);
+        ctx.globalAlpha = Math.min(1, this.flash * 8) * 0.85;
+        if (f) ctx.drawImage(f, -w * 0.5, -h, w, h);
+        else { ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(img, -w * 0.5, -h, w, h); }
+      }
+    } else {
+      if (this.flip) {
+        ctx.translate(dx + w, dy); ctx.scale(-1, 1);
+        this.drawRim(ctx, img, 0, 0, img.width, img.height, 0, 0, w, h * squash);
+        ctx.drawImage(ti, 0, 0, w, h * squash);
+      } else { this.drawRim(ctx, img, 0, 0, img.width, img.height, dx, dy, w, h * squash); ctx.drawImage(ti, dx, dy, w, h * squash); }
+      if (this.flash > 0) {
+        const f = this.flashImage(img);
+        ctx.globalAlpha = Math.min(1, this.flash * 8) * 0.85;
+        if (f) {
+          if (this.flip) ctx.drawImage(f, 0, 0, w, h * squash); else ctx.drawImage(f, dx, dy, w, h * squash);
+        } else {
+          ctx.globalCompositeOperation = 'lighter';
+          if (this.flip) ctx.drawImage(img, 0, 0, w, h * squash); else ctx.drawImage(img, dx, dy, w, h * squash);
+        }
       }
     }
     ctx.restore();
@@ -454,21 +493,46 @@ export class Creature {
     const px = isoX(this.x, this.y), py = isoY(this.x, this.y);
     let k = a.k * this.scale;
     if (this.spawnT < 0.3) k *= this.spawnT / 0.3;
-    const bob = this.moving ? Math.abs(Math.sin(this.animT * 9)) * 2.2 : Math.sin(this.animT * 2) * 0.6;
-    const squash = this.moving ? 1 + Math.sin(this.animT * 18) * 0.03 : 1;
+    const isHero = !!(this.isPlayer || this.isRemotePlayer);
+    let bob, sx = 1, sy = 1, rot = 0, lean = 0;
+    if (isHero) {
+      const running = this.moving && ((this.speed * (this.speedMul ? this.speedMul() : 1) > 5.5) || (this.char && this.char.madT > 0));
+      const f = running ? 13 : 9;
+      if (this.moving) {
+        bob = Math.abs(Math.sin(this.animT * f)) * (running ? 4.2 : 2.8);
+        const s = Math.sin(this.animT * f * 2) * (running ? 0.05 : 0.035);
+        sy = 1 + s;
+        sx = 1 - s * 0.6;
+        rot = Math.sin(this.animT * f) * (running ? 0.035 : 0.045);
+        lean = running ? 0.07 : 0.02;
+      } else {
+        const b = Math.sin(this.animT * 2.1);
+        sy = 1 + b * 0.012;
+        sx = 1 - b * 0.006;
+        bob = Math.sin(this.animT * 2) * 0.6;
+      }
+    } else {
+      bob = this.moving ? Math.abs(Math.sin(this.animT * 9)) * 2.2 : Math.sin(this.animT * 2) * 0.6;
+      sy = this.moving ? 1 + Math.sin(this.animT * 18) * 0.03 : 1;
+    }
     const z = this.z + bob;
-    const w = a.cw * k, h = a.ch * k * squash;
+    const w = a.cw * k, h = a.ch * k * (isHero ? 1 : sy);
     ctx.fillStyle = 'rgba(0,0,0,0.38)';
-    ctx.beginPath(); ctx.ellipse(px, py, 13 * this.scale, 5.5 * this.scale, 0, 0, TAU); ctx.fill();
+    const sw = 13 * this.scale;
+    const sh = 5.5 * this.scale;
+    const bobR = isHero ? bob * 0.5 : 0;
+    ctx.beginPath(); ctx.ellipse(px, py, Math.max(5, sw - bobR), Math.max(2.5, sh - bobR * 0.35), 0, 0, TAU); ctx.fill();
     const lx = this.lunge > 0 ? (Math.cos(this.facing) - Math.sin(this.facing)) * this.lunge * 8 : 0;
     const ly = this.lunge > 0 ? (Math.cos(this.facing) + Math.sin(this.facing)) * this.lunge * 4 : 0;
-    const dx = -a.ax * k, dy = -a.ay * k * squash;
-    const where = { img: a.img, x: px + lx, y: py + ly - z, dx, dy, k, flip: this.flip };
+    const dx = -a.ax * k, dy = -a.ay * k * (isHero ? 1 : sy);
+    const where = { img: a.img, x: px + lx, y: py + ly - z, dx, dy, k, flip: this.flip, rot: rot + (this.moving ? lean : 0), sx, sy };
     if (this.drawArtLayer) this.drawArtLayer(ctx, 'back', where);
     ctx.save();
     if (this.alpha !== undefined) ctx.globalAlpha = this.alpha;
     ctx.translate(where.x, where.y);
     if (this.flip) ctx.scale(-1, 1);
+    ctx.rotate(rot + (this.moving ? lean : 0));
+    ctx.scale(sx, sy);
     this.drawRim(ctx, a.img, a.frame * a.cw, 0, a.cw, a.ch, dx, dy, w, h);
     ctx.drawImage(tinted(a.img, this.tintFilter()), a.frame * a.cw, 0, a.cw, a.ch, dx, dy, w, h);
     if (this.flash > 0) {

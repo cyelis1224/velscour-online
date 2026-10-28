@@ -4,7 +4,7 @@ import { el, fmt, fmtInt, escapeHtml, clamp } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { A, potionIcon } from '../core/assets.js';
 import { UI, $, droppable } from './ui.js';
-import { skillIconURL } from './icons.js';
+import { skillIconURL, smiteIcon, madnessIcon } from './icons.js';
 import { CLASSES } from '../data/classes.js';
 import { SKILLS, effLevel, manaCost, rageCost, cooldown, CLASS_SKILLS } from '../data/skills.js';
 import { xpToNext } from '../game/player.js';
@@ -60,6 +60,13 @@ export const HUD = {
     // the bar's aspect (and how much room it takes at the bottom) comes from the art's geometry
     document.documentElement.style.setProperty('--hud-k', String(geo.h / geo.w));
     this.initFrames(geo);
+
+    // Render special ability procedural icons onto their canvases
+    const madIcon = $('#madness-btn .special-icon');
+    if (madIcon) madIcon.getContext('2d').drawImage(madnessIcon(64), 0, 0);
+    const smiteIconEl = $('#smite-btn .special-icon');
+    if (smiteIconEl) smiteIconEl.getContext('2d').drawImage(smiteIcon(64), 0, 0);
+
     $('#madness-btn').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); unleashMadness(); });
     $('#smite-btn').addEventListener('pointerdown', (e) => { e.stopPropagation(); e.preventDefault(); toggleSmite(); });
     $('#sealed-btn').addEventListener('click', (e) => { e.stopPropagation(); sfx('ui'); openNextSeal(); });
@@ -250,6 +257,24 @@ export const HUD = {
         gaugeBox.style.bottom = `${bar.height - potionY + 6}px`;
       }
 
+      // Position #special-actions (Madness & Smite buttons) to the left of the HP orb
+      const spec = $('#special-actions');
+      if (spec) {
+        const hudBarRect = bar;
+        const lifeScreenLeft = hudBarRect.left + lifeFrameX;
+        const specW = portrait ? 96 : 112;
+        if (lifeScreenLeft > specW + 10) {
+          const leftPos = Math.max(12, Math.floor((lifeScreenLeft - specW) / 2));
+          spec.style.left = `${leftPos}px`;
+          spec.style.bottom = `${hudBarRect.height - potionY - potionSize}px`;
+          spec.classList.remove('compact-portrait');
+        } else {
+          spec.style.left = '12px';
+          spec.style.bottom = `${hudBarRect.height + 8}px`;
+          spec.classList.add('compact-portrait');
+        }
+      }
+
       this.portraitOrbFrames[0].style.cssText = `display:block;left:${lifeFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
       this.portraitOrbFrames[1].style.cssText = `display:block;left:${manaFrameX}px;top:${frameY}px;width:${frameW}px;height:${frameH}px;`;
 
@@ -296,6 +321,8 @@ export const HUD = {
         gaugeBox.style.top = '';
         gaugeBox.style.bottom = '';
       }
+      const spec = $('#special-actions');
+      if (spec) spec.removeAttribute('style');
 
       this.slots.forEach((s) => {
         const potion = typeof s.map === 'string';
@@ -350,8 +377,22 @@ export const HUD = {
     set('lt', `${fmt(Math.max(0, p.hp))}/${fmt(p.maxHp)}`, (v) => { $('#life-text').textContent = v; });
     set('mt', `${fmt(p.mana)}/${fmt(p.maxMana)}`, (v) => { $('#mana-text').textContent = v; });
     const ready = madnessReady(), on = madnessOn();
-    set('mad', Math.round(clamp(c.madness || 0, 0, 1) * 1000) / 10, (v) => { $('#mad-fill').style.width = v + '%'; });
+    const madPct = on ? clamp((c.madT || 0) / 30, 0, 1) : clamp(c.madness || 0, 0, 1);
+    const madK = Math.round(madPct * 1000) / 10;
+    set('mad', madK, (v) => {
+      const ringFill = $('#madness-btn .ring-fill');
+      if (ringFill) ringFill.style.strokeDashoffset = (144.5 * (1 - v / 100)).toFixed(1);
+      const fill = $('#mad-fill');
+      if (fill) fill.style.width = v + '%';
+    });
     set('madst', ready ? 'full' : on ? 'on' : '', (v) => {
+      const btn = $('#madness-btn');
+      if (btn) {
+        btn.classList.toggle('hidden', v !== 'full');
+        btn.classList.toggle('ready', v === 'full');
+        btn.classList.toggle('active', v === 'on');
+        btn.classList.toggle('charging', !v);
+      }
       const madTrack = $('#mad-track');
       if (madTrack) {
         madTrack.classList.toggle('full', v === 'full');
@@ -359,23 +400,45 @@ export const HUD = {
       }
       const mad = $('#madness');
       if (mad) mad.className = v;
-      $('#madness-btn').classList.toggle('hidden', v !== 'full');
       if (v === 'full') { sfx('levelup', 0.4); UI.log('MADNESS is full: press the MADNESS button (G) to unleash it.', '#ff6090'); }
     });
+    set('madt', on ? `${Math.ceil(c.madT)}s` : ready ? 'READY' : `${Math.floor(madPct * 100)}%`, (v) => {
+      const st = $('#madness-btn .special-status');
+      if (st) st.textContent = v;
+      const madTxt = $('#mad-text');
+      if (madTxt) madTxt.textContent = on ? `MADNESS ${Math.ceil(c.madT)}s` : ready ? 'Madness — ready' : `Madness ${Math.floor((c.madness || 0) * 100)}%`;
+    });
+
     // SMITE (game/smite.js)
     const sReady = smiteReady(), sArmed = smiteArmed();
-    set('smite', Math.round(clamp(c.smite || 0, 0, 1) * 1000) / 10, (v) => { $('#smite-fill').style.width = v + '%'; });
+    const smitePct = clamp(c.smite || 0, 0, 1);
+    const smiteK = Math.round(smitePct * 1000) / 10;
+    set('smite', smiteK, (v) => {
+      const ringFill = $('#smite-btn .ring-fill');
+      if (ringFill) ringFill.style.strokeDashoffset = (144.5 * (1 - v / 100)).toFixed(1);
+      const fill = $('#smite-fill');
+      if (fill) fill.style.width = v + '%';
+    });
     set('smitest', sArmed ? 'armed' : sReady ? 'full' : '', (v) => {
+      const btn = $('#smite-btn');
+      if (btn) {
+        btn.classList.toggle('hidden', !v);
+        btn.classList.toggle('ready', v === 'full');
+        btn.classList.toggle('armed', v === 'armed');
+        btn.classList.toggle('charging', !v);
+      }
       const smiteTrack = $('#smite-track');
       if (smiteTrack) {
         smiteTrack.classList.toggle('full', v === 'full');
         smiteTrack.classList.toggle('armed', v === 'armed');
       }
-      $('#smite-btn').classList.toggle('hidden', !v);
-      $('#smite-btn').classList.toggle('armed', v === 'armed');
-      $('#smite-btn').textContent = v === 'armed' ? 'AIMING…' : 'SMITE';
     });
-    set('smitet', sArmed ? (G.touch ? 'Smite — tap the ground' : 'Smite — click the ground') : sReady ? 'Smite — ready' : `Smite ${Math.floor((c.smite || 0) * 100)}%`, (v) => { $('#smite-text').textContent = v; });
+    set('smitet', sArmed ? 'AIM' : sReady ? 'READY' : `${Math.floor(smitePct * 100)}%`, (v) => {
+      const st = $('#smite-btn .special-status');
+      if (st) st.textContent = v;
+      const smiteTxt = $('#smite-text');
+      if (smiteTxt) smiteTxt.textContent = sArmed ? (G.touch ? 'Smite — tap the ground' : 'Smite — click the ground') : sReady ? 'Smite — ready' : `Smite ${Math.floor((c.smite || 0) * 100)}%`;
+    });
     if (G.canvas) G.canvas.classList.toggle('aiming', sArmed);
     // sealed treasures waiting in the bag (ui/sealed.js)
     const nSeal = sealedCount(c);
@@ -392,7 +455,6 @@ export const HUD = {
       $('#greed').classList.toggle('on', g > 0);
       $('#hoard').textContent = hd ? `Hoard ${hd}` : '';
     });
-    set('madt', on ? `MADNESS ${Math.ceil(c.madT)}s` : ready ? 'Madness — ready' : `Madness ${Math.floor((c.madness || 0) * 100)}%`, (v) => { $('#mad-text').textContent = v; });
     const need = xpToNext(c.level);
     set('xp', Math.round((c.xp / need) * 1000) / 10, (v) => { $('#xp-fill').style.width = v + '%'; });
     const clsName = (CLASSES[c.classId] && CLASSES[c.classId].name) || (p && p.cls && p.cls.name) || 'Hero';

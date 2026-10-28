@@ -12,6 +12,8 @@ export const input = {
   mouse: { x: 0, y: 0, left: false, right: false, leftPressed: false, rightPressed: false, inside: true },
   joy: { active: false, id: -1, ox: 0, oy: 0, x: 0, y: 0, vx: 0, vy: 0 },
   worldTouch: null, // { id, x, y, pressed }
+  activeTouches: new Map(),
+  isPinching: false,
   lastPointerType: 'mouse',
   enabled: true,
 
@@ -32,6 +34,8 @@ export const input = {
     this.mouse.left = this.mouse.right = false;
     this.endJoy();
     this.worldTouch = null;
+    this.activeTouches.clear();
+    this.isPinching = false;
   },
   endJoy() {
     this.joy.active = false; this.joy.id = -1; this.joy.vx = 0; this.joy.vy = 0;
@@ -65,6 +69,12 @@ export function initInput(canvas) {
   const knob = document.getElementById('joy-knob');
   const JOY_R = 52;
 
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let pinchCooldown = false;
+  let pinchCooldownTimer = null;
+  let pinchPointers = [];
+
   canvas.addEventListener('pointerdown', (e) => {
     input.lastPointerType = e.pointerType;
     // a spectator's tap (aiming SMITE, catching a critter: game/spectate.js) never moves the hero or stops auto-play
@@ -78,6 +88,31 @@ export function initInput(canvas) {
     }
     // touch / pen
     e.preventDefault();
+    input.activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    // Multi-touch: 2 or more touches activate pinch zoom and cancel single-finger actions
+    if (input.activeTouches.size >= 2) {
+      input.isPinching = true;
+      pinchCooldown = true;
+      if (pinchCooldownTimer) { clearTimeout(pinchCooldownTimer); pinchCooldownTimer = null; }
+      if (input.joy.active) input.endJoy();
+      input.worldTouch = null;
+
+      const keys = [...input.activeTouches.keys()];
+      pinchPointers = [keys[0], keys[1]];
+      const p1 = input.activeTouches.get(pinchPointers[0]);
+      const p2 = input.activeTouches.get(pinchPointers[1]);
+      pinchStartDist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+      pinchStartZoom = G.settings.zoom || 1;
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      return;
+    }
+
+    if (pinchCooldown) {
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+      return;
+    }
+
     const leftZone = e.clientX < G.W * 0.42;
     if (leftZone && !input.joy.active) {
       const j = input.joy;
@@ -96,6 +131,30 @@ export function initInput(canvas) {
       input.mouse.x = e.clientX; input.mouse.y = e.clientY; input.mouse.inside = true;
       return;
     }
+    if (input.activeTouches.has(e.pointerId)) {
+      input.activeTouches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    // Two-finger pinch-to-zoom
+    if (input.isPinching && pinchPointers.length === 2) {
+      const p1 = input.activeTouches.get(pinchPointers[0]);
+      const p2 = input.activeTouches.get(pinchPointers[1]);
+      if (p1 && p2 && pinchStartDist > 10 && G.mode === 'game') {
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        const factor = dist / pinchStartDist;
+        const current = G.settings.zoom || 1;
+        const next = clamp(Math.round(pinchStartZoom * factor * 100) / 100, 0.7, 1.6);
+        if (Math.abs(next - current) > 0.001) {
+          G.settings.zoom = next;
+          camera.computeZoom();
+          debouncedSaveSettings();
+        }
+      }
+      return;
+    }
+
+    if (pinchCooldown) return;
+
     const j = input.joy;
     if (j.active && e.pointerId === j.id) {
       let dx = e.clientX - j.ox, dy = e.clientY - j.oy;
@@ -114,11 +173,36 @@ export function initInput(canvas) {
       if (e.button === 2) input.mouse.right = false;
       return;
     }
+    input.activeTouches.delete(e.pointerId);
+    if (input.activeTouches.size < 2) {
+      input.isPinching = false;
+      pinchPointers = [];
+    }
+    if (input.activeTouches.size === 0) {
+      pinchCooldown = false;
+      if (pinchCooldownTimer) { clearTimeout(pinchCooldownTimer); pinchCooldownTimer = null; }
+    } else if (pinchCooldown && !pinchCooldownTimer) {
+      pinchCooldownTimer = setTimeout(() => {
+        pinchCooldown = false;
+        pinchCooldownTimer = null;
+      }, 350);
+    }
     if (input.joy.active && e.pointerId === input.joy.id) input.endJoy();
     if (input.worldTouch && input.worldTouch.id === e.pointerId) input.worldTouch = null;
   };
   canvas.addEventListener('pointerup', up);
   canvas.addEventListener('pointercancel', up);
+  window.addEventListener('pointerup', (e) => {
+    if (e.pointerType !== 'mouse' && input.activeTouches.has(e.pointerId)) up(e);
+  });
+  window.addEventListener('pointercancel', (e) => {
+    if (e.pointerType !== 'mouse' && input.activeTouches.has(e.pointerId)) up(e);
+  });
+  canvas.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches.length >= 2) e.preventDefault();
+  }, { passive: false });
+  document.addEventListener('gesturestart', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
   canvas.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') input.mouse.inside = false; });
   let saveTimer = null;
   const debouncedSaveSettings = () => {
