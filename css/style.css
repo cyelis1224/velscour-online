@@ -2914,6 +2914,106 @@ body.touch .reliquary-panel .codex-cell {
   box-shadow: inset 0 0 14px rgba(32, 224, 255, .5);
 }
 
+.rheir {
+  border-color: #b8923a !important;
+  background: rgba(80, 58, 14, .5) !important;
+  box-shadow: inset 0 0 12px rgba(217, 180, 90, .5);
+}
+
+.rcov {
+  border-color: #1f9e82 !important;
+  background: rgba(8, 64, 52, .5) !important;
+  box-shadow: inset 0 0 12px rgba(53, 224, 184, .45);
+}
+
+.rglyph {
+  border-color: #b8a878 !important;
+  background: rgba(60, 52, 30, .5) !important;
+  box-shadow: inset 0 0 12px rgba(242, 226, 176, .45);
+}
+
+.rsig {
+  border-color: #8a7040 !important;
+  background: rgba(40, 30, 15, .45) !important;
+}
+
+.c0 {
+  color: var(--common);
+}
+
+.c1 {
+  color: var(--uncommon);
+}
+
+.c2 {
+  color: var(--rare);
+}
+
+.c3 {
+  color: var(--epic);
+}
+
+.c4 {
+  color: var(--legendary);
+}
+
+.c5 {
+  color: var(--mythic);
+}
+
+.c6 {
+  color: var(--abyssal, #20e0ff);
+}
+
+.item-detail {
+  width: 280px;
+  min-height: 120px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, .45);
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 2px 14px;
+  font-size: 13px;
+}
+
+.stats-grid .v {
+  text-align: right;
+  color: var(--gold-bright);
+}
+
+.attr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(92, 68, 36, .35);
+}
+
+.attr-row b {
+  color: var(--gold-bright);
+  min-width: 36px;
+  text-align: right;
+}
+
+.plus {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid var(--gold);
+  background: #3a2a0a;
+  color: var(--gold-bright);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
 /* tooltip */
 #tooltip {
   position: fixed;
