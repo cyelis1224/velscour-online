@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.6' };
+    return { version: '1.1.7' };
   }
 }
 
@@ -424,6 +424,9 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Fixed HP and MP numerical text display on life and mana orbs in compact mobile views (portrait & landscape)",
+        "Fixed sealed item opening panel styling, responsiveness, and reel animations on mobile & touch displays",
+        "Fine-tuned mobile touch controls and UI pointer-events layering",
         "Disabled pausing in online multiplayer across all menus, modals, and hit-stops to eliminate client and server desync",
         "Real-time simulation catch-up and background tab heartbeat to preserve synchronization during window unfocus",
         "Netcode smoothness optimization: TCP_NODELAY, dead-reckoning extrapolation, and 60 FPS monster interpolation",
@@ -451,8 +454,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.6'}`,
-          filename: `Velscour-${pkg.version || '1.1.6'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.7'}`,
+          filename: `Velscour-${pkg.version || '1.1.7'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -504,7 +507,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.6'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.7'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -820,7 +823,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.1.6';
+        const serverVer = getPackageInfo().version || '1.1.7';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -873,7 +876,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.1.6',
+          serverVersion: getPackageInfo().version || '1.1.7',
         }));
 
         if (reconnectedRoom) {

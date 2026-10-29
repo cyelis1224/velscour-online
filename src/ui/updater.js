@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.6';
+export const CURRENT_BUILD_VERSION = '1.1.7';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,16 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.6' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.7' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.6' : currentVer,
+          version: forceTestUpdate ? '1.1.7' : currentVer,
           changelog: [
+            'Fixed HP and MP numerical text display on life and mana orbs in compact mobile views (portrait & landscape)',
+            'Fixed sealed item opening panel styling, responsiveness, and reel animations on mobile & touch displays',
+            'Fine-tuned mobile touch controls and UI pointer-events layering',
             'Disabled pausing in online multiplayer across all menus, modals, and hit-stops to eliminate client and server desync',
             'Real-time simulation catch-up and background tab heartbeat to preserve synchronization during window unfocus',
             'Netcode smoothness optimization: TCP_NODELAY, dead-reckoning extrapolation, and 60 FPS monster interpolation',

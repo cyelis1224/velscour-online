@@ -857,6 +857,150 @@ body.touch .class-gauge #smite-text {
   animation: rvmythic 1s ease-in-out 3;
 }
 
+@keyframes rvmythic {
+  50% {
+    box-shadow: 0 0 40px #000, 0 0 70px var(--rc);
+  }
+}
+
+.rv-title {
+  font: 900 20px var(--font-head);
+  color: var(--gold-bright);
+  letter-spacing: 3px;
+  margin-bottom: 8px;
+}
+
+.rv-window {
+  position: relative;
+  height: 92px;
+  overflow: hidden;
+  border: 1px solid #5a4020;
+  border-radius: 6px;
+  background: #0a0604;
+  box-shadow: inset 0 0 18px #000;
+}
+
+.rv-reel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: flex;
+  will-change: transform;
+}
+
+.rv-tile {
+  flex: 0 0 92px;
+  height: 92px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-right: 1px solid #000;
+  background: linear-gradient(color-mix(in srgb, var(--rc) 28%, #0a0604), #0a0604);
+}
+
+.rv-tile b {
+  font: 700 10px var(--font-head);
+  color: var(--rc);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-shadow: 0 0 4px #000;
+}
+
+.rv-tile img {
+  width: 48px;
+  height: 48px;
+  image-rendering: pixelated;
+}
+
+.rv-gem {
+  width: 30px;
+  height: 30px;
+  transform: rotate(45deg);
+  background: radial-gradient(circle at 35% 35%, #fff, var(--rc) 45%, #000 120%);
+  opacity: .8;
+}
+
+.rv-tile.won {
+  background: linear-gradient(color-mix(in srgb, var(--rc) 55%, #0a0604), #0a0604);
+}
+
+.rv-marker {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #ffe070;
+  box-shadow: 0 0 8px #ffe070;
+}
+
+.rv-result {
+  text-align: left;
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.rv-result:empty {
+  display: none;
+}
+
+.rv-btns {
+  justify-content: center;
+  margin-top: 10px;
+  gap: 8px;
+}
+
+.rv-btns:empty {
+  display: none;
+}
+
+body.touch .rv-box {
+  width: min(560px, 80vw);
+  padding: 8px 12px;
+}
+
+body.touch .rv-title {
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+body.touch .rv-window {
+  height: 64px;
+}
+
+body.touch .rv-tile {
+  height: 64px;
+  flex-basis: 64px;
+  gap: 1px;
+}
+
+body.touch .rv-tile img {
+  width: 34px;
+  height: 34px;
+}
+
+body.touch .rv-tile b {
+  font-size: 8px;
+}
+
+body.touch .rv-gem {
+  width: 20px;
+  height: 20px;
+}
+
+body.touch .rv-result {
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+body.touch .rv-btns {
+  margin-top: 6px;
+}
+
 /* the portal choice at a cleared exit (game.portalChoice) */
 .portal-choice {
   width: min(680px, 94vw);

@@ -69,7 +69,7 @@ async function run() {
   if (rangeRes.status !== 206) {
     throw new Error(`/download/android range request failed: status ${rangeRes.status}`);
   }
-  if (!rangeRes.headers['content-disposition'] || !rangeRes.headers['content-disposition'].includes('Velscour.apk')) {
+  if (!rangeRes.headers['content-disposition'] || !/Velscour.*\.apk/i.test(rangeRes.headers['content-disposition'])) {
     throw new Error('Missing Content-Disposition for APK');
   }
   console.log('✓ Range download for Android APK verified: HTTP 206 Partial Content, Content-Range:', rangeRes.headers['content-range']);
