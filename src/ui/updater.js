@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.8';
+export const CURRENT_BUILD_VERSION = '1.1.9';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,14 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.8' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.9' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.8' : currentVer,
+          version: forceTestUpdate ? '1.1.9' : currentVer,
           changelog: [
+            'Fixed multiplayer dungeon progression: exit portal now reliably unseals for all party members when the floor champion/guardian is slain, including remote and late-joining players',
             'Fine-tuned UI styling: experience bar placement, Velscour contact skull positioning, and inventory alignment',
             'Restored missing inventory stats grid, attribute allocation rows, and item rarity styles',
             'Fixed HP and MP numerical text display on life and mana orbs in compact mobile views (portrait & landscape)',

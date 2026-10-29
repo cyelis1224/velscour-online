@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.8' };
+    return { version: '1.1.9' };
   }
 }
 
@@ -424,6 +424,7 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Fixed multiplayer dungeon progression: exit portal now reliably unseals for all party members when the floor champion/guardian is slain, including remote and late-joining players",
         "Fine-tuned UI styling: experience bar placement, Velscour contact skull positioning, and inventory alignment",
         "Restored missing inventory stats grid, attribute allocation rows, and item rarity styles",
         "Fixed HP and MP numerical text display on life and mana orbs in compact mobile views (portrait & landscape)",
@@ -456,8 +457,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.8'}`,
-          filename: `Velscour-${pkg.version || '1.1.8'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.1.9'}`,
+          filename: `Velscour-${pkg.version || '1.1.9'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -509,7 +510,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.8'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.1.9'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -825,7 +826,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.1.8';
+        const serverVer = getPackageInfo().version || '1.1.9';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -878,7 +879,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.1.8',
+          serverVersion: getPackageInfo().version || '1.1.9',
         }));
 
         if (reconnectedRoom) {
@@ -892,6 +893,7 @@ wss.on('connection', (ws) => {
               depth: reconnectedRoom.depth,
               biome: reconnectedRoom.biome,
               hostId: reconnectedRoom.hostId,
+              unsealedDepths: Array.from(reconnectedRoom.unsealedDepths || []),
               players: reconnectedRoom.players.map(p => ({
                 id: p.id,
                 name: p.name,
@@ -1081,6 +1083,7 @@ wss.on('connection', (ws) => {
           players: [clientData],
           groundLoot: new Map(),
           killedMonsters: new Map(),
+          unsealedDepths: new Set(),
         };
         rooms.set(roomName, roomData);
         clientData.room = roomName;
@@ -1096,6 +1099,7 @@ wss.on('connection', (ws) => {
             biome: roomData.biome,
             hostId: roomData.hostId,
             maxPlayers: roomData.maxPlayers,
+            unsealedDepths: Array.from(roomData.unsealedDepths || []),
             players: roomData.players.map(p => ({
               id: p.id,
               name: p.name,
@@ -1171,6 +1175,7 @@ wss.on('connection', (ws) => {
             biome: room.biome,
             hostId: room.hostId,
             maxPlayers: room.maxPlayers,
+            unsealedDepths: Array.from(room.unsealedDepths || []),
             players: room.players.map(p => ({
               id: p.id,
               name: p.name,
@@ -1256,8 +1261,39 @@ wss.on('connection', (ws) => {
           if (!set) { set = new Set(); room.killedMonsters.set(d, set); }
           if (msg.netId) set.add(msg.netId);
           if (msg.monsterIdx != null) set.add(msg.monsterIdx);
+          if (msg.isBoss || msg.rank === 'boss' || (msg.netId && (String(msg.netId).startsWith('boss_') || String(msg.netId).startsWith('raid_')))) {
+            if (!room.unsealedDepths) room.unsealedDepths = new Set();
+            room.unsealedDepths.add(d);
+            broadcastToRoom(clientData.room, {
+              type: 'game_floor_unsealed',
+              depth: d,
+              bossId: msg.netId || msg.monsterIdx,
+              bossName: '',
+              sourcePlayerId: clientData.id,
+              sourcePlayerName: clientData.name,
+            });
+          }
         }
         broadcastToRoom(clientData.room, msg, ws);
+        break;
+      }
+
+      case 'game_floor_unsealed': {
+        if (!clientData.room) break;
+        const room = rooms.get(clientData.room);
+        const d = msg.depth || (room ? room.depth : 1);
+        if (room) {
+          if (!room.unsealedDepths) room.unsealedDepths = new Set();
+          room.unsealedDepths.add(d);
+        }
+        broadcastToRoom(clientData.room, {
+          type: 'game_floor_unsealed',
+          depth: d,
+          bossId: msg.bossId || null,
+          bossName: msg.bossName || '',
+          sourcePlayerId: clientData.id,
+          sourcePlayerName: clientData.name,
+        });
         break;
       }
 
@@ -1285,6 +1321,8 @@ wss.on('connection', (ws) => {
           type: 'dungeon_killed_sync',
           depth: d,
           killed: set ? Array.from(set) : [],
+          unsealed: room.unsealedDepths ? room.unsealedDepths.has(d) : false,
+          unsealedDepths: Array.from(room.unsealedDepths || []),
         }));
         break;
       }
@@ -1415,6 +1453,8 @@ wss.on('connection', (ws) => {
             mixId: room.mixId,
             heresies: room.heresies || [],
             killed: Array.from(room.killedMonsters?.get(room.depth) || []),
+            unsealed: room.unsealedDepths ? room.unsealedDepths.has(room.depth) : false,
+            unsealedDepths: Array.from(room.unsealedDepths || []),
             sourcePlayerId: clientData.id,
             sourcePlayerName: clientData.name,
           });
@@ -1438,6 +1478,8 @@ wss.on('connection', (ws) => {
             seed: room.dungeonSeed,
             mixId: room.mixId,
             heresies: room.heresies || [],
+            unsealed: room.unsealedDepths ? room.unsealedDepths.has(room.depth) : false,
+            unsealedDepths: Array.from(room.unsealedDepths || []),
             sourcePlayerId: clientData.id,
             sourcePlayerName: clientData.name,
           });

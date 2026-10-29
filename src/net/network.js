@@ -428,6 +428,10 @@ function serializeGearItem(item, slot) {
         this.emit('game_party_chat', msg);
         break;
 
+      case 'game_floor_unsealed':
+        this.emit('game_floor_unsealed', msg);
+        break;
+
       case 'room_depth_sync':
         if (this.currentRoom) {
           if (typeof msg.depth === 'number') this.currentRoom.depth = msg.depth;
@@ -732,7 +736,7 @@ function serializeGearItem(item, slot) {
     });
   }
 
-  sendMonsterHit(monsterIdx, dmg, isCrit = false, elem = null, x = null, y = null, netId = null, killed = false, worldKind = null, depth = 0) {
+  sendMonsterHit(monsterIdx, dmg, isCrit = false, elem = null, x = null, y = null, netId = null, killed = false, worldKind = null, depth = 0, isBoss = false, rank = null) {
     if (!this.currentRoom) return;
     this.send({
       type: 'game_monster_hit',
@@ -746,6 +750,18 @@ function serializeGearItem(item, slot) {
       killed,
       worldKind,
       depth,
+      isBoss,
+      rank,
+    });
+  }
+
+  sendFloorUnsealed(depth = 1, bossId = null, bossName = '') {
+    if (!this.currentRoom) return;
+    this.send({
+      type: 'game_floor_unsealed',
+      depth,
+      bossId,
+      bossName,
     });
   }
 

@@ -116,7 +116,8 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
   if (byHero && src && src.isPlayer && o.sk && !o.dot) classHitFx(src, tgt, o.sk, el); // the class's own splash (gfx/classfx.js)
   tgt.hp -= dmg;
   if (G.room && byHero && !o.fromNetwork && !src?.isRemotePlayer && net.connected) {
-    net.sendMonsterHit(tgt.idx || 0, dmg, crit, el, tgt.x, tgt.y, tgt.netId, tgt.hp <= 0, G.world?.kind, G.world?.depth || 0);
+    const isBoss = tgt.rank === 'boss' || tgt.rank === 'raid' || tgt === G.world?.boss;
+    net.sendMonsterHit(tgt.idx || 0, dmg, crit, el, tgt.x, tgt.y, tgt.netId, tgt.hp <= 0, G.world?.kind, G.world?.depth || 0, isBoss, tgt.rank);
   }
   if (tgt.isPlayer && !o.dot && src && src !== tgt && tgt.st.procs && tgt.st.procs.length) relicProc(tgt, 'hurt', src, dmg);
   tgt.flash = 0.12;
@@ -298,7 +299,7 @@ export function kill(tgt, src, info = {}) {
     if (tgt.team === 'enemy') { dropLoot(world, tgt); commissionKill(world, tgt); if (world.rift) riftKill(world, tgt); }
     if (world.onKill) world.onKill(tgt); // streaks, challenges (game/happenings.js)
   }
-  if (tgt.rank === 'boss' && world) {
+  if ((tgt.rank === 'boss' || tgt.rank === 'raid' || tgt === world?.boss) && world) {
     for (const c of world.creatures) if (c.summon && !c.dead) c.cheerT = 2.5;
     if (world.onBossKilled) world.onBossKilled(tgt);
   }

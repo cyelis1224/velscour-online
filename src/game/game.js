@@ -285,7 +285,15 @@ function attachNetListeners() {
 
   net.on('room_reconnected', (data) => {
     if (data && data.room) {
+      const oldUnsealed = G.room?.unsealedDepths;
       G.room = data.room;
+      if (Array.isArray(data.room.unsealedDepths)) {
+        G.room.unsealedDepths = new Set(data.room.unsealedDepths);
+      } else if (oldUnsealed) {
+        G.room.unsealedDepths = oldUnsealed;
+      } else {
+        G.room.unsealedDepths = new Set();
+      }
       UI.log(`Link restored to room <b style="color:#ffd860">${escapeHtml(data.room.name)}</b>!`, '#48e868');
     }
   });
@@ -372,6 +380,23 @@ function attachNetListeners() {
           kill(m, rp, { el: data.elem || 'phys', crit: !!data.isCrit });
         }
       }
+      if (data.killed && (data.isBoss || data.rank === 'boss' || (m && m === G.world.boss) || (G.world.boss && (G.world.boss.netId === data.netId || G.world.boss.idx === data.monsterIdx)))) {
+        if (G.room) {
+          if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+          G.room.unsealedDepths.add(G.world.depth);
+        }
+        game.unsealDungeonExit(G.world, G.world.boss?.name);
+      }
+    }
+  });
+
+  net.on('game_floor_unsealed', (data) => {
+    if (!G.room) return;
+    if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+    G.room.unsealedDepths.add(data.depth);
+
+    if (G.world && G.world.kind === 'dungeon' && G.world.depth === data.depth) {
+      game.unsealDungeonExit(G.world, data.bossName);
     }
   });
 
@@ -538,6 +563,16 @@ function attachNetListeners() {
         if (c.idx != null && G.world.killedMonsterIds.has(c.idx)) return false;
         return true;
       });
+      if (G.world.boss && (
+        (G.world.boss.netId && G.world.killedMonsterIds.has(G.world.boss.netId)) ||
+        (G.world.boss.idx != null && G.world.killedMonsterIds.has(G.world.boss.idx))
+      )) {
+        if (G.room) {
+          if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+          G.room.unsealedDepths.add(G.world.depth);
+        }
+        game.unsealDungeonExit(G.world, G.world.boss.name);
+      }
     }
 
     for (const s of data.monsters || []) {
@@ -601,6 +636,11 @@ function attachNetListeners() {
     if (!set) { set = new Set(); G.room.killedMonsters.set(data.depth, set); }
     for (const id of data.killed || []) set.add(id);
 
+    if (data.unsealed || (data.unsealedDepths && data.unsealedDepths.includes(data.depth))) {
+      if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+      G.room.unsealedDepths.add(data.depth);
+    }
+
     if (G.world && G.world.kind === 'dungeon' && G.world.depth === data.depth) {
       if (!G.world.killedMonsterIds) G.world.killedMonsterIds = new Set();
       for (const id of data.killed || []) G.world.killedMonsterIds.add(id);
@@ -610,6 +650,16 @@ function attachNetListeners() {
         if (c.idx != null && set.has(c.idx)) return false;
         return true;
       });
+      const bossDead = (G.world.boss && (
+        (G.world.boss.netId && set.has(G.world.boss.netId)) ||
+        (G.world.boss.idx != null && set.has(G.world.boss.idx))
+      )) || (G.room && G.room.unsealedDepths && G.room.unsealedDepths.has(data.depth));
+
+      if (bossDead) {
+        if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+        G.room.unsealedDepths.add(data.depth);
+        game.unsealDungeonExit(G.world, G.world.boss?.name);
+      }
     }
   });
 
@@ -630,6 +680,13 @@ function attachNetListeners() {
       if (data.seed) G.room.dungeonSeed = data.seed;
       if (data.mixId !== undefined) G.room.mixId = data.mixId;
       if (Array.isArray(data.heresies)) G.room.heresies = data.heresies;
+      if (data.unsealed || (data.unsealedDepths && data.unsealedDepths.includes(data.depth))) {
+        if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+        G.room.unsealedDepths.add(data.depth);
+        if (G.world && G.world.kind === 'dungeon' && G.world.depth === data.depth) {
+          game.unsealDungeonExit(G.world);
+        }
+      }
       if (net.currentRoom) {
         net.currentRoom.depth = G.room.depth;
         net.currentRoom.biome = G.room.biome;
@@ -758,6 +815,11 @@ export const game = {
 
   startMultiplayerGame(c, room) {
     G.room = room;
+    if (Array.isArray(room.unsealedDepths)) {
+      G.room.unsealedDepths = new Set(room.unsealedDepths);
+    } else if (!G.room.unsealedDepths) {
+      G.room.unsealedDepths = new Set();
+    }
     G.remotePlayers = new Map();
     attachNetListeners();
 
@@ -1342,8 +1404,18 @@ export const game = {
     const [sx, sy] = gen.start;
     let tp = gen.townPortal || [sx + 1.6, sy - 0.6];
     if (!gen.map.walkable(tp[0], tp[1])) tp = gen.map.randomNear(sx, sy, 2);
+    const isAlreadyUnsealed = (G.room && G.room.unsealedDepths && G.room.unsealedDepths.has(depth)) ||
+      (G.room && G.room.killedMonsters && (
+        (world.boss?.netId && G.room.killedMonsters.get(depth)?.has(world.boss.netId)) ||
+        (world.boss?.idx != null && G.room.killedMonsters.get(depth)?.has(world.boss.idx))
+      ));
     const exit = {
-      x: gen.exit[0], y: gen.exit[1], type: 'exit', active: false, color: '#5a5a60', reach: 1.6, label: 'Sealed Exit', skygate: sky,
+      x: gen.exit[0], y: gen.exit[1], type: 'exit',
+      active: !!isAlreadyUnsealed,
+      color: isAlreadyUnsealed ? '#40a0ff' : '#5a5a60',
+      reach: 1.6,
+      label: isAlreadyUnsealed ? (world.unbound ? 'Exit — to town' : 'Exit — continue') : 'Sealed Exit',
+      skygate: sky,
       use: () => this.useExit(world, exit),
     };
     world.portals = [
@@ -1411,6 +1483,17 @@ export const game = {
         });
       }
     }
+    if (world.boss && (
+      (world.boss.netId && (G.room?.killedMonsters?.get(depth)?.has(world.boss.netId) || world.killedMonsterIds?.has(world.boss.netId))) ||
+      (world.boss.idx != null && (G.room?.killedMonsters?.get(depth)?.has(world.boss.idx) || world.killedMonsterIds?.has(world.boss.idx))) ||
+      (G.room?.unsealedDepths && G.room.unsealedDepths.has(depth))
+    )) {
+      if (!exit.active) {
+        exit.active = true;
+        exit.color = '#40a0ff';
+        exit.label = world.unbound ? 'Exit — to town' : 'Exit — continue';
+      }
+    }
     world.roster = [...new Set(gen.spawns.filter((s) => s.arch && !['raid', 'boss'].includes(s.rank)).map((s) => s.arch))];
     if (!sky && biome.id !== 'throne') setupHappenings(world, gen.start, gen); // omens, shrines, treasure imps, cursed chests (game/happenings.js)
     setupCommissions(world, gen.start); // this depth's Town Commission objectives (game/commissions.js)
@@ -1425,28 +1508,14 @@ export const game = {
     world.onBossKilled = (m) => {
       if (biome.overworld) return;
       if (m.raid && m.raid.court) return; // one of Velscour Unbound's court: not the fight's end
-      exit.active = true; exit.color = '#40a0ff'; exit.label = world.unbound ? 'Exit — to town' : 'Exit — continue';
-      if (world.unbound) { // the rematch: no depth cleared, no victory screen; its hoard is Velscour's (game/velscour.js)
-        c.unbound.wins = (c.unbound.wins || 0) + 1;
-        UI.centerMsg('VELSCOUR UNBOUND HAS FALLEN', `${c.unbound.wins} time${c.unbound.wins > 1 ? 's' : ''} · the exit is open`, 4);
-        addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#40a0ff', 5)); sfx('gate'); UI.refresh(); this.autosave();
-        return;
+      if (G.room) {
+        if (!G.room.unsealedDepths) G.room.unsealedDepths = new Set();
+        G.room.unsealedDepths.add(depth);
+        if (net.connected) {
+          net.sendFloorUnsealed(depth, m.netId || m.idx, m.name);
+        }
       }
-      const first = !c.cleared[depth];
-      c.cleared[depth] = true;
-      c.deepest = Math.max(c.deepest || 0, depth);
-      this.brokeThrough(depth);
-      UI.centerMsg(m.raid ? `${m.name} DEFEATED` : 'GUARDIAN SLAIN', first ? '+1 bonus skill point · the exit is open' : 'The exit is open', 3.5);
-      if (first) { c.skillPoints++; UI.log('Bonus skill point for clearing a new depth!', '#ffd860'); recordDepth(world, depth); }
-      addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#40a0ff', 5));
-      sfx('gate');
-      UI.refresh();
-      this.autosave();
-      if (m.isVelscour && !world.practice) {
-        // the Endgame opens for every hero on this browser (docs/ENDGAME.md)
-        if (unlockEndgame()) UI.log('<b style="color:#20e0ff">The Endgame opens.</b> The Altar of Heresy and the Abyssal Rift gate in Herrington Hollow answer to every hero now.', '#a0f0ff');
-        setTimeout(() => victoryScreen(() => {}), 3200);
-      }
+      this.unsealDungeonExit(world, m.name, m.isVelscour, !!m.raid);
     };
     if (sky) {   // the Sky Battle (game/skybattle.js): one of eight weathers or thirty stories, never the last one twice
       world.overworldScenario = createSkyBattle(world, gen, biome, depth, { variant: c.skyVariant, last: c.lastSkyVariant, seen: c.skySeen || {} }, () => {
@@ -1566,9 +1635,63 @@ export const game = {
     });
   },
 
+  unsealDungeonExit(world, bossName = null, isVelscour = false, isRaid = false) {
+    if (!world || world.kind !== 'dungeon' || world.biome?.overworld) return;
+    const exit = world.portals?.find(p => p.type === 'exit');
+    if (!exit) return;
+    if (exit.active) return; // already unsealed
+
+    exit.active = true;
+    exit.color = '#40a0ff';
+    exit.label = world.unbound ? 'Exit — to town' : 'Exit — continue';
+
+    const c = G.char;
+    if (c) {
+      if (world.unbound) {
+        c.unbound.wins = (c.unbound.wins || 0) + 1;
+        UI.centerMsg('VELSCOUR UNBOUND HAS FALLEN', `${c.unbound.wins} time${c.unbound.wins > 1 ? 's' : ''} · the exit is open`, 4);
+      } else {
+        const first = !c.cleared[world.depth];
+        c.cleared[world.depth] = true;
+        c.deepest = Math.max(c.deepest || 0, world.depth);
+        this.brokeThrough(world.depth);
+        UI.centerMsg(bossName ? `${bossName} DEFEATED` : isRaid ? 'BOSS DEFEATED' : 'GUARDIAN SLAIN', first ? '+1 bonus skill point · the exit is open' : 'The exit is open', 3.5);
+        if (first) {
+          c.skillPoints++;
+          UI.log('Bonus skill point for clearing a new depth!', '#ffd860');
+          recordDepth(world, world.depth);
+        }
+      }
+      this.autosave();
+    }
+
+    addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#40a0ff', 5));
+    sfx('gate');
+    UI.refresh();
+
+    if (isVelscour && !world.practice) {
+      if (unlockEndgame()) UI.log('<b style="color:#20e0ff">The Endgame opens.</b> The Altar of Heresy and the Abyssal Rift gate in Herrington Hollow answer to every hero now.', '#a0f0ff');
+      setTimeout(() => victoryScreen(() => {}), 3200);
+    }
+  },
+
   useExit(world, exit) {
     const c = G.char;
-    if (!exit.active) { floatText(exit.x, exit.y, 70, world.breach ? 'Sealed — the Breach Heart still beats!' : world.rift ? 'Sealed — the Guardian still stands!' : world.overworldScenario ? 'Sealed — complete the shrine trial!' : 'Sealed — slay the guardian!', '#ff6040', 13, { life: 1.6 }); sfx('error'); return; }
+    if (!exit.active) {
+      const isBossDead = !world.boss || world.boss.dead ||
+        (world.killedMonsterIds && (
+          (world.boss.netId && world.killedMonsterIds.has(world.boss.netId)) ||
+          (world.boss.idx != null && world.killedMonsterIds.has(world.boss.idx))
+        )) ||
+        (G.room?.unsealedDepths && G.room.unsealedDepths.has(world.depth));
+      if (world.kind === 'dungeon' && !world.breach && !world.rift && !world.overworldScenario && isBossDead) {
+        this.unsealDungeonExit(world, world.boss?.name);
+        return;
+      }
+      floatText(exit.x, exit.y, 70, world.breach ? 'Sealed — the Breach Heart still beats!' : world.rift ? 'Sealed — the Guardian still stands!' : world.overworldScenario ? 'Sealed — complete the shrine trial!' : 'Sealed — slay the guardian!', '#ff6040', 13, { life: 1.6 });
+      sfx('error');
+      return;
+    }
     if (world.breach) this.breachExit(world);
     else if (world.rift) this.riftExit(world);
     else if (world.unbound) { sfx('portal'); this.enterTown(); }
