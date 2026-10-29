@@ -162,9 +162,9 @@ button {
   position: absolute;
   z-index: 1;
   background: #0d0806;
-  left: 17.5%;
-  width: 65%;
-  top: 83.2%;
+  left: 13%;
+  width: 86%;
+  top: 80%;
   height: 7%;
   overflow: hidden;
   pointer-events: auto;
@@ -184,7 +184,7 @@ button {
   z-index: 4;
   left: 17.5%;
   width: 65%;
-  top: 83.2%;
+  top: 80.5%;
   height: 7%;
   display: flex;
   align-items: center;
@@ -1407,8 +1407,8 @@ body.touch #sealed-btn i {
   box-shadow: 0 2px 6px #000;
   cursor: pointer;
   position: absolute;
-  top: 112px;
-  right: 0px;
+  top: -10px;
+  right: -10px;
 }
 
 #velscour-skull img {
@@ -2640,6 +2640,7 @@ body.touch #sealed-btn i {
   gap: 12px;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
 }
 
 .paperdoll {

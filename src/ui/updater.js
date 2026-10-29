@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.7';
+export const CURRENT_BUILD_VERSION = '1.1.8';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,15 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.7' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.8' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.7' : currentVer,
+          version: forceTestUpdate ? '1.1.8' : currentVer,
           changelog: [
+            'Fine-tuned UI styling: experience bar placement, Velscour contact skull positioning, and inventory alignment',
+            'Restored missing inventory stats grid, attribute allocation rows, and item rarity styles',
             'Fixed HP and MP numerical text display on life and mana orbs in compact mobile views (portrait & landscape)',
             'Fixed sealed item opening panel styling, responsiveness, and reel animations on mobile & touch displays',
             'Fine-tuned mobile touch controls and UI pointer-events layering',
