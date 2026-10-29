@@ -104,7 +104,17 @@ function loop(now) {
   // the update and the draw each get their own try: an update that throws every frame (a broken fight) used to skip
   // every draw too, and the screen went black
   if (G.mode === 'game' && G.world) {
-    try { game.update(dt); } catch (err) { reportError(err); }
+    try {
+      game.update(dt);
+      if (G.room && raw > 0.08) {
+        // Catch up simulation in online play so player stays in real-time sync with peers
+        const catchupSteps = Math.min(6, Math.floor((raw - 0.05) / 0.05));
+        for (let i = 0; i < catchupSteps; i++) {
+          if (!G.world || !G.room) break;
+          game.update(0.05);
+        }
+      }
+    } catch (err) { reportError(err); }
   }
   try {
     if (G.mode === 'game' && G.world) game.render();
@@ -146,8 +156,36 @@ async function boot() {
   UI.heresies = Heresies; UI.rifts = Rifts; UI.marks = Marks; // the Endgame's panels (docs/ENDGAME.md)
   window.addEventListener('error', (e) => reportError(e.error || e.message));
   window.addEventListener('unhandledrejection', (e) => reportError(e.reason));
-  window.addEventListener('beforeunload', () => { if (G.char) game.autosave(); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && G.char) game.autosave(); else if (!document.hidden) dropBakes(); });
+  let bgHeartbeat = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (G.char) game.autosave();
+      if (G.mode === 'game' && G.room && !bgHeartbeat) {
+        let bgLast = performance.now();
+        bgHeartbeat = setInterval(() => {
+          if (!G.room || G.mode !== 'game' || !G.world) {
+            clearInterval(bgHeartbeat);
+            bgHeartbeat = null;
+            return;
+          }
+          const bNow = performance.now();
+          const bDt = Math.min(0.1, (bNow - bgLast) / 1000);
+          bgLast = bNow;
+          try { game.update(bDt); } catch (e) {}
+        }, 100);
+      }
+    } else {
+      if (bgHeartbeat) {
+        clearInterval(bgHeartbeat);
+        bgHeartbeat = null;
+      }
+      last = performance.now();
+      dropBakes();
+      if (G.room && G.world && typeof net !== 'undefined' && net.connected && G.world.kind === 'dungeon') {
+        net.requestDungeonState(G.world.depth);
+      }
+    }
+  });
   G.canvas.addEventListener('contextrestored', dropBakes); // a GPU reset wiped the baked floors (game/render.js)
   requestAnimationFrame(loop);
   try {

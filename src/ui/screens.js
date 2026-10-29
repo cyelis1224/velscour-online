@@ -523,7 +523,7 @@ export function settingsDialog() {
     <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
     <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
     <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
-    <label>Pause while menus open</label><input type="checkbox" data-k="pauseMenus" ${st.pauseMenus !== false ? 'checked' : ''}>
+    <label>Pause while menus open (Single Player)</label><input type="checkbox" data-k="pauseMenus" ${st.pauseMenus !== false ? 'checked' : ''}>
     <label>Show gold labels</label><input type="checkbox" data-k="showGoldLabels" ${st.showGoldLabels ? 'checked' : ''}>
     <label title="An icon per summoning skill next to the buffs, with how many of its minions are out">Minion counts with the buffs</label><input type="checkbox" data-k="minionCounts" ${st.minionCounts !== false ? 'checked' : ''}>
     <label>Hide dropped item names</label><input type="checkbox" data-k="hideItemNames" ${st.hideItemNames ? 'checked' : ''}>
@@ -653,9 +653,10 @@ export function helpDialog() {
 }
 
 export function pauseMenu() {
+  const isOnline = !!G.room;
   const d = UI.dialog({
-    title: 'Paused',
-    html: `<p class="dim">${escapeHtml(G.char.name)} · Level ${G.char.level} · Depth ${G.char.depth}</p>`,
+    title: isOnline ? 'Game Menu (Live)' : 'Paused',
+    html: `<p class="dim">${escapeHtml(G.char.name)} · Level ${G.char.level} · Depth ${G.char.depth}</p>${isOnline ? '<p style="color:#ffb060;font-size:12px;margin-top:6px">Game continues in real time while playing online.</p>' : ''}`,
     buttons: [
       { label: 'Resume' },
       { label: 'Settings', fn: settingsDialog },

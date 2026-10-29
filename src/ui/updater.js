@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.5';
+export const CURRENT_BUILD_VERSION = '1.1.6';
 
 /**
  * Returns the effective client version.
@@ -168,13 +168,15 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.5' : currentVer,
+        serverVersion: forceTestUpdate ? '1.1.6' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.5' : currentVer,
+          version: forceTestUpdate ? '1.1.6' : currentVer,
           changelog: [
+            'Disabled pausing in online multiplayer across all menus, modals, and hit-stops to eliminate client and server desync',
+            'Real-time simulation catch-up and background tab heartbeat to preserve synchronization during window unfocus',
             'Netcode smoothness optimization: TCP_NODELAY, dead-reckoning extrapolation, and 60 FPS monster interpolation',
             'Equipment delta compression reducing continuous player state bandwidth by 85%',
             'Full visual replication for remote player skills, animations, hazards, and Barbarian Leap 3D arc',

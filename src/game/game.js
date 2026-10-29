@@ -2078,16 +2078,17 @@ export const game = {
     }
     this.tickPick(dt);
     Auto.tickDest(dt); // auto-play's Standard/Breach menu in town
-    const pauseMenus = G.settings.pauseMenus !== false && w.kind === 'dungeon' && ui.anyOpen();
-    G.paused = ui.modal || pauseMenus;
+    const pauseMenus = !G.room && G.settings.pauseMenus !== false && w.kind === 'dungeon' && ui.anyOpen();
+    G.paused = !G.room && (ui.modal || pauseMenus);
     Cine.update(G.paused ? 0 : dt);
-    if (G.cine && !G.paused) {   // a cut scene (game/cinema.js): no input, no auto-play, no monster thinks; the scene's actors move
+    if (G.cine && !G.paused && !G.room) {   // a cut scene (game/cinema.js): no input, no auto-play, no monster thinks; the scene's actors move
       input.endFrame();
       cineTick(w, dt);
       // a scene this hero has seen plays at 20x (Cine.fast; Settings > "Don't skip cutscenes" keeps it at 1x)
       for (let i = 1; i < CINE_FAST && Cine.fast && G.cine && G.world === w; i++) { G.time += dt; Cine.update(dt); cineTick(w, dt); }
-    } else if (G.hitStop > 0) { G.hitStop -= dt; controls.update(0); }
+    } else if (!G.room && G.hitStop > 0) { G.hitStop -= dt; controls.update(0); }
     else if (!G.paused) {
+      if (G.room && G.hitStop > 0) G.hitStop = Math.max(0, G.hitStop - dt);
       Auto.noteInput();
       controls.update(dt);
       Auto.update(dt);
