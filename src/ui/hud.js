@@ -189,7 +189,13 @@ export const HUD = {
           frame.draggable = false;
           frame.src = src;
           frame.dataset.orb = name;
-          $('#hud-bar').appendChild(frame);
+          const bar = $('#hud-bar');
+          const ref = $('#life-cover');
+          if (ref && ref.parentNode === bar) {
+            bar.insertBefore(frame, ref);
+          } else {
+            bar.appendChild(frame);
+          }
           return frame;
         };
         this.portraitOrbFrames = [
