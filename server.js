@@ -581,13 +581,14 @@ const server = http.createServer((req, res) => {
 
     const ext = path.extname(safePath).toLowerCase();
     const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+    const isCodeOrMarkup = ext === '.html' || ext === '.js' || ext === '.json' || ext === '.css';
     const headers = {
       'Content-Type': contentType,
       'Content-Length': stats.size,
       'Access-Control-Allow-Origin': '*',
     };
 
-    if (parsedUrl.searchParams.has('_v') || parsedUrl.searchParams.has('_hard') || req.headers['cache-control'] === 'no-cache') {
+    if (isCodeOrMarkup || parsedUrl.searchParams.has('_v') || parsedUrl.searchParams.has('_hard') || req.headers['cache-control'] === 'no-cache') {
       headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
       headers['Pragma'] = 'no-cache';
       headers['Expires'] = '0';

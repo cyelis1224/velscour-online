@@ -17,7 +17,14 @@ export function getClientVersion() {
     } catch (e) {}
     try {
       const saved = localStorage.getItem('velscour_installed_version');
-      if (saved) return saved;
+      if (saved) {
+        if (compareVersions(saved, CURRENT_BUILD_VERSION) > 0) {
+          return saved;
+        } else {
+          // Running build is newer than or equal to saved version: clean up stale localStorage
+          localStorage.setItem('velscour_installed_version', CURRENT_BUILD_VERSION);
+        }
+      }
     } catch (e) {}
   }
   return CURRENT_BUILD_VERSION;
@@ -141,10 +148,26 @@ export async function checkForUpdates({ force = false } = {}) {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      let res = null;
+      try {
+        res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+      } catch (e) {}
       clearTimeout(timeoutId);
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // If local server has no /api/version (e.g. running static file server like python -m http.server),
+      // fall back to official production API so local players still get version updates and changelogs
+      if (!res || !res.ok) {
+        if (baseUrl !== 'https://velscour.dagyr.me') {
+          try {
+            const fallbackRes = await fetch(`https://velscour.dagyr.me/api/version?_t=${Date.now()}`, { cache: 'no-store' });
+            if (fallbackRes && fallbackRes.ok) {
+              res = fallbackRes;
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (!res || !res.ok) throw new Error(`HTTP ${res ? res.status : 'offline'}`);
       const data = await res.json();
 
       const currentVer = getClientVersion();
