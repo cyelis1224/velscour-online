@@ -65,11 +65,17 @@ export function titleScreen() {
     menu.textContent = '';
     const last = listSaves()[0];
     const used = Object.keys(heroesByClass()).length;
-    if (last) add(`Continue<br><span style="font-size:13px;color:#a8977c">${escapeHtml(last.name)} · Lv ${last.level} ${CLASSES[last.classId].name} · Depth ${last.depth}</span>`, async () => {
-      await Cloud.settle();
-      const c = listSaves()[0];
-      if (c) gameModeScreen(c, false, titleScreen);
-    });
+    if (last) {
+      const clsName = CLASSES[last.classId]?.name || '';
+      const nameStr = (last.name || '').trim();
+      const alreadyHasClass = nameStr.toLowerCase().includes(clsName.toLowerCase());
+      const classTag = alreadyHasClass ? '' : ` ${clsName}`;
+      add(`Continue<br><span style="font-size:13px;color:#a8977c">${escapeHtml(nameStr || clsName)} · Lv ${last.level}${classTag} · Depth ${last.depth}</span>`, async () => {
+        await Cloud.settle();
+        const c = listSaves()[0];
+        if (c) gameModeScreen(c, false, titleScreen);
+      });
+    }
     add(`Heroes <span style="font-size:13px;color:#a8977c">· ${used}/${CLASS_IDS.length}</span>`, () => classSelect(last ? last.classId : 'paladin'));
     add('VELSCOUR DEFENSE', () => { location.href = 'defense/index.html'; }, 'btn blue'); // the Riftgate's game (defense/), from the title too
     add('Settings', settingsDialog, 'btn');
@@ -263,7 +269,10 @@ export function classSelect(sel = 'paladin', back = titleScreen) {
     const slots = { weapon: 'Weapon', offhand: 'Offhand', body: 'Armor', head: 'Helm', hands: 'Gloves', legs: 'Legs', feet: 'Boots', ring1: 'Ring I', ring2: 'Ring II', ring3: 'Ring III', ring4: 'Ring IV' };
     const gear = h && h.equip ? Object.entries(slots).filter(([slot]) => h.equip[slot])
       .map(([slot, label]) => '<span><b>' + label + ':</b> ' + escapeHtml(h.equip[slot].name || h.equip[slot].base || 'Equipped') + '</span>').join('') : '';
-    text.innerHTML = (h ? `<h2>${escapeHtml(h.name)}</h2><p><b style="color:#ffd34a">Level ${h.level} ${C.name}</b> · Depth ${h.depth} · Deepest ${h.deepest || 0} · ${fmtInt(h.gold)} gold</p>` : `<h2>${C.name}</h2>`) +
+    const hName = (h?.name || '').trim();
+    const hHasCls = hName.toLowerCase().includes(C.name.toLowerCase());
+    const hClsTag = hHasCls ? '' : ` ${C.name}`;
+    text.innerHTML = (h ? `<h2>${escapeHtml(hName || C.name)}</h2><p><b style="color:#ffd34a">Level ${h.level}${hClsTag}</b> · Depth ${h.depth} · Deepest ${h.deepest || 0} · ${fmtInt(h.gold)} gold</p>` : `<h2>${C.name}</h2>`) +
       `<p>${escapeHtml(C.desc)}</p><p class="dim">Skill trees: <b style="color:#e9dcc4">${C.trees.join(' · ')}</b><br>Primary attribute: <b style="color:#ffd34a">${ATTRS[C.primary].name}</b> · Life ${C.life} · Mana ${C.mana}</p>` +
       (gear ? '<div class="class-gear-summary" aria-label="Saved equipped gear">' + gear + '</div>' : '');
     for (const id in cards) cards[id].classList.toggle('sel', id === sel);
