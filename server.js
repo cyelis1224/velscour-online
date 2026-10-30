@@ -403,8 +403,15 @@ function renderDownloadPage(artifacts) {
 
 // ------------------------------------------------------------------ HTTP Server
 const server = http.createServer((req, res) => {
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-  let pathname = decodeURIComponent(parsedUrl.pathname);
+  let parsedUrl, pathname;
+  try {
+    parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    pathname = decodeURIComponent(parsedUrl.pathname);
+  } catch (err) {
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('Bad Request');
+    return;
+  }
 
   // 1. API: Version & Update metadata
   if (pathname === '/api/version') {
@@ -1591,4 +1598,12 @@ wss.on('connection', (ws) => {
 server.listen(PORT, () => {
   console.log(`VELSCOUR Online server running on http://localhost:${PORT}`);
   console.log(`WebSocket server listening on ws://localhost:${PORT}/ws`);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[Server UncaughtException]', err);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[Server UnhandledRejection]', reason);
 });
