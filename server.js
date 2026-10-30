@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.2.0' };
+    return { version: '1.2.1' };
   }
 }
 
@@ -424,6 +424,11 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Bard Music Sheets: paste tablature or note names, lock sheets, and load them into 5 Tab slots under paper doll to play songs during combat",
+        "Death Knight 3D Flying Greatsword: equipped two-handed blade flies beside hero and rests on back with 50 unique greatsword designs",
+        "Fixed castle drawbridges across all maps so lowered bridges rest flush against the stone pier without floating",
+        "Hero damage scale: combat and sheet numbers scaled to hero life for clear, readable figures without altering underlying damage mechanics",
+        "Auto-play AI evasion: intelligently steps out of Great Sand Wyrm charge paths and ground quakes",
         "Major expansion: Held 3D weapons & off-hands for all classes with 50 unique designs per weapon and elemental particle glows",
         "10 Castle Overworld variants with custom layouts, stones, moats, and story dialogue",
         "10 Sea of Sand Dune variants and massive 3D pyramids with deep burial chamber raid encounters",
@@ -466,8 +471,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.2.0'}`,
-          filename: `Velscour-${pkg.version || '1.2.0'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.2.1'}`,
+          filename: `Velscour-${pkg.version || '1.2.1'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -519,7 +524,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.2.0'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.2.1'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -836,7 +841,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.2.0';
+        const serverVer = getPackageInfo().version || '1.2.1';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -889,7 +894,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.2.0',
+          serverVersion: getPackageInfo().version || '1.2.1',
         }));
 
         if (reconnectedRoom) {

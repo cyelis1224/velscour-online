@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.2.0';
+export const CURRENT_BUILD_VERSION = '1.2.1';
 
 /**
  * Returns the effective client version.
@@ -191,13 +191,18 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.2.0' : currentVer,
+        serverVersion: forceTestUpdate ? '1.2.1' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.2.0' : currentVer,
+          version: forceTestUpdate ? '1.2.1' : currentVer,
           changelog: [
+            'Bard Music Sheets: paste tablature or note names, lock sheets, and load them into 5 Tab slots under paper doll to play songs during combat',
+            'Death Knight 3D Flying Greatsword: equipped two-handed blade flies beside hero and rests on back with 50 unique greatsword designs',
+            'Fixed castle drawbridges across all maps so lowered bridges rest flush against the stone pier without floating',
+            'Hero damage scale: combat and sheet numbers scaled to hero life for clear, readable figures without altering underlying damage mechanics',
+            'Auto-play AI evasion: intelligently steps out of Great Sand Wyrm charge paths and ground quakes',
             'Major expansion: Held 3D weapons & off-hands for all classes with 50 unique designs per weapon and elemental particle glows',
             '10 Castle Overworld variants with custom layouts, stones, moats, and story dialogue',
             '10 Sea of Sand Dune variants and massive 3D pyramids with deep burial chamber raid encounters',
