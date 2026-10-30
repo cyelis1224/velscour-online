@@ -532,9 +532,10 @@ export function openLobby(char, onBack) {
       excitable(pod, anim);
 
       const plaque = el('div', 'd2-player-name-plaque', escapeHtml(p.name));
-      const titleTag = el('div', 'd2-player-title-tag', `Lv ${p.level} ${CLASSES[p.classId]?.name || ''}`);
+      const levelTag = el('div', 'd2-player-level-tag d2-player-title-tag', `Level ${p.level}`);
+      const classTag = el('div', 'd2-player-class-tag d2-player-title-tag', escapeHtml(CLASSES[p.classId]?.name || ''));
 
-      pod.append(canvasWrap, plaque, titleTag);
+      pod.append(canvasWrap, plaque, levelTag, classTag);
 
       pod.onclick = () => {
         sfx('ui');

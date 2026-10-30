@@ -582,15 +582,44 @@
   overflow: hidden;
   text-overflow: ellipsis;
   width: 100%;
+  line-height: 1.2;
 }
 
 .d2-player-pod.is-me .d2-player-name-plaque {
   color: #48e868;
 }
 
-.d2-player-title-tag {
+.d2-player-level-tag {
+  font-family: var(--font-head);
+  font-size: 10px;
+  font-weight: 600;
+  color: #d4aa60;
+  text-shadow: 0 1px 2px #000;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  line-height: 1.15;
+  margin-top: 1px;
+}
+
+.d2-player-class-tag {
+  font-family: var(--font-body);
   font-size: 10px;
   color: #a8977c;
+  text-shadow: 0 1px 2px #000;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  line-height: 1.15;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.d2-player-title-tag {
   text-align: center;
   white-space: nowrap;
 }
@@ -810,7 +839,7 @@
   }
 
   #d2-lobby .d2-pedestal-wrap {
-    height: 122px;
+    height: 134px;
   }
 
   #d2-lobby .d2-pedestal-wrap.collapsed {
@@ -823,20 +852,24 @@
   }
 
   #d2-lobby .d2-player-pod {
-    width: 76px;
+    width: 80px;
   }
 
   #d2-lobby .d2-player-canvas-wrap {
     width: 68px;
-    height: 76px;
+    height: 70px;
   }
 
   #d2-lobby .d2-player-name-plaque {
     font-size: 11px;
   }
 
-  #d2-lobby .d2-player-title-tag {
+  #d2-lobby .d2-player-level-tag {
     font-size: 9.5px;
+  }
+
+  #d2-lobby .d2-player-class-tag {
+    font-size: 9px;
   }
 }
 
