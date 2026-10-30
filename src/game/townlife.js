@@ -1206,7 +1206,8 @@ const EVENTS = {
       const [x, y] = d.randomSpot();
       d.go(dog, x, y, true); d.feel(dog, 'happy', 4);
       yield 0.5;
-      d.go(baker, dog.goal[0], dog.goal[1], true); d.feel(baker, 'angry', 4);
+      const to = dog.goal || [x, y]; // (the dog may be there already, or found no way)
+      d.go(baker, to[0], to[1], true); d.feel(baker, 'angry', 4);
       if (kid) { d.go(kid, x + 1, y + 0.5, true); d.feel(kid, 'cheer', 4); }
       if (lap === 1 && cat && !cat.busy) { cat.busy = d.event; cat.eventRole = 'cast'; d.face(cat, dog); d.feel(cat, 'angry', 2); d.run((function* () { yield 1.5; const [cx, cy] = d.randomSpot(); d.go(cat, cx, cy, true); d.feel(cat, 'scared', 3); yield () => !cat.goal; cat.eventRole = null; cat.busy = null; })(), []); }
       for (const p of folk) if (chance(0.5)) d.feel(p, pick(['laugh', 'surprised', 'cheer']), 3);

@@ -1,5 +1,9 @@
 # CASTLE overworld biome
 
+> **October 28, 2026:** the Castle is now eleven castles: the concentric one below (Ironcrown) and ten variants with their
+> own layouts, materials, palettes and stories. Everything that used fixed coordinates here now reads the variant's
+> layout and plan (`src/data/castles.js`). See [CASTLE_VARIANTS.md](CASTLE_VARIANTS.md).
+
 > **October 21, 2026:** the curtains, towers, gates, stairs, keep and halls are now one baked 3D model on a height
 > map: walk the walls, explore the keep and its throne room, watch the drawbridge come down. See
 > [CASTLE_3D.md](CASTLE_3D.md); the sprite walls, towers and keep art described below are gone.

@@ -82,7 +82,7 @@ export function terrainOf(map) {
   const { w, h, hgt, t } = map, N = w * h, base = map.baseLevel ?? 0, under = map.under;
   const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h || t[y * w + x] !== 1 ? null : hgt[y * w + x]);
   const sw = new Int16Array(N), se = new Int16Array(N), box = new Float32Array(N * 4), order = [], occ = [], covers = [];
-  const c3 = map.c3struct && castle3dState();
+  const c3 = map.c3struct && castle3dState(map.castleVariant);
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (t[i] !== 1) continue;
@@ -259,7 +259,7 @@ function soilOf(f) {
 export function drawColumn(ctx, world, i, floorEntry, dress = null, over = false) {
   const map = world.map, T = terrainOf(map), w = map.w, x = i % w, y = (i / w) | 0, v = map.hgt[i];
   const px = (x - y) * HW, py = (x + y) * HH - v * HS;
-  const c3 = map.c3struct && castle3dState();
+  const c3 = map.c3struct && castle3dState(map.castleVariant);
   if (c3) {
     const gx = (x - y) * HW, gy = (x + y) * HH, b = c3.base.get(i), o = c3.over.get(i);
     if (over) { if (o !== undefined) drawPiece(ctx, o, gx, gy); return; }

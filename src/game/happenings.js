@@ -264,6 +264,8 @@ export function addCursed(world, [x, y]) {
       world.happen.cursed = this;
     },
     tick(dt) {
+      // the next wave comes on its timer, or at once when the last one is down: the hero never waits on the curse
+      if (this.waves > 0 && this.mobs && !this.mobs.some((m) => !m.dead)) this.waveT = Math.min(this.waveT, 0.5);
       if (this.waves > 0 && (this.waveT -= dt) <= 0) {
         const n0 = world.creatures.length;
         ambush(world, undefined, randi(4, 7));
@@ -387,6 +389,10 @@ function challengeTick(world, dt) {
   const C = world.happen.ch, p = world.player;
   if (!C) return;
   C.left -= dt;
+  // nothing left to slay close by: Velscour sends more within a second, so the clock is never spent waiting
+  const near = world.creatures.some((m) => m.team === 'enemy' && !m.dead && (m.targetable !== false || m.entering) && dist(m.x, m.y, p.x, p.y) < 10);
+  C.quiet = near ? 0 : (C.quiet || 0) + dt;
+  if (C.quiet > 0.6 && C.left > 2) { C.quiet = 0; ambush(world, undefined, randi(4, 6)); }
   if ((C.shown -= dt) <= 0) { C.shown = 1; floatText(p.x, p.y, 110, `${C.got}/${C.need} Â· ${Math.ceil(C.left)}s`, '#ff8060', 13, { life: 0.95, vz: 0 }); }
   if (C.got >= C.need) {
     world.happen.ch = null;

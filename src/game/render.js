@@ -1,6 +1,6 @@
 // World renderer: floors, decals, depth-sorted walls/entities, effects, lighting, minimap.
 import { G } from '../state.js';
-import { camera, isoX, isoY, HW, HH, TW, TH } from '../core/view.js';
+import { camera, isoX, isoY, HW, HH, TW, TH, elevationAt } from '../core/view.js';
 import { makeCanvas, TAU, clamp, rgba, shade, hexToRgb, measureCtx } from '../core/util.js';
 import { drawDecals, drawEffects, drawParticles, drawTexts, lights, glowSprite, stampDecals, bakedDecals } from '../gfx/vfx.js';
 import { orbitShieldDepth } from '../gfx/lancershields.js';
@@ -30,6 +30,7 @@ import { endgameUnlocked } from './endgame.js';
 import { heresyRankOf } from './heresies.js';
 import { addLight } from '../gfx/vfx.js';
 import { drawTerrain, drawColumn, occludersFor, occludersOfRect, occluderObj, clipAdd, hiddenBehind, standKey, hopZ, drawSky, terrainShade, HS } from '../gfx/terrain.js';
+import { drawRiftgate } from '../gfx/riftgate.js';
 
 let lightCanvas = null, glowCanvas = null, vignette = null, vigKey = '';
 const transitionSprites = new Map();
@@ -391,6 +392,7 @@ function drawScenarioGlyph(ctx, p) {
 }
 function drawPortal(ctx, p) {
   if (p.skygate) return drawSkyGate(ctx, p);
+  if (p.riftgate) return drawRiftgate(ctx, p);
   if (p.type === 'shrine' || p.type === 'objective') return drawScenarioGlyph(ctx, p);
   const x = isoX(p.x, p.y), y = isoY(p.x, p.y);
   const active = p.active;
@@ -676,6 +678,28 @@ function roofFade(world, heroBld) {
   return f.a;
 }
 
+/** How far (world px) any prop can show from its foot by renderWorld's culling below, and the ground's lowest and
+ *  highest lift; worked out again when the props change (counted) or the level does (game.setWorld, behind the
+ *  loading screen). */
+export function propReach(world) {
+  const P = world.props, R = world._propReach;
+  if (R && R.arr === P && R.n === P.length) return R;
+  let e = 220;
+  for (const pr of P) {
+    if (pr.spr && pr.k) { const s = pr.spr; e = Math.max(e, Math.max(Math.abs(s.ox), Math.abs(s.ox + s.w), Math.abs(s.oy), Math.abs(s.oy + s.h)) * pr.k + 8); }
+    else if (pr.caveProp) e = Math.max(e, 440 + Math.abs(pr.z || 0));
+  }
+  let lo = 0, hi = 0;
+  const m = world.map;
+  if (R && R.map === m) { lo = R.lo; hi = R.hi; }
+  else if (m.hgt || world.cave) {   // the lift at every tile centre and corner, and some slack for what lies between
+    const at = (x, y) => { const v = elevationAt(x, y); if (v < lo) lo = v; else if (v > hi) hi = v; };
+    for (let y = 0; y <= m.h; y++) for (let x = 0; x <= m.w; x++) { at(x, y); if (x < m.w && y < m.h) at(x + 0.5, y + 0.5); }
+    lo -= 64; hi += 64;
+  }
+  return (world._propReach = { arr: P, n: P.length, map: m, e: e + 8, lo, hi });
+}
+
 export function renderWorld(ctx, world) {
   const W = G.W * G.dpr, H = G.H * G.dpr;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -813,7 +837,15 @@ export function renderWorld(ctx, world) {
     if(px<vr.x0-100||px>vr.x1+100||py<vr.y0-110||py>vr.y1+70)continue;
     enqueue(item.depth??(item.mountX+item.mountY),13,item);
   }
+  // a quick reject by tile position first (the Castle has 2,600 props, the Wilds 1,100): the view widened by the
+  // farthest any prop reaches from its foot and by the ground's heights, as a box of tiles (not on the tower's spiral)
+  let px0 = -Infinity, px1 = Infinity, py0 = -Infinity, py1 = Infinity;
+  if (!world.tower) {
+    const R = propReach(world), xs0 = vr.x0 - R.e, xs1 = vr.x1 + R.e, ys0 = vr.y0 - R.e + R.lo, ys1 = vr.y1 + R.e + R.hi;
+    px0 = (xs0 / HW + ys0 / HH) / 2; px1 = (xs1 / HW + ys1 / HH) / 2; py0 = (ys0 / HH - xs1 / HW) / 2; py1 = (ys1 / HH - xs0 / HW) / 2;
+  }
   for (const pr of world.props) {
+    if (pr.x < px0 || pr.x > px1 || pr.y < py0 || pr.y > py1) continue;
     const px = isoX(pr.x, pr.y), py = isoY(pr.x, pr.y);
     // Tall outdoor trees are grounded well below their canopy; cull by the full
     // sprite bounds, not just its trunk's ground pivot, to prevent popping.
@@ -1242,8 +1274,16 @@ export function drawMinimap(world, dt, canvas, big = false) {
   const ox = big ? cx : cx - (p.x - p.y) * s, oy = big ? cy - ((map.w + map.h) / 4) * s + (big ? 0 : 0) : cy - ((p.x + p.y) * s) / 2;
   const toS = (x, y) => big ? [cx + (x - y) * s - ((map.w - map.h) * s) / 2, cy - ((map.w + map.h) * s) / 4 + ((x + y) * s) / 2] : [ox + (x - y) * s, oy + ((x + y) * s) / 2];
   c.fillStyle = big ? 'rgba(200,180,140,0.35)' : 'rgba(170,150,120,0.55)';
-  for (let y = 0; y < map.h; y++) {
-    for (let x = 0; x < map.w; x++) {
+  // the small map shows a window round the hero: only the tiles whose diamonds can land in it (the same order, so the
+  // same picture), not the whole map (60k-100k tiles on the dunes and the Castle) five times a second
+  let x0 = 0, x1 = map.w - 1, y0 = 0, y1 = map.h - 1;
+  if (!big) {
+    const d0 = (-4 - ox) / s - 1, d1 = (W + 4 - ox) / s + 1, s0 = (2 * (-4 - oy)) / s - 1, s1 = (2 * (H + 4 - oy)) / s + 1;   // x - y and x + y on screen
+    x0 = Math.max(0, Math.floor((d0 + s0) / 2)); x1 = Math.min(map.w - 1, Math.ceil((d1 + s1) / 2));
+    y0 = Math.max(0, Math.floor((s0 - d1) / 2)); y1 = Math.min(map.h - 1, Math.ceil((s1 - d0) / 2));
+  }
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
       const i = y * map.w + x;
       if ((map.t[i] !== 1 && !(map.wet && map.wet[i])) || !map.seen[i]) continue;
       const [sx, sy] = toS(x, y);

@@ -853,7 +853,8 @@ export const airshipsReady = () => !!AS;
 /**
  * Bring a ship to the roof (camera frame, tiles): kind galleon | ironclad | gasbag | cutter | hauler, docking at angle
  * phi (camera frame) with its starboard side to the roof. Returns a handle: state 'in' -> 'docked' (ramp down) ->
- * 'out' -> 'gone'; board() gives the boarding path, leave() sends it off, sink() burns it down.
+ * 'out' -> 'gone'; board() gives the boarding path, leave() sends it off, sink() burns it down. Setting rush hurries
+ * the approach and the ramp.
  */
 export function spawnShip(kind, phi, g, o = {}) {
   if (!AS || !S) return null;
@@ -887,13 +888,15 @@ export function spawnShip(kind, phi, g, o = {}) {
       this.t += dt;
       const bob = Math.sin(t * 0.8 + phi) * 0.22;
       if (this.state === 'in') {
+        // rush (set by game/tower.js when the hero has nothing to fight): the rest of the approach takes 0.3 s
+        if (this.rush) { this.rushK ??= Math.max(1, (this.dur - this.t) / 0.3); this.t += dt * (this.rushK - 1); }
         const k = Math.min(1, this.t / this.dur), e = 1 - Math.pow(1 - k, 3);
         root.position.set(start[0] + (dock[0] - start[0]) * e, deckY + 9 * (1 - e) + bob, start[1] + (dock[1] - start[1]) * e);
         hold.rotation.z = -0.06 * (1 - k);
         if (k >= 1) { this.state = 'docked'; this.t = 0; }
       } else if (this.state === 'docked') {
         root.position.set(dock[0], deckY + bob, dock[1]);
-        this.ramp = Math.min(1, this.ramp + dt * 0.8);
+        this.ramp = Math.min(1, this.ramp + dt * (this.rush ? 6 : 0.8));
       } else if (this.state === 'out') {
         this.ramp = Math.max(0, this.ramp - dt * 1.5);
         const k = Math.min(1, this.t / 6), e = k * k;

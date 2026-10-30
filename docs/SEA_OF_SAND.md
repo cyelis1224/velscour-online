@@ -2,6 +2,9 @@
 
 Sea of Sand is a second outdoor scenario biome alongside the Forsaken Wilds. It keeps the 72×72 outdoor map contract, uses a native desert floor atlas, and builds walkable routes between one and five objective areas. Sandstone cliffs form the map edge and internal maze walls; map collision and line of sight block passage through intact cliff tiles.
 
+This flat maze is now variant 0 of 11: the other ten are rolling three.js dunes with a big pyramid to go down
+through, picked at random on entry (never the last one seen). See [SEA_OF_SAND_DUNES.md](SEA_OF_SAND_DUNES.md).
+
 ## Runtime integration
 
 | Part | Location |

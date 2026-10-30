@@ -23,7 +23,7 @@ import { addEffect, Telegraph, Ring, Bolt, Column, burst, sparkle, floatText, sm
 import { explosionFx } from '../gfx/shapes.js';
 import { hit } from './combat.js';
 import { Delayed, Area, coneTargets } from './hazards.js';
-import { makeMonster, Monster } from './monster.js';
+import { makeMonster, Monster, lookFor } from './monster.js';
 import { UI } from '../ui/ui.js';
 import { GroundItem } from './loot.js';
 import { makeHeirloom, makeCovenant } from '../data/relics.js';
@@ -47,6 +47,9 @@ const inArena = (x, y, k = 1) => ((x - C.x) / (C.rx * k)) ** 2 + ((y - C.y) / (C
 export function setupVelscour(world, m, gen) {
   const V = new VelscourFight(world, m, gen);
   m.vel = V; world.velscour = V;
+  // the looks of everything he calls in later, chosen now: their sheets load and their sprites are built with the
+  // level, behind the loading screen, not on the frame the first demon steps out (45 ms on a slowed phone)
+  for (const a of ['demon', 'knight', 'gargoyle', 'wraith', 'imp']) lookFor(world, a);
   m.maxHp *= HP_MUL; m.hp = m.maxHp; m.dmg *= DMG_MUL;
   m.onDeath = () => V.onDeath();
   // seated on his throne until the hero comes

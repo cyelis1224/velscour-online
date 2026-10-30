@@ -570,7 +570,7 @@ export class Whirl {
           !['spark', 'ecto', 'rock'].includes(c.goreType)) {
           this.gibT = 0.45;
           const set = c.goreType === 'bone' ? ['bone'] : c.demon ? ['demon'] : ['flesh', 'limb'];
-          gibs(c.x, c.y, 15, G.touch ? 1 : 3, '#9e2022', '#ddd5c5', 0.72, set);
+          gibs(c.x, c.y, 15, G.touch ? 1 : 3, '#9e2022', '#ddd5c5', 0.72, set, { loose: true });   // no skulls off the living
         }
         // Pull normal enemies toward the eye of the storm, but never through a wall.
         if (this.pull && !c.dead && c.rank !== 'boss') {

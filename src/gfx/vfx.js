@@ -5,6 +5,7 @@ import { A } from '../core/assets.js';
 import { camera, isoX, isoY, HW, HH, screenDirToTile } from '../core/view.js';
 import { makeCanvas, rand, TAU, shade, randi, pick, fmt, shuffle, clamp, colourSprites, measureCtx } from '../core/util.js';
 import { groundHidden } from './terrain.js';
+import { bonesReady, boneDeck, boneLook, drawBoneGib } from './bonegibs.js';
 
 export const ELEM = {
   phys: { name: 'Physical', core: '#ffffff', glow: '#e0d8c8', dark: '#7a7060', sfx: 'phys' },
@@ -149,12 +150,16 @@ export function bloodSpray(x, y, z, angle, n, color, force = 1) {
 }
 
 /** Gore chunks. `sets` names gib-sprite sets (assets/sprites/gibs.json: flesh, bone, limb, bug, demon, eye); about
- *  half the chunks become sprites (capped), the rest stay cheap coloured rects. */
+ *  half the chunks become sprites (capped). The rest are three.js bones (gfx/bonegibs.js: skulls, rib cages, femurs
+ *  ...), a third in `boneColor`, the others in `color`, now and then bloodied with `o.blood` (default `color`; null:
+ *  none, a skeleton's); `o.scale` sizes them, `o.loose` keeps out skulls and rib cages. Coloured rects until the
+ *  bone sheet has loaded. */
 let spriteGibs = 0;
-export function gibs(x, y, z, n, color, boneColor = '#e8dcc0', force = 1, sets = null) {
+export function gibs(x, y, z, n, color, boneColor = '#e8dcc0', force = 1, sets = null, o = {}) {
   if (G.settings.gore === 0) return;
   n = Math.round(n * (G.settings.gore === 2 ? 1.5 : 1));
   const M = sets && A.gibImg && A.gibMeta;
+  const deck = bonesReady() ? boneDeck(n, o.loose) : null, coat = o.blood === undefined ? color : o.blood;
   for (let i = 0; i < n; i++) {
     const a = rand(TAU), s = rand(1, 5) * force;
     const bone = Math.random() < 0.3;
@@ -166,6 +171,13 @@ export function gibs(x, y, z, n, color, boneColor = '#e8dcc0', force = 1, sets =
           g: 420, drag: 0.5, life: rand(4, 9), size: rand(0.55, 0.85), blood: color, rot: rand(-0.6, 0.6), vr: rand(-8, 8), bounces: 0 });
         continue;
       }
+    }
+    if (deck) {
+      const look = boneLook(coat);
+      spawn({ type: 'gib', bone: deck[i], look, color: bone ? boneColor : color, coat, blood: look ? coat : null, rest: randi(0, 99),
+        x, y, z: z + rand(0, 14), vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(60, 200) * force,
+        g: 420, drag: 0.5, life: rand(4, 9), size: (o.scale || 1) * rand(0.85, 1.15), rot: rand(TAU), vr: rand(-12, 12), bounces: 0, w: 1 });
+      continue;
     }
     spawn({
       type: 'gib', x, y, z: z + rand(0, 14), vx: Math.cos(a) * s, vy: Math.sin(a) * s, vz: rand(60, 200) * force,
@@ -835,6 +847,7 @@ export function drawParticles(ctx, vr) {
       }
       case 'gib': {
         ctx.globalAlpha = Math.min(1, p.life);
+        if (p.bone) { drawBoneGib(ctx, p, px, py); break; }
         if (p.spr) {
           const [sx, sy, sw, sh] = p.spr, w = sw * p.size, h = sh * p.size;
           ctx.translate(px, py); ctx.rotate(p.rot);

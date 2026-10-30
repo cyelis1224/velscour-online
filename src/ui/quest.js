@@ -85,6 +85,13 @@ export function renderQuest(body) {
         if (cur) h += step(false, `In progress: <b>${escapeHtml(cur.title)}</b> — ${escapeHtml(cur.progress() || cur.description)}`);
         h += step(sc.heart.completed, 'Reach the Heart of the Forest, deep in the mossy labyrinth to the north-east, and still the <b>Elder Heartwood</b>.');
         h += step(sc.completed, sc.completed ? 'The exit is open — descend or return to town.' : 'The trial at the Heart opens the way on.');
+      } else if (sc.type === 'dunes') {
+        h += step(sc.campsDone >= sc.camps.length, `Win the waystones across ${escapeHtml(sc.variant.name)}: <b>${sc.campsDone}/${sc.camps.length}</b>.`);
+        for (const e of sc.camps) h += step(e.state === 'done', `${escapeHtml(e.name)} <span class="dim">— ${escapeHtml(e.label)}</span>`);
+        h += step(sc.phase !== 'trek', `Enter ${escapeHtml(sc.variant.pyramid.name)} once its door opens.`);
+        h += step(sc.phase === 'chamber' || sc.completed, `Go down through the tomb, room by room: <b>${sc.roomsDone}/${sc.rooms.filter((e) => e.kind).length}</b> won.`);
+        h += step(sc.completed, 'Defeat the master of the pyramid in the burial chamber.');
+        h += step(sc.completed, sc.completed ? 'A portal burns in the burial chamber — descend or return to town.' : 'The portal opens in the burial chamber when its master falls.');
       } else if (w.biome?.id === 'sea_of_sand') {
         const beat=sc.current, total=sc.total||1, done=sc.beat||0;
         h += step(done>0, `Secure the marked Sea of Sand areas: <b>${Math.min(done+1,total)}/${total}</b> current · ${done}/${total} complete.`);

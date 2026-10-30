@@ -71,6 +71,7 @@ export function titleScreen() {
       if (c) gameModeScreen(c, false, titleScreen);
     });
     add(`Heroes <span style="font-size:13px;color:#a8977c">· ${used}/${CLASS_IDS.length}</span>`, () => classSelect(last ? last.classId : 'paladin'));
+    add('VELSCOUR DEFENSE', () => { location.href = 'defense/index.html'; }, 'btn blue'); // the Riftgate's game (defense/), from the title too
     add('Settings', settingsDialog, 'btn');
     add('Credits', () => creditsScreen(titleScreen), 'btn');
     add('How to Play', helpDialog, 'btn');
@@ -520,6 +521,8 @@ export function settingsDialog() {
     <label>Target portrait sprite</label><input type="checkbox" data-k="showTargetSprite" ${st.showTargetSprite !== false ? 'checked' : ''}>
     <label>Player chat bubbles</label><input type="checkbox" data-k="showChatBubbles" ${st.showChatBubbles !== false ? 'checked' : ''}>
     <label>Chat in side notifications</label><input type="checkbox" data-k="chatInSideLog" ${st.chatInSideLog !== false ? 'checked' : ''}>
+    <label title="The hero holds his weapon and off-hand, each in its own look">Show weapons and off-hands</label><input type="checkbox" data-k="heldGear" ${st.heldGear !== false ? 'checked' : ''}>
+    <label title="Glows, particles and gem sparks on held weapons, and sparkles on rare armor and helmets (with weapons shown)">Weapon and gear effects</label><input type="checkbox" data-k="heldFx" ${st.heldFx !== false ? 'checked' : ''}>
     <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
     <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
     <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>

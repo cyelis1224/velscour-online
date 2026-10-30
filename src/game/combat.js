@@ -268,7 +268,8 @@ export function kill(tgt, src, info = {}) {
   if (G.settings.gore > 0) {
     bloodSpray(tgt.x, tgt.y, 26, src ? angleTo(src.x, src.y, tgt.x, tgt.y) : rand(TAU), Math.round((big ? 40 : 22) * goreMul), blood, big ? 1.6 : 1.2);
     if (overkill || big || chance(0.35)) {
-      gibs(tgt.x, tgt.y, 16, Math.round((overkill ? 14 : 6) * (big ? 1.8 : 1)), gore.gib || shade3(blood), gore.bones ? '#e8dcc0' : '#d8ccb0', overkill ? 1.4 : 1, gibSets(tgt));
+      gibs(tgt.x, tgt.y, 16, Math.round((overkill ? 14 : 6) * (big ? 1.8 : 1)), gore.gib || shade3(blood), gore.bones ? '#e8dcc0' : '#d8ccb0', overkill ? 1.4 : 1, gibSets(tgt),
+        { blood: gore.bones ? null : blood, scale: big ? 1.3 : 1 });   // a skeleton's bones come out clean
     }
     if (gore.blood !== '#ffcc40') addDecal(tgt.x, tgt.y, blood, (big ? 1.1 : 0.7) * rand(0.8, 1.2), 'pool', 0.92);
   }

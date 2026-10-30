@@ -116,6 +116,7 @@ export class TileMap {
     const q = this._fq || (this._fq = new Int32Array(this.w * this.h));
     let qh = 0, qt = 0;
     q[qt++] = ty * W + tx; f[ty * W + tx] = 0;
+    const T = this.t, Bl = this.block, H = this.h, hg = this.hgt;
     while (qh < qt) {
       const i = q[qh++];
       const d = f[i];
@@ -123,10 +124,10 @@ export class TileMap {
       const x = i % W, y = (i / W) | 0;
       for (let k = 0; k < 4; k++) {
         const nx = x + (k === 0 ? 1 : k === 1 ? -1 : 0), ny = y + (k === 2 ? 1 : k === 3 ? -1 : 0);
-        if (!this.walkableTile(nx, ny)) continue;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
         const ni = ny * W + nx;
-        if (f[ni] !== -1) continue;
-        if (this.hgt && !this.stepOk(ni, i)) continue; // the field is walked from ni to i
+        if (T[ni] !== 1 || Bl[ni] || f[ni] !== -1) continue;
+        if (hg && !this.stepOk(ni, i)) continue; // the field is walked from ni to i
         f[ni] = d + 1;
         q[qt++] = ni;
       }
@@ -231,6 +232,7 @@ export class TileMap {
       }
       return top;
     };
+    const T = this.t, Bl = this.block, SM = this.stepMask();
     stamp[s] = gen; gs[s] = 0; came[s] = -1;
     push(s, h(stx, sty));
     let n = 0;
@@ -245,21 +247,19 @@ export class TileMap {
         path.push(end);
         return this.smooth(sx, sy, path, r);
       }
-      const cx = cur % W, cy = (cur / W) | 0, cg = gs[cur];
-      for (let oy = -1; oy <= 1; oy++) {
-        for (let ox = -1; ox <= 1; ox++) {
-          if (!ox && !oy) continue;
-          const nx = cx + ox, ny = cy + oy;
-          if (!this.walkableTile(nx, ny)) continue;
-          if (ox && oy && (!this.walkableTile(cx + ox, cy) || !this.walkableTile(cx, cy + oy))) continue;
-          if (this.hgt && !this.stepsOk(cx, cy, ox, oy)) continue;
-          const ni = ny * W + nx;
-          if (closed[ni] === gen) continue;
-          const ng = cg + (ox && oy ? 1.414 : 1);
-          if (stamp[ni] === gen && ng >= gs[ni]) continue;
-          stamp[ni] = gen; gs[ni] = ng; came[ni] = cur;
-          push(ni, ng + h(nx, ny));
-        }
+      // the 8 neighbours in the same order as ever (ties in the heap fall the same way), off the typed arrays:
+      // stepMask holds the in-bounds, height-legal steps, floor and props are read live
+      const cx = cur % W, cy = (cur / W) | 0, cg = gs[cur], sm = SM[cur];
+      for (let k = 0; k < 9; k++) {
+        if (!((sm >> k) & 1)) continue;
+        const ox = (k % 3) - 1, oy = ((k / 3) | 0) - 1, ni = cur + oy * W + ox;
+        if (T[ni] !== 1 || Bl[ni]) continue;
+        if (ox && oy && (T[cur + ox] !== 1 || Bl[cur + ox] || T[cur + oy * W] !== 1 || Bl[cur + oy * W])) continue;
+        if (closed[ni] === gen) continue;
+        const ng = cg + (ox && oy ? 1.414 : 1);
+        if (stamp[ni] === gen && ng >= gs[ni]) continue;
+        stamp[ni] = gen; gs[ni] = ng; came[ni] = cur;
+        push(ni, ng + h(cx + ox, cy + oy));
       }
     }
     return null;
@@ -305,10 +305,12 @@ export class TileMap {
       if (v === undefined) { v = this.losWide(ax, ay, bx, by, r); C.set(key, v); }
       return v;
     };
+    // looking at most 24 nodes ahead: a mover re-plans long before it gets that far, and a long A* path (a castle
+    // ward away) tried against its far end first cost more than the search
     const out = [];
     let ax = sx, ay = sy, i = 0;
     while (i < path.length) {
-      let j = path.length - 1;
+      let j = Math.min(path.length - 1, i + 24);
       while (j > i && !los(ax, ay, path[j][0], path[j][1])) j--;
       out.push(path[j]);
       ax = path[j][0]; ay = path[j][1];

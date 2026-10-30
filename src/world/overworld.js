@@ -28,7 +28,7 @@ export const OVERWORLD_SITES = Object.freeze([
 const ENTRY=[9.5,62.5], EXIT=[63.5,9.5], SHRINE=[36.5,35.5];
 const SAND_SITES=[[18.5,19.5],[52.5,19.5],[18.5,51.5],[53.5,51.5],[36.5,35.5]];
 // Sea of Sand objects' heights in world px (the hero stands 60): the pack draws each to fit one cell.
-const SAND_H={palm_stump:24,date_palm_sapling:40,bent_desert_palm:70,thorn_acacia:48,dead_snag:46,spiny_aloe:26,reed_bundle:30,dry_scrub:22,
+export const SAND_H={palm_stump:24,date_palm_sapling:40,bent_desert_palm:70,thorn_acacia:48,dead_snag:46,spiny_aloe:26,reed_bundle:30,dry_scrub:22,
   wind_carved_boulder:40,basalt_shards:24,fossil_ribcage:38,giant_skull:34,obelisk_fragment:56,toppled_column:28,buried_statue_head:42,
   carved_standing_stone:80,clay_water_jar:26,waterskin_rack:50,caravan_chest:24,reed_crate:26,rolled_carpet_stack:22,market_awning:70,
   broken_cart_wheel:26,pack_saddle:22,bronze_brazier:40,cold_firepit:14,rope_pulley_well:78,salt_trough:22,tent_poles:60,canvas_tent:66,
@@ -71,8 +71,8 @@ function liftWilds(map,rng,flags,seed,reserved) {
   let lo=Infinity,hi=-Infinity;for(let i=0;i<N;i++){lo=Math.min(lo,hgt[i]);hi=Math.max(hi,hgt[i]);}
   Object.assign(map,{hgt,climb:4,drop:10,minLevel:lo,maxLevel:hi,baseLevel:lo-14,noSky:true,_terr:null});
 }
-export function generateOverworld(depth,biome,seed) {
-  if (biome.id === 'castle') return generateCastle(depth,biome,seed);
+export function generateOverworld(depth,biome,seed,variant=null) {
+  if (biome.id === 'castle') return generateCastle(depth,biome,seed,variant);
   if (biome.id === 'sea_of_sand') return generateSeaOfSand(depth,biome,seed);
   const rng=new RNG(seed), map=new TileMap(W,H), flags=new Uint8Array(W*H);
   map.t.fill(1);map.losBlocks=true;

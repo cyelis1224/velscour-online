@@ -97,8 +97,8 @@ const SHOTS = process.argv[2] !== 'noshots';
         st.maxIdle = Math.max(st.maxIdle, st.idle);
         const line = `${type} — ${S.title}: ${S.completed ? 'done' : S.failed ? 'FAILED' : 'STUCK (' + (S.progress() || '') + ')'} in ${t.toFixed(0)}s, longest wait ${st.maxIdle.toFixed(1)}s`;
         out.push(line);
-        // the lantern vigil is a timed hold and the lost children a long walk: waiting is the point there
-        if (!S.completed || (st.maxIdle > 25 && !['lanterns', 'lostchildren'].includes(type))) bad.push(line);
+        // the lost children are a long walk: waiting is the point there
+        if (!S.completed || (st.maxIdle > 25 && type !== 'lostchildren')) bad.push(line);
         if (!S.completed && !S.failed) S.fail('test');
         void run;
       }

@@ -88,9 +88,10 @@ function adaptRes(raw) {
   else ar.good = 0;
 }
 
-let last = performance.now();
+let last = performance.now(), lastFrame = 0;   // last: how far the game clock has run; lastFrame: the last animation frame
 function loop(now) {
   requestAnimationFrame(loop);
+  lastFrame = now;   // frames the cap skips count too, or tick() would keep moving `last` and the cap would skip them all
   // Settings › frame rate cap: a phone drawing 30 frames a second instead of 60 does half the work and heats up less
   // (a hot phone slows itself down after a long session); 2 ms slack so a 60 Hz display shows every other frame
   const cap = G.mode === 'game' ? G.settings.fpsCap || 0 : 0;
@@ -126,6 +127,38 @@ function loop(now) {
     if (G.ctx) for (let i = 0; i < 64; i++) G.ctx.restore();
   }
   input.endFrame();
+}
+
+// A hidden page (minimised, covered by other windows, a locked PC) gets no animation frames, and its timers are
+// throttled to once a second, then once a minute. A worker's timer is not, so its ticks keep the game (and auto-play)
+// running in real time while nothing is drawn. They also step in when frames stop on a page that still counts as visible.
+let lastTick = 0;
+function tick() {
+  const now = performance.now(), gap = now - lastTick;
+  lastTick = now;
+  // a short gap means the ticks arrive on time: frames stopped, not one long frame holding up this thread
+  if (!document.hidden && !(now - lastFrame > 500 && gap < 100)) return;
+  let left = Math.min(now - last, gap, 1000) / 1000;
+  last = now;
+  try {
+    while (left > 1e-4 && G.mode === 'game' && G.world) {
+      const dt = Math.min(1 / 30, left);
+      left -= dt;
+      G.time += dt; G.dt = dt; G.frame++;
+      game.update(dt);
+      input.endFrame();
+    }
+  } catch (err) {
+    reportError(err);
+  }
+}
+function startTicker() {
+  try {
+    const w = new Worker(URL.createObjectURL(new Blob(['setInterval(() => postMessage(0), 1000 / 30);'], { type: 'text/javascript' })));
+    w.onmessage = tick;
+  } catch (e) {
+    setInterval(tick, 1000 / 30);   // no workers: throttled while hidden, but each tick still catches up a second
+  }
 }
 
 let errShown = 0;
@@ -188,6 +221,7 @@ async function boot() {
   });
   G.canvas.addEventListener('contextrestored', dropBakes); // a GPU reset wiped the baked floors (game/render.js)
   requestAnimationFrame(loop);
+  startTicker();
   try {
     // the title song downloads in full alongside the art, so on mobile its intro never waits on the network
     let pa = 0, ps = 0;

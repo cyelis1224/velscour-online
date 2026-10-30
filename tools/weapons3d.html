@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Paths resolve from the repo root, so the game's gear loader finds assets/sprites/gear/. -->
+<base href="../">
+<title>Weapon Forge</title>
+<!-- The procedural held gear (tools/weapons3d.js): per class a sheet of random heroes, one row per rarity, holding that
+     rarity's main-hand and off-hand designs with their effects (src/gfx/heldfx.js) and a few socketed gems.
+     ?cls=<class> &seed=S &n=5 (heroes per rarity) &t=1.3 (the effects' moment); ?bake: no sheet (tools/weapons3d_bake.js). -->
+<style>
+  :root { --bg: #141217; --line: #3a332c; --text: #e8dfcf; --dim: #a39a8c; --gold: #f0c870; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 14px; margin: 0; color: var(--gold); }
+  select, button { background: #2b241c; color: var(--gold); border: 1px solid #5a4a30; padding: 4px 8px; font: inherit; cursor: pointer; }
+  #sheet { display: block; margin: 14px; max-width: calc(100% - 28px); image-rendering: pixelated; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header><h1>Weapon Forge</h1><select id="cls"></select><button id="reroll">New heroes</button><button id="anim">Animate</button></header>
+<canvas id="sheet"></canvas>
+<script type="module">
+import { init, renderKit, findFists, ATTEMPTS, FIST_R } from './tools/handheld3d.js';
+import { SETS, CLASS_SETS, designs, heldItem, RARITY, PER } from './tools/weapons3d.js';
+import { drawHeldFx } from './src/gfx/heldfx.js';
+import { loadGearArt, heroLook } from './src/core/gearart.js';
+import { PALETTES } from './src/data/gear.js';
+import { CLASSES } from './src/data/classes.js';
+import { bakeSet, bakeFists } from './tools/weapons3d_render.js';
+
+const P = new URLSearchParams(location.search), $ = (id) => document.getElementById(id);
+const CLS = Object.keys(CLASS_SETS), LIT = ATTEMPTS[13];
+let cls = CLS.includes(P.get('cls')) ? P.get('cls') : 'paladin', seed = +(P.get('seed') || 7);
+const N = +(P.get('n') || 5), T = +(P.get('t') || 1.3), GEMS = [[224, 32, 58], [42, 90, 255], [255, 192, 32], [32, 192, 80], [160, 64, 224], [232, 244, 255]];
+function rng(s) { return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const fistCache = {};
+function heroCanvas(c, h) {
+  const img = heroLook(c, { type: 'gear', slot: 'body', rarity: 3, look: [h.armor, h.finish, -1, 2] }, { type: 'gear', slot: 'head', rarity: 3, look: [h.helmet, h.helmFinish, -1, 2] });
+  const copy = document.createElement('canvas'); copy.width = img.width; copy.height = img.height; copy.getContext('2d').drawImage(img, 0, 0);
+  return copy;
+}
+/** marks (art px) -> the effect points heldfx wants. */
+function ptsOf(marks) {
+  const one = (k) => marks.find((m) => m.kind === k), head = one('head'), tip = one('tip'), l0 = one('l0'), l1 = one('l1'), orbit = one('orbit');
+  return { head: head ? [head.x, head.y, head.r] : [64, 120, 4], tip: tip && [tip.x, tip.y], line: l0 && l1 ? [[l0.x, l0.y], [l1.x, l1.y]] : null, orbit: orbit ? [orbit.x, orbit.y, orbit.r] : null, slots: marks.filter((m) => m.kind === 'slot').map((m) => [m.x, m.y]) };
+}
+const floor = (g, x, y, w, h) => { const r = g.createRadialGradient(x + w / 2, y + h * 0.8, 10, x + w / 2, y + h * 0.7, h * 0.8); r.addColorStop(0, '#4a4038'); r.addColorStop(0.55, '#2a2420'); r.addColorStop(1, '#1c1816'); g.fillStyle = r; g.fillRect(x, y, w, h); };
+const CROPS = { tall: [6, 4, 116, 182], short: [14, 54, 100, 132] }, Z = 3, GAP = 8, RC = ['#e8e8e8', '#4fd65a', '#4f8dff', '#b45cff', '#ff9a2a', '#ff4058'];
+
+/** Every rarity of class c: N heroes each, holding designs of that rarity from the class's main and off-hand sets. */
+async function sheet(c = cls, s = seed, n = N, t = T) {
+  await init(); await loadGearArt(c);
+  fistCache[c] ||= await findFists(c);
+  const r = rng(s + c.length * 977), sets = CLASS_SETS[c], dm = designs(sets.main), dof = designs(sets.off);
+  const CROP = SETS[sets.main].pose === 'planted' ? CROPS.tall : CROPS.short;
+  const cw = CROP[2] * Z, ch = CROP[3] * Z, rowH = ch + 34;
+  const cv = document.createElement('canvas'); cv.width = n * (cw + GAP) + GAP + 110; cv.height = 40 + 6 * (rowH + GAP);
+  const g = cv.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 18px Consolas, monospace'; g.fillText(`${CLASSES[c].name}: ${SETS[sets.main].build && sets.main} + ${sets.off}`, GAP, 26);
+  for (let R = 0; R < 6; R++) {
+    const y0 = 40 + R * (rowH + GAP), a = dm.filter((d) => d.rarity === R), b = dof.filter((d) => d.rarity === R);
+    g.fillStyle = RC[R]; g.font = 'bold 15px Consolas, monospace'; g.fillText(RARITY[R], GAP, y0 + 20);
+    for (let i = 0; i < n; i++) {
+      const h = { armor: 1 + Math.floor(r() * 26), finish: r() < 0.3 ? 0 : 1 + Math.floor(r() * (PALETTES.length - 1)), helmet: 1 + Math.floor(r() * 15), helmFinish: 1 + Math.floor(r() * (PALETTES.length - 1)) };
+      const fists = fistCache[c][h.armor], fr = FIST_R[c] || 4.5;
+      const md = a[(i + Math.floor(r() * a.length)) % a.length], od = b[(i + Math.floor(r() * b.length)) % b.length];
+      const hand = (d) => [...fists[SETS[d.set].hand], fr, fr];
+      const items = [heldItem(md, hand(md)), heldItem(od, hand(od))];
+      const out = renderKit(heroCanvas(c, h), items, LIT), k = out.width / 128, x = 110 + GAP + i * (cw + GAP);
+      floor(g, x, y0, cw, ch); g.imageSmoothingEnabled = false;
+      g.drawImage(out, CROP[0] * k, CROP[1] * k, CROP[2] * k, CROP[3] * k, x, y0, cw, ch);
+      g.save(); g.beginPath(); g.rect(x, y0, cw, ch); g.clip();
+      items.forEach((it, j) => {
+        const gems = Array.from({ length: Math.min(R + 1, 1 + Math.floor(r() * (R + 1))) }, () => GEMS[Math.floor(r() * GEMS.length)]);
+        drawHeldFx(g, { rarity: it.rarity, element: it.element, gems, pts: ptsOf(it.marks) }, t + i * 0.37 + j, (ax, ay) => [x + (ax - CROP[0]) * Z, y0 + (ay - CROP[1]) * Z], Z, { seed: i * 31 + j });
+      });
+      g.restore();
+      g.fillStyle = RC[R]; g.font = '11px Consolas, monospace';
+      g.fillText(items[0].label.slice(0, 34), x + 3, y0 + ch + 13); g.fillText(items[1].label.slice(0, 34), x + 3, y0 + ch + 27);
+    }
+  }
+  return cv;
+}
+
+let anim = false;
+async function show() { const c = await sheet(), v = $('sheet'); v.width = c.width; v.height = c.height; v.getContext('2d').drawImage(c, 0, 0); }
+$('cls').innerHTML = CLS.map((c) => `<option value="${c}">${CLASSES[c].name}</option>`).join('');
+$('cls').value = cls;
+$('cls').onchange = () => { cls = $('cls').value; show(); };
+$('reroll').onclick = () => { seed = Math.floor(Math.random() * 1e6); show(); };
+window.FORGE = { CLS, SETS: Object.keys(SETS), sheet: async (...a) => (await sheet(...a)).toDataURL('image/png'), bakeSet, bakeFists: () => bakeFists(Object.keys(CLASSES)) };
+if (!P.has('bake')) await show(); else await init();
+window.FORGE.ready = true;
+</script>
+</body>
+</html>

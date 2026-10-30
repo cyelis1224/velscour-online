@@ -328,7 +328,9 @@ function fitScore(p, it, buy = G.world && G.world.kind === 'town', keep = null) 
     // forever. Give gear a modest progression value so auto-play actually replaces stale pieces.
     const targetIlvl = Math.max(1, c.level, depthLevel(c.depth || 1));
     const freshness = (gear) => gear ? clamp((gear.ilvl || 1) / targetIlvl, 0, 1) : 0;
-    const ageGain = old && it.rarity < old.rarity ? 0 : 0.28 * (freshness(it) - freshness(old));   // never a downgrade in rarity for being newer
+    // never a downgrade in rarity for being newer, but an older piece of lower rarity still pays for its age: zeroing
+    // both made the swap back free, and an old Common ring and a newer Uncommon one took turns every tick for hours
+    const age = 0.28 * (freshness(it) - freshness(old)), ageGain = old && it.rarity < old.rarity ? Math.min(0, age) : age;
     if (s + ageGain > best.s) best = { s: s + ageGain, slot, move };
   }
   return best;
@@ -469,7 +471,8 @@ export const Auto = {
     this.town = null; this.sealWaiting = false; this.transitT = 0; this.stuck = { t: 0, x: 0, y: 0, n: 0 }; this.jiggle = null;
     this.target = null; this.dodge = null; this.retreat = false; this.ignore = new WeakSet(); this.lastSig = '';
     this.screenT = 0; this.lastCast = {}; this.stall = null; this.banT = 0; this.shun = new WeakMap(); this.giveUp = new WeakSet();
-    this.lootFor = null; this.lootT = 0; this.wantCache = new WeakMap(); this.hurt = 0; this.lastHp = -1; this.climbTo = null;
+    this.lootFor = null; this.lootT = 0; this.lootDry = 0; this.lootBusy = -99; this.lootSpent = new WeakMap(); this.stalls = new WeakMap(); this.hunts = new WeakMap(); this.edgeT = 0; this.dangerList = null;
+    this.wantCache = new WeakMap(); this.hurt = 0; this.lastHp = -1; this.climbTo = null;
     this.dragoonJumps = 0; this.dragoonJumpGoal = 3 + Math.floor(Math.random() * 6);
     this.dragoonCastUntil = 0; this.dragoonLastBarrage = 0; this.dragoonLastWeaveAt = -1;
     G.heroListen = null;
@@ -520,6 +523,7 @@ export const Auto = {
     this.thinkT -= dt;
     if (this.thinkT <= 0) { this.thinkT = 1; this.manageHero(); }
     p.moveVec = [0, 0];
+    if (this.nav && this.nav.job) this.stepRoadNav(2);   // the next road field, a slice a frame (buildNav)
     if (w.kind === 'town') this.townTick(dt);
     else this.dungeonTick(dt);
   },
@@ -832,68 +836,100 @@ export const Auto = {
       let found = false;
       for (let r = 1; r < 3 && !found; r++) for (let oy = -r; oy <= r && !found; oy++) for (let ox = -r; ox <= r && !found; ox++) if (m.walkableTile(sx + ox, sy + oy)) { sx += ox; sy += oy; found = true; }
     }
-    if (!(m.road && this.nav.from === sy * W + sx && this.nav.c && w.time - this.nav.at < 2)) d.fill(-1);
     if (m.road) {
-      // the Castle's field covers 100k tiles (~10 ms): built again only once the hero has left his tile, or every 2 s
-      const at = sy * W + sx, now = w.time;
-      if (this.nav.from === at && this.nav.c && now - this.nav.at < 2) { this.navT = 0.35; return; }
-      this.nav.from = at; this.nav.at = now;
-      return this.buildRoadNav(sx, sy);
+      // the Castle's field covers 100k tiles (~9 ms, three or four times that on a phone): built again only once the
+      // hero has left his tile, or every 2 s, and then over the next frames (stepRoadNav, 2 ms a frame) while the last
+      // one serves; roadPath starts from the hero, wherever he is along it. A hero far from its origin waits for none.
+      const at = sy * W + sx, now = w.time, nav = this.nav;
+      this.navT = 0.35;
+      if (nav.c && nav.from === at && now - nav.at < 2) return;
+      const far = !nav.c || Math.max(Math.abs((nav.from % W) - sx), Math.abs(((nav.from / W) | 0) - sy)) > 6;
+      if (!far) { if (!nav.job) nav.job = this.roadJob(sx, sy); return; }
+      nav.job = this.roadJob(sx, sy);
+      this.stepRoadNav(Infinity);
+      return;
     }
+    d.fill(-1);
     this.nav.from = -1;
+    // straight off the typed arrays (the dunes and caverns are 60k tiles, rebuilt every 0.35 s): stepMask holds each
+    // tile's in-bounds, height-legal steps (map.stepsOk), floor and props are read live
+    const T = m.t, Bl = m.block, SM = m.stepMask();
     let h = 0, t = 0;
+    if (!m.inb(sx, sy)) { this.navT = 0.35; return; }
     q[t++] = sy * W + sx; d[sy * W + sx] = 0;
     while (h < t) {
-      const i = q[h++], x = i % W, y = (i / W) | 0, nd = d[i] + 1;
-      for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
-        if (!ox && !oy) continue;
-        const nx = x + ox, ny = y + oy;
-        if (!m.walkableTile(nx, ny)) continue;
-        if (ox && oy && (!m.walkableTile(x + ox, y) || !m.walkableTile(x, y + oy))) continue;
-        if (m.hgt && !m.stepsOk(x, y, ox, oy)) continue; // a height map: only hops and drops
-        const ni = ny * W + nx;
-        if (d[ni] !== -1) continue;
+      const i = q[h++], nd = d[i] + 1, sm = SM[i];
+      for (let k = 0; k < 9; k++) {
+        if (!((sm >> k) & 1)) continue;
+        const ox = (k % 3) - 1, oy = ((k / 3) | 0) - 1, ni = i + oy * W + ox;
+        if (d[ni] !== -1 || T[ni] !== 1 || Bl[ni]) continue;
+        if (ox && oy && (T[i + ox] !== 1 || Bl[i + ox] || T[i + oy * W] !== 1 || Bl[i + oy * W])) continue;
         d[ni] = nd; q[t++] = ni;
       }
     }
     this.navT = 0.35;
   },
+  /** Start a road field from tile (sx, sy) in spare buffers (stepRoadNav runs it). */
+  roadJob(sx, sy) {
+    const m = G.world.map, W = m.w, N = W * m.h, nav = this.nav;
+    // the buffers of a search left unfinished (the hero was carried off), else the last field's
+    let j = nav.job && nav.job.d.length === N ? nav.job : null;
+    if (!j && nav.spare && nav.spare.d.length === N) { j = nav.spare; nav.spare = null; }
+    j ||= { d: new Int32Array(N), c: new Int32Array(N), p: new Int32Array(N), bk: Array.from({ length: 8 }, () => []) };
+    j.d.fill(-1); j.c.fill(0x3fffffff); j.p.fill(-1);
+    for (const b of j.bk) b.length = 0;
+    // a raised drawbridge is planned across (straight, not diagonally): it comes down as the hero walks up to it
+    // (game/castle3d.js), so a goal inside the walls is not given up at the moat
+    // (a byte per tile, not a Set: two lookups per step of a 100k-tile search cost more than the rest of it)
+    j.DB = null;
+    if (m.planOpen && m.drawbridge && !m.drawbridge.down) {
+      if (nav.dbOf !== m.drawbridge || !nav.db || nav.db.length !== N) { nav.db = new Uint8Array(N); for (const i of m.drawbridge.tiles) nav.db[i] = 1; nav.dbOf = m.drawbridge; }
+      j.DB = nav.db;
+    }
+    j.m = m; j.s0 = sy * W + sx; j.at = G.world.time; j.cur = 0; j.left = 1;
+    j.c[j.s0] = 0; j.d[j.s0] = 0; j.bk[0].push(j.s0);
+    return j;
+  },
   /**
+   * Run the road field's search (roadJob) for up to `ms`; once done it becomes the field (nav.d, nav.c, nav.p).
    * On a map with roads (map.road: the Castle's roads, lanes, trails and paving) the field is the cheapest way rather
    * than the shortest: a step onto road costs 2, onto open ground 5 (diagonals 3 / 7), so the hero keeps to the roads
    * and trails unless leaving them saves real distance. Dial's buckets; d still counts the steps, p the way back.
    */
-  buildRoadNav(sx, sy) {
-    const m = G.world.map, W = m.w, N = W * m.h, R = m.road, d = this.nav.d;
-    const c = this.nav.c && this.nav.c.length === N ? this.nav.c : (this.nav.c = new Int32Array(N));
-    const pv = this.nav.p && this.nav.p.length === N ? this.nav.p : (this.nav.p = new Int32Array(N));
-    c.fill(0x3fffffff); pv.fill(-1);
-    const B = 8, bk = this.nav.bk || (this.nav.bk = Array.from({ length: B }, () => []));
-    for (const b of bk) b.length = 0;
-    const s0 = sy * W + sx, T = m.t, Bl = m.block;
+  stepRoadNav(ms) {
+    const nav = this.nav, j = nav.job, m = j.m;
+    if (m !== G.world.map) { nav.job = null; return; }
+    const W = m.w, R = m.road, T = m.t, Bl = m.block, d = j.d, c = j.c, pv = j.p, bk = j.bk, B = 8, DB = j.DB;
     // each tile's height-legal steps (map.stepMask, worked out once a map)
     const SM = m.stepMask();
-    c[s0] = 0; d[s0] = 0; bk[0].push(s0);
-    let left = 1;
-    for (let cur = 0; left > 0; cur++) {
+    const OX = [-1, 0, 1, -1, 0, 1, -1, 0, 1], OFF = OX.map((ox, k) => (((k / 3) | 0) - 1) * W + ox);
+    const end = performance.now() + ms;
+    let cur = j.cur, left = j.left, n = 0;
+    for (; left > 0; cur++) {
       const b = bk[cur % B];
       while (b.length) {
+        if ((++n & 2047) === 0 && performance.now() > end) { j.cur = cur; j.left = left; return; }
         const i = b.pop(); left--;
         if (c[i] !== cur) continue;
-        const sm = SM[i];
+        const sm = SM[i], dbi = DB ? DB[i] : 0;
         for (let k = 0; k < 9; k++) {
-          if (!((sm >> k) & 1)) continue;
-          const ox = (k % 3) - 1, oy = ((k / 3) | 0) - 1, ni = i + oy * W + ox;
-          if (T[ni] !== 1 || Bl[ni]) continue;
-          if (ox && oy && (T[i + ox] !== 1 || Bl[i + ox] || T[i + oy * W] !== 1 || Bl[i + oy * W])) continue;
-          const nc = cur + (ox && oy ? (R[ni] ? 3 : 7) : (R[ni] ? 2 : 5));
+          const step = (sm >> k) & 1;
+          if (!step && !(DB && (k & 1))) continue;
+          const ni = i + OFF[k], dbn = DB ? DB[ni] : 0;
+          if (!step && !dbn && !dbi) continue;
+          if ((T[ni] !== 1 || Bl[ni]) && !dbn) continue;
+          const diag = !(k & 1);   // (k 4, the tile itself, is never a step)
+          if (diag) { const a = i + OX[k], o = i + OFF[k] - OX[k]; if (T[a] !== 1 || Bl[a] || T[o] !== 1 || Bl[o]) continue; }
+          const nc = cur + (diag ? (R[ni] ? 3 : 7) : (R[ni] ? 2 : 5));
           if (nc >= c[ni]) continue;
           c[ni] = nc; d[ni] = d[i] + 1; pv[ni] = i;
           bk[nc % B].push(ni); left++;
         }
       }
     }
-    this.navT = 0.35;
+    // done: it serves now, and the old field's buffers wait for the next search
+    nav.spare = nav.c ? { d: nav.d, c: nav.c, p: nav.p, bk: nav.bk || Array.from({ length: B }, () => []) } : null;
+    nav.d = d; nav.c = c; nav.p = pv; nav.bk = bk; nav.from = j.s0; nav.at = j.at; nav.job = null;
   },
   /** Path distance (tiles) from the hero to (x,y), or Infinity. */
   navDist(x, y) {
@@ -952,6 +988,11 @@ export const Auto = {
     const path = [];
     for (let guard = 0; pv[cur] >= 0 && guard < 20000; guard++) { path.push([(cur % W) + 0.5, ((cur / W) | 0) + 0.5]); cur = pv[cur]; }
     path.reverse();
+    // the field's origin can be a few tiles behind the hero (buildNav builds the next one over several frames): join
+    // the way at its point nearest him, not back where it starts
+    let k0 = 0, kd = Infinity;
+    for (let k = 0; k < Math.min(path.length - 1, 16); k++) { const dd = dist(p.x, p.y, path[k][0], path[k][1]); if (dd < kd) { kd = dd; k0 = k; } }
+    if (k0) path.splice(0, k0);
     if (path.length) path[path.length - 1] = [gx, gy];
     // smooth: skip a waypoint only if the straight line stays all on road, or all off it
     const same = (ax, ay, bx, by) => {
@@ -969,7 +1010,7 @@ export const Auto = {
     return out;
   },
   /** Steer toward (gx,gy) along a path. Returns true when there. */
-  goTo(gx, gy, near = 0.35, dt = 0) {
+  goTo(gx, gy, near = 0.35, dt = 0, hold = true) {
     const p = G.player;
     if (dist(p.x, p.y, gx, gy) <= near) { this.path = null; return true; }
     if (!this.path || !this.goal || dist(this.goal[0], this.goal[1], gx, gy) > 0.7 || this.navT <= 0) {
@@ -987,8 +1028,21 @@ export const Auto = {
     }
     let [nx, ny] = this.path[0];
     if (this.jiggle && this.jiggle.t > 0) { this.jiggle.t -= dt; nx = p.x + Math.cos(this.jiggle.a); ny = p.y + Math.sin(this.jiggle.a); }
+    if (hold && this.holdEdge(nx, ny, dt)) return false; // (not when running for cover or a raid mechanic)
     this.steer(nx, ny);
     return false;
+  },
+  /** The next step would take him into a telegraph or burning ground he just got out of: wait at its edge (it is
+   *  usually gone in a second) instead of stepping in and dodging straight back out, over and over. After 1.5 s he
+   *  walks on through it, not dodging for 2 s while he is healthy. */
+  holdEdge(nx, ny, dt) {
+    const L = this.dangerList, p = G.player;
+    if (!L || !L.length) { this.edgeT = 0; return false; }
+    const dx = nx - p.x, dy = ny - p.y, l = Math.hypot(dx, dy) || 1, s = Math.min(0.6, l);
+    if (this.inDanger(L, p.x, p.y) || !this.inDanger(L, p.x + (dx / l) * s, p.y + (dy / l) * s)) { this.edgeT = 0; return false; }
+    if ((this.edgeT += dt || G.dt || 1 / 30) > 1.5) { this.edgeT = 0; this.braveT = 2; return false; }
+    p.moveVec = [0, 0];
+    return true;
   },
   steer(x, y) {
     const p = G.player, dx = x - p.x, dy = y - p.y, l = Math.hypot(dx, dy);
@@ -1028,7 +1082,8 @@ export const Auto = {
     // (so does a rift's clock)
     if (this.braveT > 0) this.braveT -= dt;
     const brave = w.breach || w.rift;
-    if (!(brave && this.braveT > 0 && p.hp > p.maxHp * 0.6) && this.dodgeDanger(dt)) {
+    this.dangerList = null; // (dodgeDanger fills it: goTo waits at the edge of what it holds)
+    if (!(this.braveT > 0 && p.hp > p.maxHp * 0.6) && this.dodgeDanger(dt)) {
       if (brave && (this.dodgeRun = (this.dodgeRun || 0) + dt) > (w.rift ? 2 : 6) && p.hp > p.maxHp * 0.7 && this.hurt < 0.02) { this.braveT = w.rift ? 4 : 3; this.dodgeRun = 0; }
       this.watchStuck(dt); return;
     }
@@ -1046,7 +1101,8 @@ export const Auto = {
     if (dash) { const nd = this.navDist(dash.x, dash.y); if (!(nd > (this.rushBest ?? Infinity) - 0.5)) { this.rushBest = nd; this.rushT = 0; } else if ((this.rushT = (this.rushT || 0) + dt) > 6) this.rushT = -1.5; }
     else this.rushBest = this.rushT = undefined;
     const blocked = dash && this.rushT > 1.5;
-    const foes = enemyNear(w, p, 13).filter((m) => w.map.los(p.x, p.y, m.x, m.y) && (!dash || m === w.boss || (blocked && Math.hypot(m.x - p.x, m.y - p.y) < 4)));
+    // (a foe he landed nothing on in 12 s of trying is left alone for a while: fighting it on is the loop)
+    const foes = enemyNear(w, p, 13).filter((m) => w.map.los(p.x, p.y, m.x, m.y) && (!dash || m === w.boss || (blocked && Math.hypot(m.x - p.x, m.y - p.y) < 4)) && !(this.shun.get(m) > w.time));
     // a foe he is taking the stairs to stays in mind while the walls and stairs hide it (12 s from the last sighting)
     const ct = this.climbTo;
     if (ct && (ct.dead || w.time - this.climbSeen > 12)) this.climbTo = null;
@@ -1067,12 +1123,24 @@ export const Auto = {
     // a shrine a few steps away is worth grabbing even mid-fight (game/happenings.js)
     const sh = w.chests.find((ch) => ch.shrine && !ch.opened && !this.giveUp.has(ch) && dist(p.x, p.y, ch.x, ch.y) < 5);
     if (sh && this.navDist(sh.x, sh.y) < 7) {
-      if (this.lootFor !== sh) { this.lootFor = sh; this.lootT = 0; }
-      if ((this.lootT += dt) > 6) this.giveUp.add(sh);
+      this.lootFor = sh;
+      if ((this.lootT = this.spend(sh, dt)) > 6) this.giveUp.add(sh);
       this.setStatus(`Activating the ${sh.label}`);
       if (this.goTo(sh.x, sh.y, sh.reach - 0.2, dt)) sh.use();
       this.watchStuck(dt); return;
     }
+    // a fight that needs him somewhere (a cache to dig, a relic to break, back inside its ring: game/dunes.js `duty`):
+    // after a few seconds of fighting he pushes through to it, and stands on a cache until it is dug
+    const duty = foes.length && w.overworldScenario && w.overworldScenario.duty;
+    if (duty) {
+      if (duty.hold && dist(p.x, p.y, duty.x, duty.y) <= duty.reach) { this.setStatus(duty.label); p.path = null; p.moveVec = [0, 0]; this.dutyT = this.dutyPush = 0; return; }
+      if (!(this.dutyPush > 0) && (this.dutyT = (this.dutyT || 0) + dt) > 5) { this.dutyPush = 3; this.dutyT = 0; }
+      if (this.dutyPush > 0) {
+        this.dutyPush -= dt; this.setStatus(duty.label);
+        if (this.goTo(duty.x, duty.y, duty.reach * 0.8, dt)) this.dutyPush = 0;
+        this.watchStuck(dt); return;
+      }
+    } else this.dutyT = this.dutyPush = 0;
     if (foes.length) { this.combat(foes, false); this.watchStuck(dt); return; }
     this.target = null;
     // keep pets and buffs up between fights
@@ -1083,8 +1151,8 @@ export const Auto = {
       let best = null, bd = Infinity;
       for (const ch of co) { const d = this.navDist(ch.x, ch.y); if (d < bd) { bd = d; best = ch; } }
       if (best && bd < 400) {
-        if (this.lootFor !== best) { this.lootFor = best; this.lootT = 0; }
-        if ((this.lootT += dt) > 60) this.giveUp.add(best); // can't get there
+        this.lootFor = best;
+        if ((this.lootT = this.spend(best, dt)) > 60) this.giveUp.add(best); // can't get there
         this.setStatus(`Commission: the ${best.label}`);
         if (this.goTo(best.x, best.y, (best.reach || 1.3) - 0.2, dt)) best.use();
         this.watchStuck(dt); return;
@@ -1150,6 +1218,11 @@ export const Auto = {
     const goal = this.huntGoal(w);
     if (goal) {
       this.setStatus(goal === w.boss ? `Hunting the guardian${w.boss.name ? ' — ' + w.boss.name : ''}` : 'Clearing the level');
+      // no ground gained on it in 8 s of hunting it (the path field reaches a spot the hero can't): leave it for 30 s
+      const nd = this.navDist(goal.x, goal.y);
+      let h = this.hunts.get(goal);
+      if (!h || nd < h.d - 1) this.hunts.set(goal, h = { d: nd, t: 0 });
+      else if ((h.t += dt) > 8 && goal !== w.boss) { this.shun.set(goal, w.time + 30); this.hunts.delete(goal); }
       this.goTo(goal.x, goal.y, 1, dt);
     } else {
       // nothing known to hunt: walk to the nearest reachable tile not yet revealed, else to the exit
@@ -1166,11 +1239,12 @@ export const Auto = {
     if (!d) return null;
     if (this.front && this.front.t > w.time) return this.front.at;
     let best = -1, bd = Infinity;
+    const W = m.w, H = m.h, T = m.t, S = m.seen, unseen = (j) => T[j] === 1 && !S[j];
     for (let i = 0; i < d.length; i++) {
       const v = d[i];
       if (v < 2 || v >= bd) continue;
-      const x = i % m.w, y = (i / m.w) | 0;
-      if (!m.seen[i] || [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([ox, oy]) => m.tile(x + ox, y + oy) === 1 && !m.seen[(y + oy) * m.w + x + ox])) { bd = v; best = i; }
+      const x = i % W, y = (i / W) | 0;
+      if (!S[i] || (x + 1 < W && unseen(i + 1)) || (x > 0 && unseen(i - 1)) || (y + 1 < H && unseen(i + W)) || (y > 0 && unseen(i - W))) { bd = v; best = i; }
     }
     if (best < 0) return null;
     const at = [(best % m.w) + 0.5, ((best / m.w) | 0) + 0.5];
@@ -1186,7 +1260,7 @@ export const Auto = {
     const farm = !!w.rift || c.level < depthLevel(w.depth) + S.farm; // the monster level, not the raw depth (they part after depth 60); a rift's quota wants the whole level
     let best = null, bd = Infinity;
     for (const m of w.creatures) {
-      if (m.dead || m.team !== 'enemy' || m.targetable === false || this.giveUp.has(m)) continue;
+      if (m.dead || m.team !== 'enemy' || m.targetable === false || this.giveUp.has(m) || this.shun.get(m) > w.time) continue;
       const d = this.navDist(m.x, m.y);
       if (d === Infinity) continue;
       const lim = m.goblin ? 60 : farm ? 999 : S.lim;
@@ -1198,28 +1272,43 @@ export const Auto = {
     return best;
   },
 
+  /** Seconds spent going for this loot, chest or shrine, summed over every try (flipping between targets can't reset it). */
+  spend(o, dt) { const s = (this.lootSpent.get(o) || 0) + dt; this.lootSpent.set(o, s); return s; },
   /** Pick up good loot, gold and orbs, and open chests, when they're close. Returns true while busy with it. */
   lootStep(w, dt) {
     const p = G.player, c = G.char;
     let best = null, bd = 16;
     for (const g of w.loot) {
-      if (g.z > 0 || g.t < 0.4) continue;
+      if (g.z > 0 || g.t < 0.4 || this.giveUp.has(g)) continue;
       const lim = g.kind === 'gold' ? 9 : g.kind.startsWith('orb') ? 7 : 16;
       const d = this.navDist(g.x, g.y);
       if (d > lim || d >= bd || !this.wantLoot(g)) continue;
       bd = d; best = g;
     }
     for (const ch of w.chests) {
-      if (ch.opened || this.giveUp.has(ch)) continue;
+      if (ch.opened || ch.inert || this.giveUp.has(ch)) continue; // (inert: a scenario's goal marker, nothing to use)
       const d = this.navDist(ch.x, ch.y);
       if (d < (ch.far || 14) && d - (ch.far ? 6 : 0) < bd) { bd = d - (ch.far ? 6 : 0); best = ch; } // shrines and caches are worth a walk
     }
-    if (!best) { this.lootT = 0; return false; }
-    if (this.lootFor !== best) { this.lootFor = best; this.lootT = 0; }
-    this.lootT += dt;
+    // the last target picked up (gone from the ground) or opened: the looting is getting somewhere
+    const lf = this.lootFor;
+    if (lf && (w.chests.includes(lf) ? lf.opened : !w.loot.includes(lf))) { this.lootDry = 0; this.lootFor = null; }
+    if (!best) return false;
+    this.lootFor = best;
+    // the time on each target is summed (a hero flipping between two items, or losing sight of one for a frame, never
+    // starts its clock over), and 10 s with nothing coming off the ground gives up the whole pile there (a bag that
+    // won't take it, a spot he can't stand on)
+    if (w.time - this.lootBusy > 5) this.lootDry = 0;
+    this.lootBusy = w.time;
+    this.lootT = this.spend(best, dt);
     if (this.lootT > (best.far ? 20 : 8)) { this.giveUp.add(best); return false; } // unreachable
+    if ((this.lootDry = (this.lootDry || 0) + dt) > (best.far ? 20 : 10)) {
+      for (const g of w.loot) if (dist(g.x, g.y, best.x, best.y) < 6) this.giveUp.add(g);
+      this.giveUp.add(best); this.lootDry = 0;
+      return false;
+    }
     if (best.use) {
-      this.setStatus(best.shrine ? `Activating the ${best.label}` : best.label ? `Opening the ${best.label}` : 'Opening a chest');
+      this.setStatus(best.shrine ? `Activating the ${best.label}` : best.scen ? best.label : best.label ? `Opening the ${best.label}` : 'Opening a chest'); // (a scenario's says what it does)
       if (this.goTo(best.x, best.y, (best.reach || 1.3) - 0.2, dt)) best.use();
       return true;
     }
@@ -1280,7 +1369,7 @@ export const Auto = {
       this.cover = best;
     }
     this.setStatus('Taking cover!');
-    this.goTo(this.cover[0], this.cover[1], 0.3, dt);
+    this.goTo(this.cover[0], this.cover[1], 0.3, dt, false);
     return true;
   },
 
@@ -1309,7 +1398,7 @@ export const Auto = {
     // keep shooting on the way when the hero can
     const foes = enemyNear(w, p, 13);
     if (foes.length && p.castLock <= 0 && !r.holdFire) { const t = this.pickTarget(foes); if (t) { const pick = this.chooseSkill(foes, t, dist(p.x, p.y, t.x, t.y), true); if (pick && !['leap', 'dash'].includes(pick.sk.kind) && p.tryUseSkill(pick.sk, pick.x, pick.y, pick.sk.kind === 'melee' ? t : null)) this.countFocus(pick.sk); } }
-    this.goTo(g.x, g.y, Math.max(0.3, g.r * 0.6), dt);
+    this.goTo(g.x, g.y, Math.max(0.3, g.r * 0.6), dt, false);
     return true;
   },
 
@@ -1350,6 +1439,7 @@ export const Auto = {
     // a lobbed shot is worth eating once or twice to close on a shooter: healthy and not melting, push through
     const tough = p.hp > p.maxHp * 0.7 && this.hurt < 0.03 && enemyNear(w, p, 4).length < 3 && this.target && !this.target.dead && dist(p.x, p.y, this.target.x, this.target.y) > 2.2;
     if (tough) list = list.filter((d) => !d.minor);
+    this.dangerList = list;
     if (this.dodge) {
       this.dodge.t -= dt;
       if (this.dodge.t > 0 && this.inDanger(list, p.x, p.y)) { this.setStatus('Dodging!'); this.steer(this.dodge.x, this.dodge.y); return true; }
@@ -1471,13 +1561,15 @@ export const Auto = {
     if (!t) return;
     // a foe on another level that the hero can walk to (the Castle's walls by their stairs): go there to fight it
     const climb = !fleeing && this.offTier(t.x, t.y) && this.navDist(t.x, t.y) < 220;
-    // watchdog: if the target's life hasn't moved in a while, stop casting utility skills, then try another target
-    const sw = this.stall;
-    if (!sw || sw.m !== t || t.hp < sw.hp - 1) this.stall = { m: t, hp: t.hp, t: 0 };
-    else if (!climb && (sw.t += 1 / 30) > 12) {
-      this.banT = 10;
-      if (sw.t > 25 && t.rank !== 'boss') { this.shun.set(t, w.time + 30); this.stall = null; }
+    // watchdog: a target whose life hasn't moved in 4 s is walked right up to, after 6 s only damage is thrown at it, and
+    // after 12 s (never a boss) it is left alone for 30 s. Kept per target, so flipping between two never starts it over.
+    let sw = this.stalls.get(t);
+    if (!sw || t.hp < sw.hp - 1) this.stalls.set(t, sw = { m: t, hp: t.hp, t: 0 });
+    else if (!climb && (sw.t += 1 / 30) > 6) {
+      this.banT = 5;
+      if (sw.t > 12 && t.rank !== 'boss') { this.shun.set(t, w.time + 30); this.stalls.delete(t); }
     }
+    this.stall = sw;
     if (this.banT > 0) this.banT -= 1 / 30;
     p.aim = [t.x, t.y];
     if (!fleeing) this.setStatus(`Fighting ${t.name || 'a monster'}`);
@@ -1541,7 +1633,7 @@ export const Auto = {
     // If a point-blank Spearstorm is ready, finish approaching after a leap
     // instead of idling at the primary jump attack's much greater reach.
     if (p.classId === 'dragoon' && this.readySkill((sk) => sk.m.barrage)) reach = Math.min(reach, 1.8);
-    if (this.stall && this.stall.t > 6) reach = Math.min(reach, 1.6); // nothing is landing: walk right up to it
+    if (this.stall && this.stall.t > 4) reach = Math.min(reach, 1.6); // nothing is landing: walk right up to it
     // shooters and casters: don't trade shots from the edge of range (they win that), close in to a sure hit
     else if ((t.ai === 'ranged' || t.ai === 'caster') && p.hp > p.maxHp * 0.55) reach = Math.min(reach, Math.max(2.4, reach * (0.65 - 0.25 * bold)));
     // ranged builds back off between casts from a crowd, from a melee foe closing in, or from anything when hurt (how

@@ -131,8 +131,13 @@ const step = (page, secs) => page.evaluate(async (secs) => {   // run the game f
       }, [cond, secs, kill]);
       const tag = `tower_scn${String(si).padStart(2, '0')}`;
       await until('run.phase === "top" && run.top.step === "wave1"', 10, false);
-      if (await until('run.top.ships.some((s) => s.state === "docked" && s.ramp >= 1)', 60, true)) { await until('false', 1.2, false); await shot(tag + '_boarding'); }
-      if (await until('run.top.step === "ship" && run.top.flag && run.top.flag.state === "docked"', 300, true)) await shot(tag + '_airship');
+      // roofs without boats (teleports, drops, climbs) reach the flagship well inside the minute: stop when it sails
+      const boat = 'run.top.ships.some((s) => s.state === "docked" && s.ramp >= 1)';
+      await until(boat + ' || run.top.sailed', 60, true);
+      if (await until(boat, 0, false)) { await until('false', 1.2, false); await shot(tag + '_boarding'); }
+      // the flagship sails during wave 3, so it is often moored before the roof is clear (the ship step is then one frame)
+      if (await until('run.top.flag && run.top.flag.state === "docked"', 300, true)) await shot(tag + '_airship');
+      await until('run.top.step === "final" || run.completed', 300, true);   // the rest of wave 3 (the captain is still boarding)
       if (await until('run.top.final && !run.top.final.entering', 40, false)) await shot(tag + '_captain');
       await until('run.completed', 300, true);
       await until('false', 2.5, false); await shot(tag + '_portal');

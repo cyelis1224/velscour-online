@@ -1,0 +1,375 @@
+// The Castle overworld's variants (docs/CASTLE_VARIANTS.md): each is its own castle, with
+//  - layout: the 3D masonry (src/world/castle3d.js): curtain rings in wall cells (a cell is 2 x 2 tiles), outermost first,
+//    each with its wall-walk level, corner towers (round drums, roofed drums or 'square') and interval towers [side, cell,
+//    'square' (default) | 'half' (half-round)]; the gatehouse (a cell on the first ring's south side) and its height,
+//    the twin-towered gates [cell x, cell y, ring], the stairs [ring, side, tile along the wall, direction] and the
+//    north-west corners (tiles) of the keep (50 x 33), the cathedral (28 x 32) and the great hall (28 x 30);
+//  - look: where its bake lives (assets/tiles/castle3d/<dir>/), the bake's materials (tools/castle3d.html: [texture,
+//    tint] for the stone, the walks, the stair treads, the cathedral, the dais, the roofs and the timber), the ground's
+//    palette swap (core/util.js recolor), the water's tint and current, the drifting particles, the odds of night and
+//    rain, and the trees of the wood round it;
+//  - plan: where things stand round it (src/world/castleworld.js): the river and any lake or bog pools, the yards in the
+//    wards (practice yard, smithy, stables, paddock, kitchen garden, orchard, mason's yard, barracks, walled garden,
+//    well), the village, fields, orchard, graveyard, the siege lines and the ruin; null leaves one out;
+//  - story: who lives there and what happened: told on arrival, by the herald at the road and by the lord in the keep's
+//    council chamber, and dressed on the ground (`set`, castleworld.js).
+// The first is the castle the others grew from (its bake is assets/tiles/castle3d/ itself).
+
+const IRONCROWN_PLAN = {
+  entry: [169, 294], exit: [224, 8],
+  river: { in: [[52, -4], [54, 30], [51, 66], [52, 104], [57, 124], [68, 133], [90, 134]], out: [[248, 150], [270, 151], [296, 148], [320, 151], [342, 153]] },
+  riverBridge: 285,
+  roads: [
+    [[[169, 306], [166, 268], [173, 246], [169, 226], [169, 214]], 5.2], [[[169, 196], [169, 186], [189, 182], [193, 176]], 4.4, 'cobble'],
+    [[[209, 72], [209, 82], [151, 88], [145, 96]], 3.6, 'cobble'], [[[209, 55], [213, 40], [218, 22], [224, -2]], 4.2],
+    [[[175, 240], [214, 236], [250, 232], [270, 222], [284, 198], [286, 172], [284, 140], [262, 110], [244, 44], [230, 24]], 3.4],
+    [[[165, 250], [130, 256], [100, 254], [70, 236]], 3.2], [[[165, 270], [136, 276], [96, 280], [60, 272]], 2.6],
+    [[[100, 254], [78, 226], [60, 196], [50, 168]], 2.8]],
+  village: [169, 252], fields: [34, 212], orchard: [40, 246], graveyard: [56, 176], siege: [262, 236], ruin: [290, 64], riverbank: [64, 148],
+  garden: [160, 146], well: [200, 152], practice: [128, 180], smithy: [206, 184], stables: [104, 120], paddock: [104, 156], kgarden: [110, 76],
+  orchardN: { trees: [[150, 78], [156, 80], [162, 77], [184, 79], [190, 82], [196, 77], [226, 80], [232, 86]], roost: [176, 78], herbs: [145, 86], site: [170, 82] },
+  mason: [233, 116], barracks: [222, 150], baileySW: [112, 186],
+  lanterns: [[112, 69.5], [146, 69.5], [200, 69.5], [226, 69.5], [97.5, 96], [97.5, 124], [97.5, 152], [97.5, 186], [240.5, 96], [240.5, 124], [240.5, 152],
+    [240.5, 186], [112, 200.5], [146, 200.5], [194, 200.5], [226, 200.5]],
+  milestones: [[175, 240], [165, 250], [100, 254], [165, 270], [286, 172], [244, 44], [78, 226], [213, 40]],
+};
+const OUT = (o) => ({ out: [[o[0], o[1]], [o[0] + 24, o[1] + 2], [o[0] + 52, o[1] - 2], [o[0] + 76, o[1] + 1], [342, o[1] + 3]] });
+
+export const CASTLE_VARIANTS = [
+  {
+    id: 'ironcrown', name: 'Ironcrown Castle', epithet: 'the concentric castle of the old kings',
+    layout: {
+      rings: [
+        { x0: 48, y0: 34, x1: 120, y1: 100, lv: 26, r: 3.4,
+          towers: [['N', 60], ['N', 78], ['N', 92], ['W', 52], ['E', 52], ['W', 67], ['E', 67], ['W', 82], ['E', 82], ['S', 64], ['S', 104]] },
+        { x0: 62, y0: 48, x1: 106, y1: 86, lv: 34, r: 3.2, roofed: true, towers: [['W', 67], ['E', 67], ['N', 84], ['S', 80]] },
+      ],
+      gate: 84, twins: [[104, 34, 0], [96, 86, 1], [72, 48, 1]],
+      stairs: [[0, 'S', 140, '+x'], [0, 'N', 184, '-x'], [0, 'W', 120, '+y'], [0, 'E', 154, '-y'],
+        [1, 'S', 164, '+x'], [1, 'N', 191, '-x'], [1, 'W', 108, '+y'], [1, 'E', 140, '+y']],
+      keep: [130, 103], cathedral: [182, 102], hall: [128, 140], shadow: [170, 136, 5200],
+    },
+    look: { dir: '' },
+    plan: IRONCROWN_PLAN,
+    story: {
+      herald: { role: 'knight', lines: ['Forty days they\'ve sat out there.', 'The inner wall has never fallen. Not once.', 'Mind the drawbridge; it comes down for friends.'] },
+      lord: { role: 'king', lines: ['Two walls, four gates, and not one of them ever opened to an enemy.', 'My grandfather built the inner wall higher than the outer. Look out from it and tell me he was wrong.'] },
+      intro: 'The siege of Ironcrown enters its fortieth day. The old kings built two walls, one inside the other, and the enemy has dug in before both.',
+    },
+  },
+  {
+    id: 'blackfen', name: 'Blackfen Hold', epithet: 'mossed stone over a drowned village',
+    layout: {
+      rings: [{ x0: 54, y0: 40, x1: 114, y1: 96, lv: 22, corner: 'square',
+        towers: [['N', 64], ['N', 78], ['N', 90], ['S', 62], ['S', 92], ['S', 104], ['W', 54], ['W', 68], ['W', 82], ['E', 54], ['E', 68], ['E', 82]] }],
+      gate: 76, gh: 36, twins: [[100, 40, 0]],
+      stairs: [[0, 'S', 116, '+x'], [0, 'N', 136, '+x'], [0, 'W', 165, '-y'], [0, 'E', 110, '+y']],
+      keep: [150, 88], cathedral: [116, 124], hall: [192, 140],
+    },
+    look: { dir: 'blackfen', mat: { ashlar: ['mossy', 0xc4c8b4], walk: ['mossy', 0x8c9080], setts: ['rubble', 0x8a8c7c], chapel: ['mossy', 0xb8bca8],
+      marble: ['chapel', 0xc8d0b8], slate: ['roof_moss', 0xffffff], wood: ['wood', 0x8a8070] },
+      ground: { hue: -12, sat: 0.78, light: -0.03 }, water: { tint: 'rgba(54,66,22,0.5)', streak: [150, 170, 110] },
+      ambient: { type: 'firefly', color: '#c8e070' }, night: 0.35, rain: 0.5,
+      forest: ['hanging_moss_fir', 'weeping_willow', 'dead_crowned_elm', 'twisted_yew', 'root_fused_twins', 'fungal_beech'] },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[60, -4], [62, 30], [58, 70], [64, 110], [78, 128], [101, 136]], ...OUT([236, 150]) }, riverBridge: 292,
+      pools: [[64, 226, 10, 6], [104, 266, 8, 5], [252, 262, 7, 5], [282, 104, 10, 7], [34, 126, 6, 9], [120, 222, 7, 4], [220, 216, 6, 4]],
+      village: [153, 238], fields: null, orchard: null, graveyard: [52, 182], siege: [264, 232], ruin: [292, 60], riverbank: [72, 150],
+      garden: [118, 92], well: [206, 100], practice: [116, 176], smithy: [160, 174], stables: null, paddock: null, kgarden: null,
+      orchardN: { trees: [[206, 124], [215, 129], [223, 123], [113, 164], [113, 112]] }, mason: null, barracks: [210, 170], baileySW: [124, 188],
+    },
+    story: {
+      set: 'bog',
+      herald: { role: 'ferryman', lines: ['Lord Fenmoor drowned the old village to fill his moat.', 'The fen gives back what it took. At night, mostly.', 'Walk the causeway, not the green. The green is water.'] },
+      lord: { role: 'duke', lines: ['They call it a curse. I call it a moat no army has ever crossed.', 'The bells you hear under the water are from the old chapel. Ignore them.'] },
+      intro: 'Blackfen Hold rises out of the marsh on a single green wall. Lord Fenmoor drowned a village to fill its moat, and the fen has been giving it back ever since.',
+    },
+  },
+  {
+    id: 'solenne', name: 'Solenne Palace', epithet: 'white stone and blue roofs, dressed for a wedding',
+    layout: {
+      rings: [
+        { x0: 38, y0: 50, x1: 130, y1: 100, lv: 24, r: 3.4,
+          towers: [['N', 50, 'half'], ['N', 64, 'half'], ['N', 80, 'half'], ['N', 94, 'half'], ['N', 120, 'half'], ['S', 50, 'half'], ['S', 64, 'half'], ['S', 74, 'half'],
+            ['S', 94, 'half'], ['S', 106, 'half'], ['S', 120, 'half'], ['W', 62, 'half'], ['W', 76, 'half'], ['W', 88, 'half'], ['E', 62, 'half'], ['E', 76, 'half'], ['E', 88, 'half']] },
+        { x0: 66, y0: 60, x1: 102, y1: 90, lv: 32, r: 3.2, roofed: true, towers: [['N', 90], ['S', 72], ['S', 96], ['W', 75], ['E', 75]] },
+      ],
+      gate: 84, twins: [[108, 50, 0], [84, 90, 1], [74, 60, 1]],
+      stairs: [[0, 'S', 110, '+x'], [0, 'N', 150, '+x'], [0, 'W', 172, '-y'], [0, 'E', 172, '-y'],
+        [1, 'S', 140, '+x'], [1, 'N', 180, '+x'], [1, 'W', 165, '+y'], [1, 'E', 150, '+y']],
+      keep: [144, 126], cathedral: [88, 128], hall: [222, 128],
+    },
+    look: { dir: 'solenne', mat: { ashlar: ['ashlar', 0xf4f0e8], walk: ['ashlar', 0xc8c2b8], setts: ['ashlar', 0xb8b2a8], chapel: ['chapel', 0xfaf6ee],
+      marble: ['chapel', 0xffffff], slate: ['roof_blue', 0xffffff], wood: ['wood', 0xe0d0c0] },
+      ground: { sat: 1.18, light: 0.03 }, water: { tint: 'rgba(40,150,170,0.22)', streak: [190, 240, 240] },
+      ambient: { type: 'leaf', color: '#f2b8c8' }, night: 0.1, rain: 0.1 },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[40, -4], [44, 40], [38, 80], [44, 120], [52, 140], [67, 150]], ...OUT([268, 150]) }, riverBridge: 304,
+      village: [169, 250], fields: [44, 222], orchard: [36, 256], graveyard: [32, 192], siege: [264, 240], ruin: [300, 56], riverbank: [56, 160],
+      garden: [226, 104], well: [190, 166], practice: [120, 186], smithy: [182, 186], stables: [90, 164], paddock: [110, 164], kgarden: null,
+      orchardN: { trees: [[176, 108], [186, 110], [196, 106], [96, 108], [112, 110]] }, mason: [252, 166], barracks: [215, 166], baileySW: [96, 196],
+    },
+    story: {
+      set: 'wedding',
+      herald: { role: 'duchess', lines: ['The Princess Elowen weds Prince Caderyn at dawn!', 'Lord Varrick asked for her hand first. He brought an army to ask again.', 'Do wipe your boots. The roses were brought from the Isles.'] },
+      lord: { role: 'princess', lines: ['I will not be married in a siege. I will be married in spite of one.', 'Varrick wrote me eleven poems. The twelfth was a declaration of war.'] },
+      intro: 'Solenne Palace is dressed for a royal wedding: white walls, blue roofs, roses on every arch. The bride\'s jilted suitor, Lord Varrick, has camped his army on the south road.',
+    },
+  },
+  {
+    id: 'sunscar', name: 'Sunscar Citadel', epithet: 'red sandstone on the last frontier',
+    layout: {
+      rings: [
+        { x0: 64, y0: 24, x1: 106, y1: 104, lv: 26, corner: 'square',
+          towers: [['N', 74], ['N', 86], ['S', 72], ['S', 96], ['W', 38], ['W', 52], ['W', 66], ['W', 80], ['W', 94], ['E', 38], ['E', 52], ['E', 66], ['E', 80], ['E', 94]] },
+        { x0: 70, y0: 32, x1: 100, y1: 60, lv: 38, r: 3.2, roofed: true, towers: [['N', 86], ['S', 78], ['W', 46], ['E', 46]] },
+      ],
+      gate: 84, twins: [[96, 24, 0], [92, 60, 1], [76, 32, 1]],
+      stairs: [[0, 'S', 140, '+x'], [0, 'N', 180, '+x'], [0, 'W', 192, '-y'], [0, 'E', 128, '+y'],
+        [1, 'S', 158, '+x'], [1, 'N', 170, '+x'], [1, 'W', 80, '+y'], [1, 'E', 80, '+y']],
+      keep: [146, 70], cathedral: [136, 140], hall: [178, 150],
+    },
+    look: { dir: 'sunscar', mat: { ashlar: ['ashlar', 0xe8b088], walk: ['ashlar', 0xb88a6a], setts: ['ashlar', 0xa88060], chapel: ['chapel', 0xf0c8a0],
+      marble: ['chapel', 0xfff0d8], slate: ['roof_terracotta', 0xffffff], wood: ['wood', 0xd8b890] },
+      ground: { hue: -30, sat: 0.5, light: 0.12, contrast: 0.95, tint: [238, 206, 150, 0.45] }, water: { tint: 'rgba(158,124,66,0.52)', streak: [236, 220, 176] },
+      ambient: { type: 'sand', color: '#e2c890' }, night: 0.2, rain: 0, forest: ['spire_pine', 'thornbound_cypress', 'dead_crowned_elm', 'split_lightning_oak'],
+      trees: { hue: -28, sat: 0.5, light: 0.05 } },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[50, -4], [54, 40], [48, 80], [60, 110], [84, 124], [119, 128]], ...OUT([222, 140]) }, riverBridge: 284,
+      village: [169, 252], fields: null, orchard: null, graveyard: [70, 196], siege: [268, 238], ruin: [292, 64], riverbank: [92, 150],
+      garden: null, well: [176, 128], practice: [140, 186], smithy: [180, 186], stables: null, paddock: null, kgarden: null, orchardN: null,
+      mason: null, barracks: [204, 125], baileySW: [140, 200],
+    },
+    story: {
+      set: 'desert',
+      herald: { role: 'border scout', lines: ['Nine years since the last relief column.', 'Captain Ysolde still posts the watch at dawn. Every dawn.', 'Water\'s rationed. Courage isn\'t.'] },
+      lord: { role: 'knight', lines: ['The crown forgot us. The desert did not. Neither did the raiders.', 'The citadel at the north end has never been taken. We sleep up there now.'] },
+      intro: 'Sunscar Citadel is the last fort on the burning frontier: a long red wall, a high citadel at its north end, and a garrison that has not been relieved in nine years.',
+    },
+  },
+  {
+    id: 'hoarfrost', name: 'Hoarfrost Bastion', epithet: 'blue-grey slate under an endless winter',
+    layout: {
+      rings: [
+        { x0: 46, y0: 30, x1: 122, y1: 102, lv: 24, r: 3.6,
+          towers: [['N', 60, 'half'], ['N', 78, 'half'], ['N', 96, 'half'], ['S', 56, 'half'], ['S', 88, 'half'], ['S', 104, 'half'], ['S', 116, 'half'],
+            ['W', 44, 'half'], ['W', 58, 'half'], ['W', 72, 'half'], ['W', 86, 'half'], ['E', 44, 'half'], ['E', 58, 'half'], ['E', 72, 'half'], ['E', 86, 'half']] },
+        { x0: 72, y0: 40, x1: 106, y1: 72, lv: 40, corner: 'square', towers: [['N', 90], ['S', 80], ['E', 56]] },
+      ],
+      gate: 70, twins: [[112, 30, 0], [72, 60, 1], [96, 72, 1]],
+      stairs: [[0, 'S', 160, '+x'], [0, 'N', 110, '+x'], [0, 'W', 140, '+y'], [0, 'E', 170, '+y'],
+        [1, 'S', 160, '+x'], [1, 'N', 170, '+x'], [1, 'E', 98, '+y'], [1, 'W', 96, '+y']],
+      keep: [152, 86], cathedral: [100, 92], hall: [106, 162],
+    },
+    look: { dir: 'hoarfrost', mat: { ashlar: ['slatestone', 0xdce6f0], walk: ['slatestone', 0xe8eef4], setts: ['slatestone', 0xc8d0da], chapel: ['chapel', 0xe0eaf4],
+      marble: ['chapel', 0xf0f6ff], slate: ['roof_snow', 0xffffff], wood: ['wood', 0xa8a0a0] },
+      ground: { sat: 0.16, light: 0.24, contrast: 0.78, tint: [236, 244, 255, 0.55] }, water: { tint: 'rgba(214,232,244,0.62)', streak: [240, 250, 255] },
+      ambient: { type: 'snow', color: '#eef4ff' }, night: 0.3, rain: 0, forest: ['spire_pine', 'hanging_moss_fir', 'cathedral_redwood', 'dead_crowned_elm'],
+      trees: { sat: 0.35, light: 0.1, tint: [236, 244, 255, 0.35] } },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[40, -4], [44, 40], [40, 80], [48, 110], [62, 124], [83, 128]], ...OUT([254, 150]) }, riverBridge: 292,
+      village: [141, 252], fields: null, orchard: null, graveyard: [48, 192], siege: [268, 242], ruin: [294, 62], riverbank: [62, 150],
+      garden: [108, 130], well: [156, 128], practice: [160, 180], smithy: [200, 182], stables: [224, 98], paddock: [224, 140], kgarden: null, orchardN: null,
+      mason: null, barracks: [232, 168], baileySW: [112, 196],
+    },
+    story: {
+      set: 'frost',
+      herald: { role: 'retired veteran', lines: ['Winter came to Hoarfrost and never left.', 'The garrison froze at their posts. Some of them still stand there.', 'Keep to the braziers. The Margrave doesn\'t feel the cold. You will.'] },
+      lord: { role: 'dowager queen', lines: ['My son made a bargain with the winter for an unbreakable wall. He got one.', 'The ice on the moat is a yard thick. Nothing comes over it, and nothing goes out.'] },
+      intro: 'Hoarfrost Bastion has been locked in winter for a hundred years. A tall slate citadel stands in the north-east of its ward, and the garrison stands frozen at its posts.',
+    },
+  },
+  {
+    id: 'cinderhold', name: 'Cinderhold', epithet: 'soot-black walls, fallen last night',
+    layout: {
+      rings: [
+        { x0: 44, y0: 38, x1: 120, y1: 100, lv: 26, r: 3.4,
+          towers: [['N', 54], ['N', 76], ['N', 96], ['N', 110], ['S', 56], ['S', 86], ['S', 100], ['S', 112], ['W', 52], ['W', 66], ['W', 82], ['E', 52], ['E', 66], ['E', 82]] },
+        { x0: 84, y0: 46, x1: 114, y1: 92, lv: 34, r: 3.2, roofed: true, towers: [['W', 56], ['W', 84], ['E', 60], ['E', 80]] },
+      ],
+      gate: 70, twins: [[64, 38, 0], [100, 92, 1], [84, 70, 1]],
+      stairs: [[0, 'S', 100, '+x'], [0, 'N', 150, '+x'], [0, 'W', 150, '+y'], [0, 'E', 108, '+y'],
+        [1, 'S', 176, '+x'], [1, 'N', 200, '+x'], [1, 'W', 108, '+y'], [1, 'E', 150, '+y']],
+      keep: [174, 98], cathedral: [100, 100], hall: [186, 140],
+    },
+    look: { dir: 'cinderhold', mat: { ashlar: ['soot', 0xd8d0c8], walk: ['soot', 0xaaa29c], setts: ['basalt', 0xb0aaa4], chapel: ['soot', 0xd8d0c8],
+      marble: ['chapel', 0x9a9090], slate: ['roof_char', 0xffffff], wood: ['wood', 0x6a5a50] },
+      ground: { sat: 0.32, light: 0.01, contrast: 1.04 }, water: { tint: 'rgba(16,14,14,0.45)', streak: [150, 140, 130] },
+      ambient: { type: 'ash', color: '#8c8680' }, night: 0.4, rain: 0, forest: ['dead_crowned_elm', 'split_lightning_oak', 'hollow_ash', 'twisted_yew'] },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[44, -4], [48, 40], [44, 80], [52, 112], [64, 128], [79, 132]], ...OUT([250, 150]) }, riverBridge: 292,
+      village: [141, 250], fields: [30, 214], orchard: null, graveyard: [44, 178], siege: [262, 236], ruin: [292, 60], riverbank: [62, 150],
+      garden: null, well: [175, 150], practice: [110, 180], smithy: [145, 150], stables: [130, 100], paddock: [100, 140], kgarden: null, orchardN: null,
+      mason: null, barracks: [150, 170], baileySW: [100, 190],
+    },
+    story: {
+      set: 'burned',
+      herald: { role: 'guard', lines: ['It fell last night. The Ashen Host came over the west wall with ladders.', 'Survivors are holed up in the inner ward. The rest of us... we ran.', 'Smoke\'s still rising. So are some of the dead.'] },
+      lord: { role: 'duke', lines: ['They burned the west ward and the village for sport. The inner wall held.', 'We cannot hold it another night without help. Will you be the help?'] },
+      intro: 'Cinderhold fell last night. The Ashen Host burned the west ward and the village; smoke still rises over soot-black walls, and the survivors hold only the inner ward to the east.',
+    },
+  },
+  {
+    id: 'mourncross', name: 'Mourncross Abbey', epithet: 'a fortified abbey sealed against the plague',
+    layout: {
+      rings: [
+        { x0: 46, y0: 34, x1: 122, y1: 100, lv: 26, corner: 'square',
+          towers: [['N', 60, 'half'], ['N', 74, 'half'], ['N', 96, 'half'], ['N', 110, 'half'], ['S', 56, 'half'], ['S', 86, 'half'], ['S', 100, 'half'], ['S', 114, 'half'],
+            ['W', 50, 'half'], ['W', 66, 'half'], ['W', 82, 'half'], ['E', 50, 'half'], ['E', 66, 'half'], ['E', 82, 'half']] },
+        { x0: 74, y0: 58, x1: 96, y1: 86, lv: 18, r: 2.8, roofed: true, towers: [] },
+      ],
+      gate: 70, gh: 38, twins: [[84, 34, 0], [85, 86, 1], [76, 58, 1]],
+      stairs: [[0, 'S', 190, '+x'], [0, 'N', 180, '+x'], [0, 'W', 150, '+y'], [0, 'E', 150, '+y'], [1, 'S', 152, '+x'], [1, 'N', 176, '+x']],
+      keep: [96, 74], cathedral: [157, 126], hall: [204, 76],
+    },
+    look: { dir: 'mourncross', mat: { ashlar: ['chapel', 0xd8d8c0], walk: ['ashlar', 0xb0b098], setts: ['ashlar', 0xa0a088], chapel: ['panel', 0xe8e8d0],
+      marble: ['chapel', 0xf0f0e0], slate: ['roof_copper', 0xffffff], wood: ['wood', 0xb8b0a0] },
+      ground: { hue: -14, sat: 0.55, light: -0.03, tint: [205, 205, 150, 0.16] }, water: { tint: 'rgba(66,90,36,0.42)', streak: [170, 200, 140] },
+      ambient: { type: 'spore', color: '#b8c890' }, night: 0.3, rain: 0.35 },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[40, -4], [44, 40], [40, 80], [48, 112], [62, 126], [83, 132]], ...OUT([254, 150]) }, riverBridge: 290,
+      village: [141, 250], fields: [26, 222], orchard: null, graveyard: [50, 178], siege: [266, 238], ruin: [292, 60], riverbank: [62, 150],
+      garden: [104, 140], well: [110, 166], practice: [196, 180], smithy: [100, 184], stables: [210, 120], paddock: [210, 156], kgarden: [100, 118],
+      orchardN: { trees: [[160, 80], [172, 84], [184, 80], [196, 86]] }, mason: null, barracks: [236, 112], baileySW: [104, 196],
+    },
+    story: {
+      set: 'plague',
+      herald: { role: 'friar', lines: ['The Grey Sickness came at Michaelmas. Abbot Ceredig shut the gates.', 'The living were sealed in with the dying. Then the dying got up.', 'Cover your mouth, child. And don\'t touch the carts.'] },
+      lord: { role: 'priest', lines: ['The cloister walls keep the cathedral clean. Nothing sick passes them.', 'We pray for a cure. We have stopped praying for the dead; they are not listening.'] },
+      intro: 'Mourncross Abbey shut its gates when the plague came, the living sealed in with the dying. Its cathedral stands inside a walled cloister at the heart of the ward, and the graveyard outside has outgrown the village.',
+    },
+  },
+  {
+    id: 'goldspire', name: 'Goldspire', epithet: 'three walls round the crown treasury',
+    layout: {
+      rings: [
+        { x0: 38, y0: 24, x1: 130, y1: 106, lv: 22, r: 3.4,
+          towers: [['N', 52, 'half'], ['N', 66, 'half'], ['N', 80, 'half'], ['N', 94, 'half'], ['N', 118, 'half'], ['S', 52, 'half'], ['S', 66, 'half'], ['S', 74, 'half'],
+            ['S', 96, 'half'], ['S', 106, 'half'], ['S', 118, 'half'], ['W', 40, 'half'], ['W', 54, 'half'], ['W', 68, 'half'], ['W', 82, 'half'], ['W', 96, 'half'],
+            ['E', 40, 'half'], ['E', 54, 'half'], ['E', 68, 'half'], ['E', 82, 'half'], ['E', 96, 'half']] },
+        { x0: 50, y0: 36, x1: 118, y1: 94, lv: 30, corner: 'square', towers: [['N', 62], ['N', 106], ['S', 62], ['S', 104], ['W', 52], ['W', 78], ['E', 52], ['E', 78]] },
+        { x0: 70, y0: 52, x1: 98, y1: 80, lv: 38, r: 3.2, roofed: true, towers: [['N', 88], ['S', 78]] },
+      ],
+      gate: 84, gh: 36, twins: [[104, 24, 0], [74, 94, 1], [94, 36, 1], [90, 80, 2], [78, 52, 2]],
+      stairs: [[0, 'S', 120, '+x'], [0, 'N', 130, '+x'], [0, 'W', 172, '-y'], [0, 'E', 172, '-y'],
+        [1, 'S', 200, '+x'], [1, 'N', 120, '+x'], [1, 'W', 160, '+y'], [1, 'E', 160, '+y'], [2, 'S', 145, '+x'], [2, 'N', 166, '+x']],
+      keep: [144, 110], cathedral: [204, 112], hall: [106, 118],
+    },
+    look: { dir: 'goldspire', mat: { ashlar: ['panel', 0xf0d8a8], walk: ['ashlar', 0xd8c090], setts: ['ashlar', 0xc8b080], chapel: ['chapel', 0xf8e4b8],
+      marble: ['chapel', 0xffffff], slate: ['roof_gold', 0xffffff], wood: ['wood', 0xe0c8a0] },
+      ground: { hue: -6, sat: 1.1, light: 0.02 }, water: { tint: 'rgba(30,110,170,0.2)', streak: [200, 235, 255] },
+      ambient: { type: 'glitter', color: '#ffd860' }, night: 0.2, rain: 0.15 },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[34, -4], [38, 40], [34, 80], [42, 112], [52, 126], [67, 130]], ...OUT([270, 150]) }, riverBridge: 300,
+      village: [169, 256], fields: [30, 236], orchard: null, graveyard: [36, 194], siege: [278, 250], ruin: [302, 22], riverbank: [50, 156],
+      garden: [150, 78], well: [120, 166], practice: [110, 196], smithy: [196, 194], stables: [82, 90], paddock: [82, 130], kgarden: [120, 54],
+      orchardN: { trees: [[200, 80], [212, 84], [222, 80], [110, 82]] }, mason: [256, 110], barracks: [250, 150], baileySW: [90, 200],
+    },
+    story: {
+      set: 'treasury',
+      herald: { role: 'duke', lines: ['Three walls, three gates, and the Crown Treasury at the heart of them.', 'Somebody walked through all three last night and walked out with the Mint\'s gold.', 'Every guard swears the gates were shut. Every guard is lying, or worse.'] },
+      lord: { role: 'queen', lines: ['Whoever robbed us knew the way through every gate. That is the part that frightens me.', 'Find the gold, find the traitor. I suspect they are in the same place.'] },
+      intro: 'Goldspire keeps the Crown Treasury behind three walls, each higher than the last. Last night someone passed all three gates and emptied the Royal Mint.',
+    },
+  },
+  {
+    id: 'bloodmoat', name: 'Castle Morvane', epithet: 'red brick, black roofs and a moat of blood',
+    layout: {
+      rings: [{ x0: 50, y0: 36, x1: 118, y1: 98, lv: 30, r: 3.6,
+        towers: [['N', 58, 'half'], ['N', 74, 'half'], ['N', 90, 'half'], ['N', 106, 'half'], ['S', 58, 'half'], ['S', 74, 'half'], ['S', 88, 'half'], ['S', 112, 'half'],
+          ['W', 46, 'half'], ['W', 58, 'half'], ['W', 70, 'half'], ['W', 84, 'half'], ['E', 46, 'half'], ['E', 58, 'half'], ['E', 70, 'half'], ['E', 84, 'half']] }],
+      gate: 100, twins: [[66, 36, 0]],
+      stairs: [[0, 'S', 150, '+x'], [0, 'N', 200, '+x'], [0, 'W', 160, '+y'], [0, 'E', 168, '-y']],
+      keep: [144, 78], cathedral: [108, 120], hall: [200, 124],
+    },
+    look: { dir: 'bloodmoat', mat: { ashlar: ['brick', 0xd89088], walk: ['basalt', 0x8a7a78], setts: ['basalt', 0x7a6a68], chapel: ['basalt', 0xb89090],
+      marble: ['chapel', 0xc8a0a0], slate: ['roof_black', 0xffffff], wood: ['wood', 0x7a5a50] },
+      ground: { hue: -18, sat: 0.6, light: -0.12, tint: [120, 40, 40, 0.14] }, water: { tint: 'rgba(118,8,12,0.6)', streak: [220, 90, 90] },
+      ambient: { type: 'ember', color: '#ff4a3a' }, night: 0.7, rain: 0.2, forest: ['dead_crowned_elm', 'twisted_yew', 'thornbound_cypress', 'hollow_ash', 'ancient_black_oak'] },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[46, -4], [50, 40], [46, 80], [56, 112], [70, 126], [91, 130]], ...OUT([246, 150]) }, riverBridge: 290,
+      village: [201, 248], fields: null, orchard: null, graveyard: [50, 172], siege: [80, 236], ruin: [290, 64], riverbank: [70, 150],
+      garden: [150, 128], well: [186, 160], practice: [118, 176], smithy: [150, 180], stables: [212, 160], paddock: null, kgarden: null, orchardN: null,
+      mason: null, barracks: [110, 80], baileySW: [118, 188],
+    },
+    story: {
+      set: 'blood',
+      herald: { role: 'priest', lines: ['Count Morvane receives his guests after dark. Only after dark.', 'The tithe here is paid in blood, a cup a household, every new moon.', 'The moat was clear water once. I christened children in it.'] },
+      lord: { role: 'duke', lines: ['The Count is... indisposed during the day. I am his steward. Do not ask what he is.', 'The village fed the moat for a hundred years. Tonight the moat wants more.'] },
+      intro: 'Castle Morvane stands behind one tall wall of red brick, its moat gone red as wine. Count Morvane receives his guests after dark, and the village pays his tithe in blood.',
+    },
+  },
+  {
+    id: 'hexenmere', name: 'Hexenmere', epithet: 'violet basalt raised out of a witch\'s mere',
+    layout: {
+      rings: [
+        { x0: 48, y0: 40, x1: 120, y1: 102, lv: 28, r: 3.6, roofed: true,
+          towers: [['N', 60], ['N', 76], ['N', 92], ['S', 64], ['S', 96], ['S', 110], ['W', 52], ['W', 66], ['W', 80], ['W', 94], ['E', 52], ['E', 66], ['E', 80], ['E', 94]] },
+        { x0: 54, y0: 48, x1: 90, y1: 82, lv: 36, r: 3.0, roofed: true, towers: [['N', 72, 'half'], ['W', 64, 'half'], ['S', 64, 'half'], ['E', 56, 'half']] },
+      ],
+      gate: 84, twins: [[104, 40, 0], [76, 82, 1], [90, 66, 1]],
+      stairs: [[0, 'S', 110, '+x'], [0, 'N', 140, '+x'], [0, 'W', 175, '+y'], [0, 'E', 130, '+y'],
+        [1, 'S', 118, '+x'], [1, 'N', 148, '+x'], [1, 'W', 138, '+y'], [1, 'E', 145, '+y']],
+      keep: [118, 102], cathedral: [196, 92], hall: [202, 140],
+    },
+    look: { dir: 'hexenmere', mat: { ashlar: ['basalt', 0xc0b0e0], walk: ['basalt', 0x8a80a0], setts: ['basalt', 0x807898], chapel: ['chapel', 0xc8b8e8],
+      marble: ['chapel', 0xe0d0ff], slate: ['roof_violet', 0xffffff], wood: ['wood', 0x8a7890] },
+      ground: { hue: 38, sat: 0.5, light: -0.08, tint: [110, 90, 150, 0.2] }, water: { tint: 'rgba(80,30,120,0.48)', streak: [200, 160, 255] },
+      ambient: { type: 'wisp', color: '#c090ff' }, night: 0.55, rain: 0.25, forest: ['twisted_yew', 'fungal_beech', 'root_fused_twins', 'weeping_willow', 'hanging_moss_fir', 'dead_crowned_elm'] },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      lake: [52, 72, 34, 26],
+      river: { in: [[66, 92], [74, 112], [80, 126], [87, 132]], ...OUT([250, 150]) }, riverBridge: 292,
+      village: [169, 250], fields: null, orchard: null, graveyard: [50, 184], siege: [264, 238], ruin: [292, 58], riverbank: [70, 156],
+      garden: [140, 141], well: [116, 146], practice: [110, 180], smithy: [184, 186], stables: [212, 172], paddock: null, kgarden: [186, 126], orchardN: null,
+      mason: null, barracks: [234, 90], baileySW: [112, 196],
+    },
+    story: {
+      set: 'witch',
+      herald: { role: 'hedge witch', lines: ['Morgaine sank the old castle into the mere, and raised it up again. Wrong.', 'The stones remember being underwater. Listen to them drip.', 'Don\'t eat anything that grows here, dearie. Not even the mushrooms. Especially the mushrooms.'] },
+      lord: { role: 'wandering wizard', lines: ['The witch-queen keeps her court in the inner ward. I keep my distance.', 'Every circle of stones out there is a door. Most of them open inward.'] },
+      intro: 'The witch-queen Morgaine sank the old castle of Hexenmere into its mere and raised it again in violet stone. Witch-circles ring the shore, and the water has not been the right colour since.',
+    },
+  },
+  {
+    id: 'thornwick', name: 'Thornwick Motte', epithet: 'a small stone castle in a market town',
+    layout: {
+      rings: [{ x0: 64, y0: 46, x1: 104, y1: 84, lv: 20, r: 3.4, roofed: true,
+        towers: [['N', 76, 'half'], ['S', 74, 'half'], ['S', 96, 'half'], ['W', 56, 'half'], ['W', 72, 'half'], ['E', 56, 'half'], ['E', 72, 'half']] }],
+      gate: 84, gh: 34, twins: [[94, 46, 0]],
+      stairs: [[0, 'S', 138, '+x'], [0, 'N', 150, '+x'], [0, 'W', 140, '+y'], [0, 'E', 140, '+y']],
+      keep: [144, 100], cathedral: [60, 96], hall: [232, 196],
+    },
+    look: { dir: 'thornwick', mat: { ashlar: ['rubble', 0xe0cfb0], walk: ['rubble', 0xb0a088], setts: ['ashlar', 0xa89880], chapel: ['chapel', 0xe8d8b8],
+      marble: ['chapel', 0xfff0d8], slate: ['roof_terracotta', 0xf0e0d8], wood: ['wood', 0xd0b898] },
+      ground: { hue: -24, sat: 1.04 }, water: { tint: 'rgba(60,110,90,0.18)', streak: [200, 230, 220] },
+      ambient: { type: 'leaf', color: '#d0782e' }, night: 0.2, rain: 0.3 },
+    plan: {
+      entry: [169, 294], exit: [224, 8],
+      river: { in: [[60, -4], [64, 40], [62, 70], [80, 84], [100, 92], [119, 98]], out: [[218, 130], [240, 132], [270, 128], [300, 132], [342, 134]] }, riverBridge: 300,
+      village: [169, 198], fields: [20, 242], orchard: [40, 202], graveyard: [74, 150], siege: [280, 236], ruin: [292, 60], riverbank: [92, 116],
+      garden: [88, 162], well: [150, 232], practice: [136, 145], smithy: [180, 146], stables: [100, 200], paddock: [100, 234], kgarden: [36, 168],
+      orchardN: null, mason: null, barracks: [240, 150], baileySW: [140, 158],
+      town: [['cottage', 120, 214, false], ['bakery', 128, 224, true], ['cottage', 196, 214, true], ['inn', 204, 224, true], ['cottage', 190, 236, false],
+        ['cottage', 128, 240, false], ['cottage', 232, 168, true], ['cottage', 98, 184, false], ['bakery', 210, 182, true]],
+    },
+    story: {
+      set: 'fair',
+      herald: { role: 'baker', lines: ['Harvest fair at Thornwick! Pies, ale and a greased pig!', 'The reeve\'s girl went into the woods for blackberries. Three days ago.', 'Something\'s been walking the fields at night. The scarecrows have moved.'] },
+      lord: { role: 'duke', lines: ['It is a small castle, but it is ours, and the town has always been under its wing.', 'The fair goes on. If we cancelled the fair every time something walked out of the woods, we\'d never have a fair.'] },
+      intro: 'Thornwick Motte is a small stone castle on a hill in the middle of a market town. The harvest fair has filled the streets, and something has been walking the fields at night.',
+    },
+  },
+];
+export const CASTLE_BY_ID = Object.fromEntries(CASTLE_VARIANTS.map((v) => [v.id, v]));
+/** A variant from its id, record or index (anything else: the first castle). */
+export const castleVariant = (v) => (typeof v === 'string' ? CASTLE_BY_ID[v] : typeof v === 'number' ? CASTLE_VARIANTS[((v % CASTLE_VARIANTS.length) + CASTLE_VARIANTS.length) % CASTLE_VARIANTS.length]
+  : v?.layout ? v : null) || CASTLE_VARIANTS[0];

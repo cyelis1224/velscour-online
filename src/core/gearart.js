@@ -159,7 +159,8 @@ export const gearFxOf = (item) => { const l = itemLook(item); return l && l[2] >
 
 // ------------------------------------------------------------------ palettes
 const lutCache = new Map();
-/** Per palette and material a 256-entry RGB lookup by luminance. */
+/** Per palette and material a 256-entry RGB lookup by luminance (src/gfx/heldart.js recolours held gear with them too). */
+export function paletteLuts(pi) { return luts(pi); }
 function luts(pi) {
   let L = lutCache.get(pi);
   if (L) return L;
@@ -354,9 +355,10 @@ export function gearIcon(item, w = 48, h = w) {
 }
 
 /** The hero's portrait (w x h) for the inventory, or null without gear art. */
-export function heroPortrait(cls, body, head, w, h) {
-  const c = heroLook(cls, body, head);
-  if (!c) return null;
+export function heroPortrait(cls, body, head, w, h, over = null, extra = null) {
+  const c0 = heroLook(cls, body, head);
+  if (!c0) return null;
+  const c = over || c0; // `over`: the hero holding his gear (src/gfx/heldart.js heldPortraitArgs), `extra` its box
   const m = S.meta, b = [0, Infinity, 0, 0];
   // the armor box widened by the helm's
   const ab = m.armor.box[(body ? itemLook(body)[0] : 1) - 1];
@@ -367,6 +369,7 @@ export function heroPortrait(cls, body, head, w, h) {
     b[0] = Math.min(b[0], hb[0]); b[1] = Math.min(b[1], hb[1]);
     b[2] = Math.max(b[2], hb[2]); b[3] = Math.max(b[3], hb[3]);
   }
+  if (extra) { b[0] = Math.min(b[0], extra[0]); b[2] = Math.max(b[2], extra[2]); b[3] = Math.max(b[3], extra[3]); b[1] = Math.min(b[1], Math.max(extra[1], b[1] - 14)); }
   return fitCanvas(c, b.map((v) => v * HD), w, h);
 }
 

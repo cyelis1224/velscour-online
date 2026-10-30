@@ -354,3 +354,62 @@ export function el(tag, cls, html) {
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+// ------------------------------------------------------------------ canvas colour filters everywhere
+// ctx.filter is missing from some browsers (WebKit long left it out, and has drawn offscreen canvases unfiltered), so
+// baked looks (tints, darkened corpses) would come out plain there. filterOK() tests it once on a pixel; where it
+// fails, drawFiltered() draws plainly, then puts the colour filters (brightness, contrast, saturate, grayscale, sepia,
+// hue-rotate, invert; others are skipped) through the pixels by the CSS spec's matrices.
+let FOK;
+export function filterOK() {
+  if (FOK !== undefined) return FOK;
+  if (globalThis.VELSCOUR_NO_CANVAS_FILTER) return (FOK = false);   // tests: the by-hand path in a browser that has filters
+  try {
+    const a = makeCanvas(1, 1), b = makeCanvas(1, 1), x = b.getContext('2d', { willReadFrequently: true });
+    a.getContext('2d').fillStyle = '#fff'; a.getContext('2d').fillRect(0, 0, 1, 1);
+    x.filter = 'brightness(0)'; x.drawImage(a, 0, 0); x.filter = 'none';
+    FOK = x.getImageData(0, 0, 1, 1).data[0] < 128;
+  } catch (e) { FOK = false; }
+  return FOK;
+}
+const LUM = [0.2126, 0.7152, 0.0722];
+function filterOps(f) {
+  const ops = [];
+  for (const [, fn, arg] of String(f).matchAll(/([a-z-]+)\(([^)]*)\)/g)) {
+    let v = parseFloat(arg); if (/%/.test(arg)) v /= 100;
+    if (fn === 'hue-rotate') { v = /rad/.test(arg) ? v : /turn/.test(arg) ? v * 2 * Math.PI : v * Math.PI / 180; const c = Math.cos(v), s = Math.sin(v); ops.push([0.213 + c * 0.787 - s * 0.213, 0.715 - c * 0.715 - s * 0.715, 0.072 - c * 0.072 + s * 0.928, 0.213 - c * 0.213 + s * 0.143, 0.715 + c * 0.285 + s * 0.140, 0.072 - c * 0.072 - s * 0.283, 0.213 - c * 0.213 - s * 0.787, 0.715 - c * 0.715 + s * 0.715, 0.072 + c * 0.928 + s * 0.072]); }
+    else if (fn === 'saturate') ops.push([0.213 + 0.787 * v, 0.715 - 0.715 * v, 0.072 - 0.072 * v, 0.213 - 0.213 * v, 0.715 + 0.285 * v, 0.072 - 0.072 * v, 0.213 - 0.213 * v, 0.715 - 0.715 * v, 0.072 + 0.928 * v]);
+    else if (fn === 'grayscale') { const k = 1 - Math.min(1, v); ops.push([LUM[0] + (1 - LUM[0]) * k, LUM[1] - LUM[1] * k, LUM[2] - LUM[2] * k, LUM[0] - LUM[0] * k, LUM[1] + (1 - LUM[1]) * k, LUM[2] - LUM[2] * k, LUM[0] - LUM[0] * k, LUM[1] - LUM[1] * k, LUM[2] + (1 - LUM[2]) * k]); }
+    else if (fn === 'sepia') { const k = 1 - Math.min(1, v); ops.push([0.393 + 0.607 * k, 0.769 - 0.769 * k, 0.189 - 0.189 * k, 0.349 - 0.349 * k, 0.686 + 0.314 * k, 0.168 - 0.168 * k, 0.272 - 0.272 * k, 0.534 - 0.534 * k, 0.131 + 0.869 * k]); }
+    else if (fn === 'brightness') ops.push([v, 0, 0, 0, v, 0, 0, 0, v]);
+    else if (fn === 'contrast') ops.push([v, 0, 0, 0, v, 0, 0, 0, v, 0.5 - 0.5 * v]);
+    else if (fn === 'invert') { const k = Math.min(1, v); ops.push([1 - 2 * k, 0, 0, 0, 1 - 2 * k, 0, 0, 0, 1 - 2 * k, k]); }
+  }
+  return ops;
+}
+/** Run filter f's colour functions through the pixels of (x, y, w, h) on ctx (the fallback for ctx.filter). */
+export function filterPixels(ctx, f, x = 0, y = 0, w = ctx.canvas.width, h = ctx.canvas.height) {
+  const ops = filterOps(f);
+  x = Math.max(0, Math.floor(x)); y = Math.max(0, Math.floor(y));
+  w = Math.min(ctx.canvas.width - x, Math.ceil(w) + 1); h = Math.min(ctx.canvas.height - y, Math.ceil(h) + 1);
+  if (!ops.length || w <= 0 || h <= 0) return;
+  const id = ctx.getImageData(x, y, w, h), d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3]) continue;
+    let r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+    for (const m of ops) {
+      const o = m[9] || 0, nr = r * m[0] + g * m[1] + b * m[2] + o, ng = r * m[3] + g * m[4] + b * m[5] + o, nb = r * m[6] + g * m[7] + b * m[8] + o;
+      r = nr < 0 ? 0 : nr > 1 ? 1 : nr; g = ng < 0 ? 0 : ng > 1 ? 1 : ng; b = nb < 0 ? 0 : nb > 1 ? 1 : nb;
+    }
+    d[i] = r * 255 + 0.5; d[i + 1] = g * 255 + 0.5; d[i + 2] = b * 255 + 0.5;
+  }
+  ctx.putImageData(id, x, y);
+}
+/** ctx.drawImage(img, ...args) through filter f: the canvas filter where it works, else filterPixels on the drawn box. */
+export function drawFiltered(ctx, f, img, ...args) {
+  if (filterOK()) { ctx.filter = f; ctx.drawImage(img, ...args); ctx.filter = 'none'; return; }
+  ctx.drawImage(img, ...args);
+  const [dx, dy, dw, dh] = args.length >= 8 ? args.slice(4) : [args[0], args[1], args[2] ?? img.width, args[3] ?? img.height];
+  const t = ctx.getTransform(), x0 = t.a * dx + t.e, y0 = t.d * dy + t.f, x1 = t.a * (dx + dw) + t.e, y1 = t.d * (dy + dh) + t.f;   // (scale and shift only)
+  filterPixels(ctx, f, Math.min(x0, x1), Math.min(y0, y1), Math.abs(x1 - x0), Math.abs(y1 - y0));
+}

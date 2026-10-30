@@ -1,6 +1,7 @@
 // Fifty biome-tinted wall ornaments, each with four authored isometric wall
 // views. The view contract intentionally matches walltorches.js.
 import { isoX, isoY } from '../core/view.js';
+import { drawFiltered } from '../core/util.js';
 
 const ROOT = 'assets/fx/wall_hangings/';
 const CASTLE_KEEP_ATLAS = 'assets/tiles/castle_keep/wall_hangings.webp';
@@ -112,8 +113,7 @@ function tintedAtlas(img, sheet, hue) {
   if (!c) {
     c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
     const g = c.getContext('2d');
-    g.filter = `hue-rotate(${hue - 34}deg) saturate(${hue === 34 ? 0.88 : 1.08})`;
-    g.drawImage(img, 0, 0);
+    drawFiltered(g, `hue-rotate(${hue - 34}deg) saturate(${hue === 34 ? 0.88 : 1.08})`, img, 0, 0);   // (by hand where canvas filters don't work)
     tinted.set(key, c);
     while (tinted.size > 5) tinted.delete(tinted.keys().next().value); // one biome's hue: the five atlases
   }

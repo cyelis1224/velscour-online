@@ -13,11 +13,12 @@ import { depthLevel, fortitude, logCurve } from '../data/depth.js';
 import { heroBonus } from './defiance.js';
 import { MAX_MASTERY, masteryNeed, masteryMul, masteryTier, TIER_NAMES } from './augments.js';
 import { castSkill, Timer } from './skillrun.js';
-import { Orbit, Area, BeamCh, Whirl } from './hazards.js';
+import { Orbit, Area, BeamCh, Whirl, Leap } from './hazards.js';
 import { hit, aoe } from './combat.js';
 import { heroLook, heroFrame, gearFxOf, finishOf } from '../core/gearart.js';
 import { castArtFx } from '../gfx/artfx.js';
 import { drawGearFx, updateGearFx } from '../gfx/gearfx.js';
+import { heldHero, drawHeldLayer } from '../gfx/heldart.js';
 import { fxColor } from '../data/gear.js';
 import { freeSlot } from '../data/bar.js';
 import { bardCompose, bardUpdate, harmonyMul } from './bard.js';
@@ -499,8 +500,11 @@ export class Player extends Creature {
    * has no gear art, and the old class sprite stands in). A single frame, drawn with the usual bob.
    */
   artFrame() {
-    const eq = this.char.equip, img = heroLook(this.classId, eq.body, eq.head);
-    if (!img) return null;
+    const eq = this.char.equip, base = heroLook(this.classId, eq.body, eq.head);
+    if (!base) return null;
+    // the weapon and off-hand in his fists (src/gfx/heldart.js), unless the settings turn held gear off
+    const held = G.settings.heldGear !== false ? heldHero(base, this.classId, eq) : null, img = held ? held.img : base;
+    this.heldArt = { held, base };
     const f = heroFrame(this.classId, this.spriteH);
     return { img, frame: 0, cw: img.width, ch: img.height, ax: f.ax, ay: f.ay, k: f.k };
   }
@@ -514,6 +518,7 @@ export class Player extends Creature {
   drawArtLayer(ctx, layer, art) {
     const g = this.gearFx();
     if (g) drawGearFx(ctx, this, g.fx, g.col, layer, art);
+    if (layer === 'front' && this.heldArt && G.settings.heldGear !== false) drawHeldLayer(ctx, this, this.heldArt.held, this.heldArt.base, art);
   }
 
   // ------------------------------------------------------------------ death
@@ -562,6 +567,9 @@ export class Player extends Creature {
       hit(src, this, amount, k === 'burn' ? 'fire' : k === 'poison' ? 'poison' : 'blood', { dot: true });
     });
     if (this.dead) return;
+    // a dash, leap or beam whose effect was swept away under him (a level section changing round him: game/caverns.js,
+    // dunes.js, tower.js) would hold him channelling for good, unable to move or fight: let it go
+    if (this.channel && this.world && !this.world.hazards.includes(this.channel)) { if (this.channel instanceof Leap) this.z = 0; this.channel = null; }
     // regen
     if (this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + st.lifeRegen * dt);
     if (this.mana < this.maxMana) this.mana = Math.min(this.maxMana, this.mana + st.manaRegen * dt);

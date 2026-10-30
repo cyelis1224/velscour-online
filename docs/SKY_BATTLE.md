@@ -19,7 +19,11 @@ node tools/tests/skyship.js [clear|storm,...|all] [auto]     # whole battles at 
 2. **Boarding waves** (5, easy to hard). Boats come out of the sky astern and lie alongside to port: the gasbag sloop,
    the harpoon cutter and the grapple hauler, from `tools/airship3d_skiffs.js`. Their crews leap the rail. From the
    third wave on, a gasbag also crosses high overhead and drops boarders on ropes. Monster levels follow the depth.
+   The next wave is called as soon as the current one is all over the rail and down to its last two boarders, so its
+   boats are already on their way; a boat goes to a dock with no crew alongside, and an empty boat still there casts off.
 3. **Mid-boss** (after wave 3). A captain swings across the deck on a rope from his gasbag's balloon, with an escort.
+   His gasbag sets out while the last two of wave 3 still stand; his scene waits for a clear deck (and for the gasbag,
+   at most a second and a half). Wave 4 is called once he falls and his escort is over the rail.
 4. **Parley** (cut scene). The next captain and two **sky-knights** come aboard from a gasbag flying a white flag. The
    hero walks over to meet them (round the fittings and down the stairs, wherever they stood). The talk is one of
    2,000 conversations (`src/data/skytalk.js`):
@@ -32,9 +36,10 @@ node tools/tests/skyship.js [clear|storm,...|all] [auto]     # whole battles at 
    quarter, her first broadside bursting short in the air. The captain
    leaps away and leaves his knights under his own fleet's guns. They still won't join the hero, but from here on
    they fight at the hero's side.
-5. **The flagship's duel.** She closes from far to port over about 26 s, trading broadsides with the ironclad. Her
-   shots land on telegraphed circles and hurt both sides. The ironclad's port battery answers and sets her afire.
-   Boarders drop over twice.
+5. **The flagship's duel.** She closes from far to port over about 26 s of fighting, trading broadsides with the
+   ironclad. Her shots land on telegraphed circles and hurt both sides. The ironclad's port battery answers and sets her
+   afire. Her boarders come over in threes all the way in (a champion leads every other three), the next three while
+   the last of these still stands.
 6. **Hooks** (cut scene). The knights throw grappling hooks from the ironclad's rail, and the flagship's crew throw
    back. The chains go taut. Captain one leaps the gap; captain two swings over on a rope from her mainmast. The
    knights then run back and leap into the captains with giant Runeblade strikes.
@@ -43,6 +48,22 @@ node tools/tests/skyship.js [clear|storm,...|all] [auto]     # whole battles at 
    words with whoever fired that broadside. The gate turns blue and becomes the exit. A hoard chest rises on the
    hatch: a rare chest's drop, one item at loot bonus 1.6, and a 35% chance of a guaranteed Epic (20% of those a
    Legendary), capped by item level like every drop. First clear: +1 skill point.
+
+**No standing about** (the rule from docs/HANDOFF.md, October 28, 2026). Arrivals stay staggered, but the moment
+nothing on the deck can be hit (`S.calm`, outside cut scenes), `hurry()` in `src/game/skybattle.js` brings the
+*next* foe on its way, one arrival at a time so they don't all land at once:
+- a boarder in the air finishes its leap or rope slide in a quarter second (boarding entrances only, not a captain's
+  moves);
+- else a docked boat's next boarder leaps now, and the ramp drops at once;
+- else the boat coming in soonest is alongside in 0.4 s;
+- else the flyover gasbag speeds to its drop zone and drops now;
+- else the next boat, flyover or flagship boarder sets out now (the timers `run.later` tags with a wave).
+
+The flagship closes 6x faster while the deck is clear. The beat before the first wave and before the mid-boss and
+parley scenes is 0.3 s or less (it was 2.5 s), and the gap between gauntlet champions is 0.3 s (it was 1.2 s). Measured
+frame by frame from the first wave to victory, with boarders dying the instant they land or 1.5 s after, the longest
+stretch outside cut scenes with nothing to hit is 0.83-0.93 s. Before, it was 9-12 s every wave and 12-15 s into the
+flagship's duel.
 
 **Stories.** Besides the eight weathers there are thirty stories with their own boarders, captains, knights, dialogue
 and sometimes a gauntlet of bosses and a master: [SKY_STORIES.md](SKY_STORIES.md).

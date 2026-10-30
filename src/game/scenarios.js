@@ -138,6 +138,7 @@ function makeScenario(world, start, info, need) {
     case 'relic': { // lift it, outlast three waves
       own(marker(...at[0], W.relic, sprite('treasure') || sprite('tomb'), (mk) => { mk.opened = true; begin(); S.waves = 3; S.waveT = 0.5; }, { color: '#ff4070' }));
       S.tick = (dt) => {
+        if (S.waves > 0 && S.waves < 3 && !foesAlive()) S.waveT = Math.min(S.waveT, 0.6); // a wave cut down: the next comes at once
         if (S.waves > 0 && (S.waveT -= dt) <= 0) { wave(at[0], randi(4, 7)); S.waves--; S.waveT = 8; }
         if (S.active && !S.waves && !foesAlive()) reward(...at[0]);
       };
@@ -166,7 +167,7 @@ function makeScenario(world, start, info, need) {
       });
       if (mech === 'escort') {
         const soul = people[0], goal = at[at.length - 1];
-        own(marker(...goal, 'The far altar', sprite('altar'), () => {}, { color: '#a0e0ff' }));
+        own(marker(...goal, 'The far altar', sprite('altar'), () => {}, { color: '#a0e0ff', inert: true })); // only where to lead it: nothing to use
         S.tick = (dt) => {
           if (!soul.follow) return;
           const p = G.player, d = dist(soul.x, soul.y, p.x, p.y);
@@ -258,13 +259,14 @@ function makeScenario(world, start, info, need) {
           if (S.left <= 0) reward(x, y);
         } else if (mech === 'ward') {
           S.objective = { x, y, reach: 3 };
-          if (S.waves > 0 && !S.foes.some((m) => !m.dead && dist(m.x, m.y, x, y) < 16) && (S.waveT -= dt) <= 0) { S.waves--; S.waveT = 3; S.foes.push(...foe(null, map.randomNear(x, y, 6), S.waves ? 'normal' : 'champion', 4 + (3 - S.waves), { awake: true })); }
+          if (S.waves > 0 && !S.foes.some((m) => !m.dead && dist(m.x, m.y, x, y) < 16) && (S.waveT -= dt) <= 0) { S.waves--; S.waveT = 0.8; S.foes.push(...foe(null, map.randomNear(x, y, 6), S.waves ? 'normal' : 'champion', 4 + (3 - S.waves), { awake: true })); }
           const near = world.creatures.filter((m) => m.team === 'enemy' && !m.dead && dist(m.x, m.y, x, y) < 2).length;
           S.wardHp -= near * 2.5 * dt;
           if (S.wardHp <= 0) fail('The ' + W.ward + ' has fallen');
           else if (!S.waves && !foesAlive()) reward(x, y);
         } else {
           S.left -= dt; S.got = (world.happen ? world.happen.kills || 0 : 0) - S.k0;
+          if (!foesAlive()) S.waveT = Math.min(S.waveT, 0.5); // the hourglass runs: nobody stands about between waves
           if ((S.waveT -= dt) <= 0) { S.waveT = 6; wave(null, randi(4, 6)); }
           if (S.got >= need) reward(p.x, p.y); else if (S.left <= 0) fail('The hourglass ran dry');
         }

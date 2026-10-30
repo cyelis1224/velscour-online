@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Paths resolve from the repo root, so the game's gear loader (src/core/gearart.js) finds assets/sprites/gear/. -->
+<base href="../">
+<title>Hand-held Gear</title>
+<!-- Random heroes (armor, helmet, finishes) holding three.js gear: the Paladin's maces and shields one sheet per fitting
+     attempt (tools/handheld3d.js), every class's main-hand and off-hand pieces (tools/handheld3d_kits.js).
+     ?attempt=N (default: the last) | ?cls=<class>|all  &seed=S &n=8. tools/handheld3d_bake.js saves the sheets. -->
+<style>
+  :root { --bg: #141217; --line: #3a332c; --text: #e8dfcf; --dim: #a39a8c; --gold: #f0c870; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { font-size: 14px; margin: 0; color: var(--gold); }
+  select, button { background: #2b241c; color: var(--gold); border: 1px solid #5a4a30; padding: 4px 8px; font: inherit; cursor: pointer; }
+  #note { color: var(--dim); }
+  #sheet { display: block; margin: 14px; max-width: calc(100% - 28px); image-rendering: pixelated; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>Hand-held Gear</h1>
+  <select id="cls"></select>
+  <select id="attempt"></select>
+  <button id="reroll">New heroes</button>
+  <span id="note"></span>
+</header>
+<canvas id="sheet"></canvas>
+<script type="module">
+import { ATTEMPTS, WEAPONS, SHIELDS, init, compose, findFists, renderKit } from './tools/handheld3d.js';
+import { CLASS_KITS, kitItems } from './tools/handheld3d_kits.js';
+import { CLASSES } from './src/data/classes.js';
+import { loadGearArt, heroLook } from './src/core/gearart.js';
+import { PALETTES } from './src/data/gear.js';
+
+const P = new URLSearchParams(location.search), $ = (id) => document.getElementById(id);
+let attempt = Math.min(ATTEMPTS.length - 1, Math.max(0, (+P.get('attempt') || ATTEMPTS.length) - 1)), seed = +(P.get('seed') || 7);
+const N = +(P.get('n') || 8), FISTS = await findFists('paladin'), CLS = Object.keys(CLASS_KITS);
+let cls = P.get('cls') || 'attempts';
+
+function rng(s) { return () => { s = (s + 0x6d2b79f5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+/** n random Paladins: armor 1-26, helmet 1-15, a finish each (now and then the armor's own colours), weapon and shield. */
+function heroes(seed, n) {
+  const r = rng(seed), pick = (a) => a[Math.floor(r() * a.length)], wk = Object.keys(WEAPONS), sk = Object.keys(SHIELDS);
+  return Array.from({ length: n }, (_, i) => {
+    const h = {
+      armor: 1 + Math.floor(r() * 26), finish: r() < 0.3 ? 0 : 1 + Math.floor(r() * (PALETTES.length - 1)),
+      helmet: 1 + Math.floor(r() * 15), helmFinish: 1 + Math.floor(r() * (PALETTES.length - 1)),
+      weapon: wk[i % wk.length], shield: sk[(i + Math.floor(i / sk.length)) % sk.length], roll: Math.floor(r() * 360),
+    };
+    h.fists = FISTS[h.armor];
+    return h;
+  });
+}
+function heroCanvas(h, cls = 'paladin') {
+  const c = heroLook(cls, { type: 'gear', slot: 'body', rarity: 3, look: [h.armor, h.finish, -1, 2] },
+    { type: 'gear', slot: 'head', rarity: 3, look: [h.helmet, h.helmFinish, -1, 2] });
+  const copy = document.createElement('canvas'); copy.width = c.width; copy.height = c.height; copy.getContext('2d').drawImage(c, 0, 0);
+  return copy;
+}
+const floor = (g, x, y, w, h) => {
+  const r = g.createRadialGradient(x + w / 2, y + h * 0.8, 10, x + w / 2, y + h * 0.7, h * 0.8);
+  r.addColorStop(0, '#4a4038'); r.addColorStop(0.55, '#2a2420'); r.addColorStop(1, '#1c1816'); g.fillStyle = r; g.fillRect(x, y, w, h);
+};
+// the part of the 128x192 frame worth showing, and the cell layout of a sheet
+const CROP = [12, 58, 110, 134], Z = 3, CW = CROP[2] * Z, CH = CROP[3] * Z + 30, GAP = 10;
+
+/** A sheet of n heroes for attempt a: each at 3x (art px as squares) with the game-size sprite in its corner. */
+async function sheet(a, s = seed, n = N) {
+  await init(); await loadGearArt('paladin');
+  const A = ATTEMPTS[a], hs = heroes(s, n), cols = 4, rows = Math.ceil(n / cols);
+  const c = document.createElement('canvas'); c.width = cols * (CW + GAP) + GAP; c.height = 40 + rows * (CH + GAP);
+  const g = c.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 16px Consolas, monospace'; g.fillText(A.name, GAP, 24);
+  g.fillStyle = '#a39a8c'; g.font = '13px Consolas, monospace'; g.fillText(A.note, GAP + g.measureText(A.name).width + 120, 24);
+  hs.forEach((h, i) => {
+    const out = compose(heroCanvas(h), h, A), x = GAP + (i % cols) * (CW + GAP), y = 40 + Math.floor(i / cols) * (CH + GAP);
+    floor(g, x, y, CW, CH - 30);
+    g.imageSmoothingEnabled = false;
+    const k = out.width / 128;
+    g.drawImage(out, CROP[0] * k, CROP[1] * k, CROP[2] * k, CROP[3] * k, x, y, CW, CROP[3] * Z);
+    g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(out, CROP[0] * k, CROP[1] * k, CROP[2] * k, CROP[3] * k, x + CW - CROP[2] - 4, y + CROP[3] * Z - CROP[3] - 4, CROP[2], CROP[3]);
+    g.fillStyle = '#e8dfcf'; g.font = '12px Consolas, monospace';
+    g.fillText(`${WEAPONS[h.weapon].label} + ${SHIELDS[h.shield].label}`, x + 4, y + CROP[3] * Z + 14);
+    g.fillStyle = '#a39a8c'; g.fillText(`armor ${h.armor} · helm ${h.helmet} · finish ${h.finish}`, x + 4, y + CROP[3] * Z + 27);
+  });
+  return c;
+}
+/** The first four heroes' hands big (6x): the weapon hand above, the shield arm below. */
+async function closeup(a, s = seed, n = 4) {
+  await init(); await loadGearArt('paladin');
+  const A = ATTEMPTS[a], hs = heroes(s, n), Zc = 6, crops = [[14, 88, 46, 56], [74, 92, 46, 70]];
+  const cw = 46 * Zc, c = document.createElement('canvas'); c.width = n * (cw + GAP) + GAP; c.height = 40 + (56 + 70) * Zc + GAP;
+  const g = c.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 16px Consolas, monospace'; g.fillText(A.name + ' (hands, 6x)', GAP, 24);
+  hs.forEach((h, j) => {
+    const out = compose(heroCanvas(h), h, A), k = out.width / 128, x = GAP + j * (cw + GAP);
+    let y = 34;
+    for (const cr of crops) {
+      floor(g, x, y, cr[2] * Zc, cr[3] * Zc); g.imageSmoothingEnabled = false;
+      g.drawImage(out, cr[0] * k, cr[1] * k, cr[2] * k, cr[3] * k, x, y, cr[2] * Zc, cr[3] * Zc);
+      y += cr[3] * Zc + GAP / 2;
+    }
+  });
+  return c;
+}
+
+/** The weapon fist at 12x, with gear and bare, for the first n heroes. */
+async function fists(a, s = seed, n = 4) {
+  await init(); await loadGearArt('paladin');
+  const A = ATTEMPTS[a], hs = heroes(s, n), Zf = 12, cr = [30, 108, 28, 34], cw = cr[2] * Zf;
+  const c = document.createElement('canvas'); c.width = n * (2 * cw + 3 * GAP) + GAP; c.height = cr[3] * Zf + 44;
+  const g = c.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 16px Consolas, monospace'; g.fillText(A.name + ' (weapon fist, 12x: held | bare)', GAP, 24);
+  hs.forEach((h, j) => {
+    const bare = heroCanvas(h), out = compose(bare, h, A), k = out.width / 128;
+    [out, bare].forEach((im, b) => {
+      const x = GAP + j * (2 * cw + 3 * GAP) + b * (cw + GAP);
+      floor(g, x, 34, cw, cr[3] * Zf); g.imageSmoothingEnabled = false;
+      g.drawImage(im, cr[0] * k, cr[1] * k, cr[2] * k, cr[3] * k, x, 34, cw, cr[3] * Zf);
+    });
+  });
+  return c;
+}
+
+// ------------------------------------------------------------------ every class's kit
+const KIT_A = ATTEMPTS[13], classFists = {}; // lit as attempt 14
+/** n random heroes of a class (armor, helmet, finishes) with this armor's fists. */
+async function classHeroes(c, s, n) {
+  await loadGearArt(c); classFists[c] ||= await findFists(c);
+  const r = rng(s + c.length * 7919);
+  return Array.from({ length: n }, () => {
+    const h = { armor: 1 + Math.floor(r() * 26), finish: r() < 0.3 ? 0 : 1 + Math.floor(r() * (PALETTES.length - 1)), helmet: 1 + Math.floor(r() * 15), helmFinish: 1 + Math.floor(r() * (PALETTES.length - 1)) };
+    h.fists = classFists[c][h.armor];
+    return h;
+  });
+}
+const className = (c) => CLASSES[c]?.name || c;
+const kitLabel = (c, i) => { const k = CLASS_KITS[c]; return `${k.main[i % k.main.length].label} + ${k.off[i % k.off.length].label}`; };
+const CROPK = [4, 14, 120, 176];
+/** A sheet of n heroes of class c, each at Z (art px as squares) with the game-size sprite in its corner. */
+async function classSheet(c, s = seed, n = N, Zk = 3) {
+  await init();
+  const hs = await classHeroes(c, s, n), cols = 4, rows = Math.ceil(n / cols), cw = CROPK[2] * Zk, ch = CROPK[3] * Zk + 30;
+  const cv = document.createElement('canvas'); cv.width = cols * (cw + GAP) + GAP; cv.height = 40 + rows * (ch + GAP);
+  const g = cv.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 16px Consolas, monospace'; g.fillText(className(c), GAP, 24);
+  g.fillStyle = '#a39a8c'; g.font = '13px Consolas, monospace'; g.fillText(CLASS_KITS[c].main.length > 1 ? 'every weapon and shield in turn' : kitLabel(c, 0), GAP + 200, 24);
+  hs.forEach((h, i) => {
+    const out = renderKit(heroCanvas(h, c), kitItems(c, i, h.fists), KIT_A), x = GAP + (i % cols) * (cw + GAP), y = 40 + Math.floor(i / cols) * (ch + GAP);
+    drawCell(g, out, x, y, Zk, `${kitLabel(c, i)}`, `armor ${h.armor} · helm ${h.helmet} · finish ${h.finish}`);
+  });
+  return cv;
+}
+function drawCell(g, out, x, y, Zk, l1, l2) {
+  const cw = CROPK[2] * Zk, k = out.width / 128;
+  floor(g, x, y, cw, CROPK[3] * Zk); g.imageSmoothingEnabled = false;
+  g.drawImage(out, CROPK[0] * k, CROPK[1] * k, CROPK[2] * k, CROPK[3] * k, x, y, cw, CROPK[3] * Zk);
+  g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+  g.drawImage(out, CROPK[0] * k, CROPK[1] * k, CROPK[2] * k, CROPK[3] * k, x + cw - CROPK[2] - 4, y + CROPK[3] * Zk - CROPK[3] - 4, CROPK[2], CROPK[3]);
+  g.fillStyle = '#e8dfcf'; g.font = '12px Consolas, monospace'; g.fillText(l1, x + 4, y + CROPK[3] * Zk + 14);
+  g.fillStyle = '#a39a8c'; g.fillText(l2, x + 4, y + CROPK[3] * Zk + 27);
+}
+/** One hero of every class, Zk x. */
+async function overview(s = seed, Zk = 2, cols = 8) {
+  await init();
+  const cw = CROPK[2] * Zk, ch = CROPK[3] * Zk + 30, cv = document.createElement('canvas');
+  cv.width = cols * (cw + GAP) + GAP; cv.height = 40 + Math.ceil(CLS.length / cols) * (ch + GAP);
+  const g = cv.getContext('2d'); g.fillStyle = '#141217'; g.fillRect(0, 0, cv.width, cv.height);
+  g.fillStyle = '#f0c870'; g.font = 'bold 16px Consolas, monospace'; g.fillText('Every class: main hand + off hand', GAP, 24);
+  for (const [j, c] of CLS.entries()) {
+    const [h] = await classHeroes(c, s, 1), out = renderKit(heroCanvas(h, c), kitItems(c, 0, h.fists), KIT_A);
+    drawCell(g, out, GAP + (j % cols) * (cw + GAP), 40 + Math.floor(j / cols) * (ch + GAP), Zk, className(c), kitLabel(c, 0));
+  }
+  return cv;
+}
+
+async function show() {
+  const all = cls !== 'attempts';
+  $('attempt').style.display = all ? 'none' : '';
+  $('note').textContent = all ? (cls === 'all' ? 'one hero of every class' : kitLabel(cls, 0)) : ATTEMPTS[attempt].note;
+  const c = cls === 'all' ? await overview() : all ? await classSheet(cls) : await sheet(attempt), v = $('sheet');
+  v.width = c.width; v.height = c.height; v.getContext('2d').drawImage(c, 0, 0);
+}
+$('cls').innerHTML = `<option value="attempts">Paladin attempts</option><option value="all">Every class</option>` + CLS.map((c) => `<option value="${c}">${className(c)}</option>`).join('');
+$('cls').value = cls;
+$('cls').onchange = () => { cls = $('cls').value; show(); };
+$('attempt').innerHTML = ATTEMPTS.map((a, i) => `<option value="${i}">${a.name}</option>`).join('');
+$('attempt').value = attempt;
+$('attempt').onchange = () => { attempt = +$('attempt').value; show(); };
+$('reroll').onclick = () => { seed = Math.floor(Math.random() * 1e6); show(); };
+window.HAND = { ATTEMPTS, sheet: async (...a) => (await sheet(...a)).toDataURL('image/png'), closeup: async (...a) => (await closeup(...a)).toDataURL('image/png'), fists: async (...a) => (await fists(...a)).toDataURL('image/png'),
+  CLS, className, classSheet: async (...a) => (await classSheet(...a)).toDataURL('image/png'), overview: async (...a) => (await overview(...a)).toDataURL('image/png') };
+await show();
+window.HAND.ready = true;
+</script>
+</body>
+</html>

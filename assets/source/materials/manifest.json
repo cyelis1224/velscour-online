@@ -1,0 +1,640 @@
+{
+  "pack": "VELScour Material Texture Pack",
+  "native_tile_px": [
+    160,
+    160
+  ],
+  "texture_count": 35,
+  "textures": [
+    {
+      "id": "SHIP-01",
+      "category": "ship_planks",
+      "name": "Tarblack Ship Oak",
+      "file": "textures/ship_planks/SHIP-01_Tarblack_Oak.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        1
+      ],
+      "sha256": "6af0e0f85d18522dbe9fe1d2d8f25da5fcbac6d07a651114533f7de1517cda58"
+    },
+    {
+      "id": "SHIP-02",
+      "category": "ship_planks",
+      "name": "Salt-Worn Deck Oak",
+      "file": "textures/ship_planks/SHIP-02_Salt_Worn_Oak.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        2
+      ],
+      "sha256": "e2f90621ac242a942a86e91a6489baa809096b114cfbdbc6edb3628892aeaa82"
+    },
+    {
+      "id": "SHIP-03",
+      "category": "ship_planks",
+      "name": "Violet-Caulking Teak",
+      "file": "textures/ship_planks/SHIP-03_Violet_Teak.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        3
+      ],
+      "sha256": "17606d5480ea140d175ce56175c1c939de535053d6eb779884360aa0c65f82b6"
+    },
+    {
+      "id": "SHIP-04",
+      "category": "ship_planks",
+      "name": "Splintered Cypress",
+      "file": "textures/ship_planks/SHIP-04_Splintered_Cypress.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        4
+      ],
+      "sha256": "5aa6046bba8c95d3a89f6133ceb48d56be07b49dac3c044715291e72e344f984"
+    },
+    {
+      "id": "SHIP-05",
+      "category": "ship_planks",
+      "name": "Red Mahogany Deck",
+      "file": "textures/ship_planks/SHIP-05_Red_Mahogany.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        5
+      ],
+      "sha256": "eaa7662a8db152154f004b639fbce4e6fe30530e671b6c9e3f9aace1b6d3bdd0"
+    },
+    {
+      "id": "SHIP-06",
+      "category": "ship_planks",
+      "name": "Salt-Bleached Greyboards",
+      "file": "textures/ship_planks/SHIP-06_Salt_Bleached_Greyboards.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        1,
+        6
+      ],
+      "sha256": "2099e5220844ed169cf7fb60aac3d26a7854cba0d8319bd4ef75b6d988044cf3"
+    },
+    {
+      "id": "SHIP-07",
+      "category": "ship_planks",
+      "name": "Ember-Scorched Planks",
+      "file": "textures/ship_planks/SHIP-07_Ember_Scorched.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        1
+      ],
+      "sha256": "8bb87922882598ebd250a0fea01783742fddf99bf4f548c8fc698e742d053408"
+    },
+    {
+      "id": "SHIP-08",
+      "category": "ship_planks",
+      "name": "Bone-Nail Deck Oak",
+      "file": "textures/ship_planks/SHIP-08_Bone_Nail_Oak.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        2
+      ],
+      "sha256": "530a1dd2000136161df1507ba09102836fc12f693283b666380060eeb68a7896"
+    },
+    {
+      "id": "SHIP-09",
+      "category": "ship_planks",
+      "name": "Mossed Shipboard",
+      "file": "textures/ship_planks/SHIP-09_Mossed_Shipboard.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        3
+      ],
+      "sha256": "bfd69f385ec6cefccae73f01cce97a928e20222e432c7755766b4831bb34fb9c"
+    },
+    {
+      "id": "SHIP-10",
+      "category": "ship_planks",
+      "name": "Black Walnut Rift-Seam",
+      "file": "textures/ship_planks/SHIP-10_Black_Walnut_Rift_Seam.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        4
+      ],
+      "sha256": "b0bb2d7d9ba9c01c95ee7ee81558721ef9034e5a1a6e4410b1bd14b733017379"
+    },
+    {
+      "id": "MET-01",
+      "category": "metal",
+      "name": "Hammered Gunmetal",
+      "file": "textures/metal/MET-01_Hammered_Gunmetal.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        5
+      ],
+      "sha256": "8cd43a74b25cefabfcbcdb861f7a3ab036ebabad042865cb60fb6c4558400b31"
+    },
+    {
+      "id": "MET-02",
+      "category": "metal",
+      "name": "Riveted Black Iron",
+      "file": "textures/metal/MET-02_Riveted_Black_Iron.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        2,
+        6
+      ],
+      "sha256": "2a0b8a73244f524aebeedb9bd861f42ef4b86b968183e273e6eda66215b6bfb0"
+    },
+    {
+      "id": "MET-03",
+      "category": "metal",
+      "name": "Flaked Iron Plate",
+      "file": "textures/metal/MET-03_Flaked_Iron.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        1
+      ],
+      "sha256": "2e2e10e5e142a91b8266eae9451caa0b5d765db668d6dea48ead410676a3ecbf"
+    },
+    {
+      "id": "MET-04",
+      "category": "metal",
+      "name": "Pitted Tarnished Bronze",
+      "file": "textures/metal/MET-04_Tarnished_Bronze.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        2
+      ],
+      "sha256": "4e4da10d64ad643ce38f8343b0665d5859f9fcd6dc985b33fc37b341d8c1ccc3"
+    },
+    {
+      "id": "MET-05",
+      "category": "metal",
+      "name": "Oxidized Green Copper",
+      "file": "textures/metal/MET-05_Oxidized_Copper.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        3
+      ],
+      "sha256": "4baca79c7ac24eea783d283be4f168a12e1adc30839c21eb4d4e24544b00a9cc"
+    },
+    {
+      "id": "MET-06",
+      "category": "metal",
+      "name": "Tarnished Pale Silver",
+      "file": "textures/metal/MET-06_Tarnished_Silver.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        4
+      ],
+      "sha256": "9f2d4873a6fe3c131e27f3c17652492c9a2280d306e527e8ac201b1aa1a14039"
+    },
+    {
+      "id": "MET-07",
+      "category": "metal",
+      "name": "Black Chainmail",
+      "file": "textures/metal/MET-07_Black_Chainmail.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        5
+      ],
+      "sha256": "e51e7e9d0c37c2c0125849e374703878633b3960c6b26049c314c25c21374fff"
+    },
+    {
+      "id": "MET-08",
+      "category": "metal",
+      "name": "Scratched Blue Steel",
+      "file": "textures/metal/MET-08_Scratched_Blue_Steel.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        3,
+        6
+      ],
+      "sha256": "903cdf1ddda505a0fd242cc4b4f988690ba409efaebb0139a86d2d45b092d980"
+    },
+    {
+      "id": "MET-09",
+      "category": "metal",
+      "name": "Oxide-Stained Brass Sheet",
+      "file": "textures/metal/MET-09_Oxide_Stained_Brass.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        1
+      ],
+      "sha256": "ab159e88163d554014d224aff80bab97de5324ee490a2ea87596b6043fb3134d"
+    },
+    {
+      "id": "MET-10",
+      "category": "metal",
+      "name": "Amethyst-Corroded Plate",
+      "file": "textures/metal/MET-10_Amethyst_Corrosion.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        2
+      ],
+      "sha256": "fefe33423ae58ad19e338e1c71706f1cb37320aa1d05f57daaa9bc0b48b25824"
+    },
+    {
+      "id": "CLOTH-01",
+      "category": "sailcloth",
+      "name": "Coarse Sail Canvas",
+      "file": "textures/sailcloth/CLOTH-01_Coarse_Sail_Canvas.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        3
+      ],
+      "sha256": "522c3846fe8c4e3cf72f9cbb37606c3f6d0cec90039c5d9e23d6dee1bebfed3a"
+    },
+    {
+      "id": "CLOTH-02",
+      "category": "sailcloth",
+      "name": "Stitched Charcoal Sailcloth",
+      "file": "textures/sailcloth/CLOTH-02_Stitched_Charcoal.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        4
+      ],
+      "sha256": "66af3c3cb8ef156a284e6ee8454c3c7d954b467887055692367155975f6f029e"
+    },
+    {
+      "id": "CLOTH-03",
+      "category": "sailcloth",
+      "name": "Patched Dark Canvas",
+      "file": "textures/sailcloth/CLOTH-03_Patched_Dark_Canvas.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        5
+      ],
+      "sha256": "f1fd791a5b693541450f01a31256d093a37c9b4a7949f151cf45f3d2c17e02e8"
+    },
+    {
+      "id": "CLOTH-04",
+      "category": "sailcloth",
+      "name": "Aged Cream Linen",
+      "file": "textures/sailcloth/CLOTH-04_Aged_Cream_Linen.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        4,
+        6
+      ],
+      "sha256": "3377c571c32e9e5bdc31c25f7f3425ad91de318c390f270a02bfe716e9097878"
+    },
+    {
+      "id": "CLOTH-05",
+      "category": "sailcloth",
+      "name": "Deep Plum Woven Sail",
+      "file": "textures/sailcloth/CLOTH-05_Deep_Plum_Woven_Sail.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        1
+      ],
+      "sha256": "db1656d47ed1a5b111b26d896e04143afd7a7cb5b04b9a9095a431e1366d95fc"
+    },
+    {
+      "id": "WOOD-01",
+      "category": "wood",
+      "name": "End-Grain Timber",
+      "file": "textures/wood/WOOD-01_End_Grain_Timber.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        2
+      ],
+      "sha256": "266e5b52d3f03905aaeabbd338a4bfa1d26d9491049bc77004066e23bee08fc5"
+    },
+    {
+      "id": "WOOD-02",
+      "category": "wood",
+      "name": "Scroll-Cut Blackwood",
+      "file": "textures/wood/WOOD-02_Scroll_Cut_Blackwood.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        3
+      ],
+      "sha256": "17e968e305c44ffdeb64a2e64e156221365d430a6f1c1de400ab4bea032e9c03"
+    },
+    {
+      "id": "WOOD-03",
+      "category": "wood",
+      "name": "Rootwood Grain",
+      "file": "textures/wood/WOOD-03_Rootwood_Grain.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        4
+      ],
+      "sha256": "9dfa3a1b0fcca033bf7b3d7e32ecb52681f9261751bd7a620fdd406ba5666e52"
+    },
+    {
+      "id": "WOOD-04",
+      "category": "wood",
+      "name": "Weathered Cedar",
+      "file": "textures/wood/WOOD-04_Weathered_Cedar.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        5
+      ],
+      "sha256": "02bc5d6289104f268d19c0963d57139f076ee93caf987307e0315ee18fbe9cf1"
+    },
+    {
+      "id": "WOOD-05",
+      "category": "wood",
+      "name": "Violet-Streak Blackwood",
+      "file": "textures/wood/WOOD-05_Violet_Streak_Blackwood.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        5,
+        6
+      ],
+      "sha256": "026ba41f9ae70939ecda85e26df1104f26c3245371562a94abf05d8f493bcfe6"
+    },
+    {
+      "id": "GOLD-01",
+      "category": "gold",
+      "name": "Beaten Antique Gold",
+      "file": "textures/gold/GOLD-01_Beaten_Antique_Gold.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        6,
+        1
+      ],
+      "sha256": "e54d27202d6028920e2f4f115b9f70baf2750c76721d86fed04171b521371a63"
+    },
+    {
+      "id": "GOLD-02",
+      "category": "gold",
+      "name": "Scratched Gold Leaf",
+      "file": "textures/gold/GOLD-02_Scratched_Gold_Leaf.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        6,
+        2
+      ],
+      "sha256": "b012484725dded9b6e9318c5d73f182f4a52c39fc4d396505bbdfc769d4c2aed"
+    },
+    {
+      "id": "GOLD-03",
+      "category": "gold",
+      "name": "Gold with Amethyst Seams",
+      "file": "textures/gold/GOLD-03_Amethyst_Seamed_Gold.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        6,
+        3
+      ],
+      "sha256": "c3f18459e95bd50a1e7e3dae91a625291c953aa8bc8eb8976f5fdb2b75bc3c4d"
+    },
+    {
+      "id": "GOLD-04",
+      "category": "gold",
+      "name": "Hammered Reliquary Gold",
+      "file": "textures/gold/GOLD-04_Hammered_Reliquary_Gold.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        6,
+        4
+      ],
+      "sha256": "b58b2b926bffc8d0674fa819f1dc84ed5e1ce9c76b6ba1a0c5a2e1ee3e44dadd"
+    },
+    {
+      "id": "GOLD-05",
+      "category": "gold",
+      "name": "Gilded Charcoal Alloy",
+      "file": "textures/gold/GOLD-05_Gilded_Charcoal_Alloy.png",
+      "size_px": [
+        160,
+        160
+      ],
+      "colors": 8,
+      "palette_budget": 8,
+      "seam_edges_exact": true,
+      "source_cell": [
+        6,
+        5
+      ],
+      "sha256": "255a0f323f9c6b9d40d764a6bd4d56cd128d0a92c4f6219a84197157af7dc992"
+    }
+  ]
+}

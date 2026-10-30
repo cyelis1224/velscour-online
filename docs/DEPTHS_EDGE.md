@@ -40,7 +40,8 @@ Planned in screen-aligned axes (a to the right of the screen, b toward the camer
   lake cavern. Floor heights ramp along the passages and are smoothed and held under the climb limit.
 - **The lake cavern**: a lake (deep in the middle, a walkable shallow rim, a beach) fed by the plunge pool under the
   falls, and walls 17 tiles high. The waterfall drops from a spur of the plateau (where the river spills) straight
-  into the plunge pool. A notch at the cliff's foot beside it holds the passage mouth.
+  into the plunge pool. A notch at the cliff's foot beside it holds the passage mouth (where the gallery runs close, the rock kept between
+  them can eat the notch's inner end: `notchIn` is then pulled back to the notch's last open tile).
 - **The plateau** (the top of the falls, HP 13-16 tiles up by variant) behind the lake: higher ground behind lower
   never hides it. A river crosses it from a spring in the back wall to the lip; it is shallow and walkable.
 - **The shaft**, to the right of the plateau: a pool at its foot (with a rope of water falling into it out of the
@@ -99,7 +100,9 @@ Planned in screen-aligned axes (a to the right of the screen, b toward the camer
 - **The top of the falls**: one boss (45%), two (35%) or three (20%), each a raid boss (its template and title in
   `DEPTHS_EDGE_BOSSES`) at reduced life with no execute timer, with adds (the last one drawn 2.6x, the others 2x); it climbs up the falls and over the lip,
   rises out of the river, or drops out of the dark. The last one's fall opens the exit portal there, with two rich
-  chests. +1 skill point the first time.
+  chests. +1 skill point the first time. No waiting: the next boss comes a tenth of a second after the last falls,
+  its adds start landing at once, and with nothing up there to hit, a boss still climbing the falls finishes the
+  climb in half a second (`run.top.hurry`).
 - `objective` walks auto-play down the route's waypoints, into the notch, up the ledge's waypoints and to the plateau.
   A level-1 paladin at depth 3 takes a whole cave in 17-20 game minutes.
 - Sight: `map.losRise` is 2.2 tiles here, so the low mounds of a cavern never block line of sight (the default rule,

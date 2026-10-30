@@ -2,6 +2,7 @@
 import { rand, randi, pick, weighted, clamp, chance } from '../core/util.js';
 import { rollAugments, RING_NAMES, AUGMENTS, KIND_NAMES } from './rings.js';
 import { SKILLS } from './skills.js';
+import { CLASS_FOCUS } from './held.js';
 
 // lv: the rarity's power bonus in item levels. Every number on an item (base damage, armor, affix values, ring
 // powers, legendary powers) comes from its power level = item level + lv. Every rarity rolls the same CORE_LINES
@@ -75,7 +76,22 @@ export const WEAPONS = {
 export const OFFHANDS = {
   shield: { names: ['Buckler', 'Kite Shield', 'Tower Shield', 'Aegis', 'Bulwark'], icon: 'shield', armor: 1.0, block: [8, 16] },
   orb: { names: ['Glass Orb', 'Eldritch Orb', 'Sacred Globe', 'Eye of Night', 'Star of Ruin'], icon: 'orb', armor: 0.25, spell: [6, 14] },
+  // the classes' own off-hands (src/data/held.js CLASS_FOCUS); icon: the painted fallback until the held art loads
+  tome: { names: ['Primer', 'Grimoire', 'Tome of Embers', 'Codex Arcanum', 'Book of Ages'], icon: 'orb', armor: 0.25, spell: [6, 14] },
+  skull: { names: ['Bleached Skull', 'Rime Skull', 'Frost Skull', 'Lich Skull', 'Skull of the Old King'], icon: 'orb', armor: 0.4, spell: [5, 12] },
+  idol: { names: ['Carved Idol', 'Spirit Idol', 'Ancestor Idol', 'Thunder Idol', 'Idol of the First Tribe'], icon: 'orb', armor: 0.4, spell: [5, 12] },
+  lantern: { names: ['Tin Lantern', 'Iron Lantern', 'Corpse Lantern', 'Grave Lantern', 'Lantern of the Hollow Moon'], icon: 'orb', armor: 0.3, spell: [6, 14] },
+  jar: { names: ['Specimen Jar', 'Ooze Flask', 'Gel Reliquary', 'Living Jar', 'Heart of the Mire'], icon: 'orb', armor: 0.6, spell: [4, 10] },
+  bomb: { names: ['Powder Bomb', 'Grenade', 'Shrapnel Bomb', "Dragon's Breath", 'Doomsday Charge'], icon: 'orb', armor: 0.2, crit: [3, 7] },
+  drum: { names: ['Tambourine', 'Frame Drum', 'War Drum', 'Siren Bell', 'Drum of Thunders'], icon: 'orb', armor: 0.3, cast: [6, 12] },
+  quiver: { names: ['Arrow', 'Barbed Arrow', "Hunter's Arrow", 'Seeker Arrow', 'Arrow of the Last Light'], icon: 'bow', armor: 0.2, crit: [3, 7] },
+  rang: { names: ['Throwing Stick', 'Small Rang', 'Twin Rang', 'Glaive', 'Moon Rang'], icon: 'boomerang', armor: 0.25, spell: [4, 10] },
 };
+/** A random off-hand base: mostly shields and orbs, often the wearer's own kind. */
+function offhandBase() {
+  const own = CLASS_FOCUS[ringCtx.classId];
+  return chance(0.3) && own ? own : chance(0.45) ? 'shield' : chance(0.4) ? 'orb' : pick(Object.keys(OFFHANDS));
+}
 export const ARMORS = {
   head: { names: ['Cap', 'Helm', 'Great Helm', 'Winged Helm', 'Crown'], icon: 'helm', armor: 0.6 },
   body: { names: ['Leather Armor', 'Chain Mail', 'Breastplate', 'Plate Armor', 'Ancient Armor'], icon: 'armor', armor: 1.2 },
@@ -400,13 +416,15 @@ export function rollItem(ilvl, opts = {}) {
     if (W.crit) item.affixes.push({ s: 'critChance', v: W.crit, implicit: true });
     if (W.cast) item.affixes.push({ s: 'castSpeed', v: W.cast, implicit: true });
   } else if (slot === 'offhand') {
-    item.base = opts.base || pick(Object.keys(OFFHANDS));
+    item.base = opts.base || offhandBase();
     const O = OFFHANDS[item.base];
     item.armor = Math.round(6 * O.armor * Math.pow(1.045, pl - 1) * (0.85 + Math.random() * 0.3));
     item.icon = O.icon;
     item.baseName = O.names[Math.min(4, Math.floor(tier / 2))];
     if (O.block) item.affixes.push({ s: 'block', v: randi(O.block[0], O.block[1]), implicit: true });
     if (O.spell) item.affixes.push({ s: 'dmgPct', v: randi(O.spell[0], O.spell[1]) + Math.floor(ilvl / 10), implicit: true });
+    if (O.crit) item.affixes.push({ s: 'critChance', v: randi(O.crit[0], O.crit[1]), implicit: true });
+    if (O.cast) item.affixes.push({ s: 'castSpeed', v: randi(O.cast[0], O.cast[1]), implicit: true });
   } else if (slot === 'ring') {
     item.base = 'ring'; item.icon = 'ring';
     item.baseName = RING_NAMES[tier];

@@ -1,5 +1,6 @@
 // Game flow: characters, town, dungeon depths, death, victory.
 import { G } from '../state.js';
+import { riftgateSpot } from '../gfx/riftgate.js';
 import { input } from '../core/input.js';
 import { camera } from '../core/view.js';
 import { sfx, playMusic, stopMusic, setAmbience, stopAmbience, footsteps } from '../core/audio.js';
@@ -8,6 +9,7 @@ import { biomeTileSet, loadBiomeArt, mixedTileSet, keepTileSets } from '../core/
 import { loadArtFor, enemyImage, markArtCaches, trimArtCaches } from '../core/enemyart.js';
 import { loadClassArt } from '../core/classart.js';
 import { loadGearArt } from '../core/gearart.js';
+import { loadHeld } from '../gfx/heldart.js';
 import { preloadBarFx } from '../gfx/artfx.js';
 import { SKILLS } from '../data/skills.js';
 import { setClassItems, setRingContext, SEAL_GAP } from '../data/items.js';
@@ -43,8 +45,14 @@ import { loadTower3D, tower3dReady } from '../gfx/tower3d.js';
 import { generateCaverns, CAVE_VARIANTS } from '../world/caverns.js';
 import { createCaveRun, useCaverns } from './caverns.js';
 import { loadCave3D, cave3dReady } from '../gfx/cave3d.js';
+import { generateDunes } from '../world/dunes.js';
+import { createDuneRun, useDunes } from './dunes.js';
+import { loadDunes3D, dunes3dReady } from '../gfx/dunes3d.js';
+import { DUNE_VARIANTS } from '../data/dunes.js';
 import { loadCastlePack, releaseCastlePack } from '../gfx/castle.js';
 import { loadCastle3D, releaseCastle3D, loadBaked, castle3dState, warmBaked } from '../gfx/castle3dart.js';
+import { CASTLE_VARIANTS } from '../data/castles.js';
+import { addCastleStory } from './castlestory.js';
 import { generateSkyship } from '../world/skyship.js';
 import { warmSky } from '../gfx/skyship.js';
 import { createSkyBattle } from './skybattle.js';
@@ -61,7 +69,7 @@ import { applyTrait, rollTrait, ambushTick, madnessTick, unleashMadness, enter }
 import { hit, kill } from './combat.js';
 import { makeRaidBoss } from './raid.js';
 import { dropChest, GroundItem } from './loot.js';
-import { renderWorld, drawMinimap, preloadTownSheets, releaseTownSheets } from './render.js';
+import { renderWorld, drawMinimap, preloadTownSheets, releaseTownSheets, propReach } from './render.js';
 import { controls } from './controls.js';
 import { Auto } from './autoplay.js';
 import { writeSave, newCharData, migrate } from './save.js';
@@ -135,7 +143,7 @@ let automapCanvas = null;
 
 // Build the level's monster sprites (palette swap, hit flash, corpse shade) behind the loading screen: each swap reads
 // pixels back from the GPU, and doing that on a monster's first hit or death stalled the frame (worst on phones).
-// Yields every ~40 ms so the loading screen keeps painting.
+// Yields every ~40 ms so the loading screen keeps painting (not while hidden: a hidden page's chained timers can wait a minute).
 async function warmLevelArt(w) {
   const seen = new Set();
   if (w.map.hgt) terrainOf(w.map); // a height map's draw order and occluders (the Castle's 100k columns): behind the loading screen, not the first frame
@@ -149,7 +157,17 @@ async function warmLevelArt(w) {
     if (seen.has(k)) continue;
     seen.add(k);
     if (enemyImage(c.art, c.swap)) { enemyImage(c.art, c.swap, 'flash'); enemyImage(c.art, c.swap, 'dark'); }
-    if (performance.now() - t > 40) { await new Promise((r) => setTimeout(r, 0)); t = performance.now(); }
+    if (performance.now() - t > 40 && !document.hidden) { await new Promise((r) => setTimeout(r, 0)); t = performance.now(); }
+  }
+  // and the looks the level has chosen for what arrives later (waves, ambushes, summons), so their first frame
+  // doesn't build them
+  for (const l of (w.looks && w.looks.all ? w.looks.all() : [])) {
+    if (!l || !l.art || G.world !== w) continue;
+    const k = l.art + '|' + swapKey(l.swap);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (enemyImage(l.art, l.swap)) { enemyImage(l.art, l.swap, 'flash'); enemyImage(l.art, l.swap, 'dark'); }
+    if (performance.now() - t > 40 && !document.hidden) { await new Promise((r) => setTimeout(r, 0)); t = performance.now(); }
   }
   // what earlier levels built and this one never asked for goes (a long run carried every level's sprites)
   if (G.world === w) { trimArtCaches(); clearRims(); }
@@ -861,13 +879,13 @@ export const game = {
     this.startChar(c, true);
   },
   async loadChar(c) {
-    await this.loadClassPack(c.classId);
+    await this.loadClassPack(c.classId, c);
     this.startChar(migrate(c), false);
   },
-  async loadClassPack(classId) {
+  async loadClassPack(classId, char = null) {
     const el = document.getElementById('loading');
     const slow = setTimeout(() => el && el.classList.remove('hidden'), 250);
-    const [meta] = await Promise.all([loadClassArt(classId), loadGearArt(classId)]);
+    const [meta] = await Promise.all([loadClassArt(classId), loadGearArt(classId), loadHeld(classId, char)]);
     clearTimeout(slow);
     if (el) el.classList.add('hidden');
     setClassItems(classId, meta);
@@ -1016,9 +1034,12 @@ export const game = {
     useTerrain(world.map); // a height map lifts the ground plane (gfx/terrain.js); flat maps clear it
     useTower(world); // the Serpentine Tower lays the grid onto its spiral stair (game/tower.js)
     useCaverns(world); // the Depth's Edge Caverns lift everything onto their smooth height field (game/caverns.js)
+    useDunes(world); // so do the Sea of Sand's dunes and pyramids (game/dunes.js)
     camera.computeZoom();
     camera.follow(p.x, p.y, 0, true);
     world.map.reveal(p.x, p.y, 12);
+    world.map.stepMask(); // the steps every path search reads (map.js), worked out here rather than mid fight
+    propReach(world); // and the props' culling box (render.js), once the ground's heights are set
     preloadBarFx(p, SKILLS);
     if (G.room && net.connected) {
       net.sendLootRequest(world.kind, world.depth || 0);
@@ -1073,6 +1094,9 @@ export const game = {
     // THE ETERNAL BREACH's purple portal (game.confirmBreach, docs/ETERNAL_BREACH.md)
     if (t.breach) world.portals.push({ x: t.breach.x, y: t.breach.y, active: true, breach: true, color: '#a040ff', reach: 2.2, label: 'THE ETERNAL BREACH', use: () => this.confirmBreach() });
     // the Abyssal Rift gate (game.confirmRift): lit once the Endgame is open
+    // the Riftgate to VELSCOUR DEFENSE (defense/: its own page and save), across the square from the dungeon portal
+    const rg = t.riftgate || (t.riftgate = riftgateSpot(t));
+    if (rg) world.portals.push({ x: rg.x, y: rg.y, active: true, color: '#3a6cff', reach: 1.7, riftgate: true, label: 'The Riftgate: VELSCOUR DEFENSE', use: () => this.confirmRiftgate() });
     if (t.rift) world.portals.push({ x: t.rift.x, y: t.rift.y, rift: true, color: '#20e0ff', reach: 1.7, get active() { return endgameUnlocked(); }, set active(v) {}, get label() { return endgameUnlocked() ? `Abyssal Rift — Tier ${riftOpen()}` : 'Abyssal Rift (sealed)'; }, use: () => this.confirmRift() });
     // the hero steps out of the portal, a little way down its road toward the square
     const P = t.portal, C = t.center, l = Math.hypot(C.x - P.x, C.y - P.y) || 1;
@@ -1098,6 +1122,14 @@ export const game = {
     townHappening(world); // a festival, a blessing, a gift (game/happenings.js)
     p.hp = p.maxHp; p.mana = p.maxMana;
     this.autosave();
+  },
+
+  confirmRiftgate() {
+    UI.dialog({
+      title: 'The Riftgate',
+      html: `<p>A blue-black wound in the air, far older and stranger than the dungeon portal. Beyond it Velscour's horde marches on the Bastion, and sixteen heroes wait for a Commander.</p><p class="dim">VELSCOUR DEFENSE is a separate game with its own cards and save; your hero here is not touched. A way back waits on the other side.</p>`,
+      buttons: [{ label: 'Not yet' }, { label: 'Step through', cls: 'red', fn: () => { this.autosave(); location.href = 'defense/index.html'; } }],
+    });
   },
 
   getPlayersAwayFromPortal(portal) {
@@ -1224,6 +1256,10 @@ export const game = {
           } else if (['caverns', 'caves', 'cave', 'depths edge', "depth's edge"].includes(message.trim().toLowerCase())) {
             close();
             this.teleportToBiome(BIOME_BY_ID.depths_edge);
+          } else if (['pyramid', 'pyramids', 'dunes', 'tomb'].includes(message.trim().toLowerCase())) {
+            close();
+            G.sandVariant = 1 + Math.floor(Math.random() * DUNE_VARIANTS.length);   // one of the dune variants, not the flat maze
+            this.teleportToBiome(BIOME_BY_ID.sea_of_sand).finally(() => { G.sandVariant = undefined; });
           }
         } },
       ],
@@ -1303,14 +1339,37 @@ export const game = {
 
   // the art a level of this biome needs before it can be generated (the portal and Velscour's level select share it)
   loadLevelArt(biome, mix = null) {
-    if (biome.id === 'sea_of_sand') return loadSeaOfSandPack();
-    if (biome.id === 'castle') return Promise.all([loadCastlePack(), loadCastle3D(), loadDarkForestTrees()]);
+    if (biome.id === 'sea_of_sand') { // the flat cliff maze (0) or one of the ten dune variants with their pyramids (src/data/dunes.js), never the one seen last
+      if (G.room) {
+        const s = G.room.dungeonSeed || G.room.seed || 1;
+        G.sandNext = Math.abs(s) % (DUNE_VARIANTS.length + 1);
+      } else {
+        const c = G.char, kept = c?.seaOfSandRuns?.[c.depth], n = DUNE_VARIANTS.length + 1, last = c?.lastSand ?? -1;
+        const k = Math.floor(Math.random() * (n - (last >= 0 ? 1 : 0)));
+        G.sandNext = G.sandVariant ?? (kept ? kept.dunes || 0 : last >= 0 && k >= last ? k + 1 : k);
+      }
+      if (G.sandNext > 0) return loadDunes3D().catch((e) => { console.warn(e); G.sandNext = 0; return loadSeaOfSandPack(); });
+      return loadSeaOfSandPack();
+    }
+    if (biome.id === 'castle') { // one of the castles (src/data/castles.js), never the one seen last; the first if its bake won't load
+      if (G.room) {
+        const s = G.room.dungeonSeed || G.room.seed || 1;
+        G.castleNext = Math.abs(s) % CASTLE_VARIANTS.length;
+      } else {
+        const last = CASTLE_VARIANTS.findIndex((v) => v.id === G.char?.lastCastle), k = Math.floor(Math.random() * (CASTLE_VARIANTS.length - (last >= 0 ? 1 : 0)));
+        G.castleNext = G.castleVariant ?? (last >= 0 && k >= last ? k + 1 : k);
+      }
+      return Promise.all([loadCastlePack(), loadCastle3D(G.castleNext).catch((e) => { console.warn(e); G.castleNext = 0; return loadCastle3D(0); }), loadDarkForestTrees()]);
+    }
     if (biome.id === 'dark_forest') return Promise.all([loadBiomeArt(biome), loadDarkForestTrees()]);
     if (biome.challenge) return loadBiomeArt(biome); // the Breach's two packs (pack, wallPack, moreFloors/morePacks)
     if (biome.id === 'mountainside') return Promise.all([loadBiomeArt(BIOME_BY_ID.dark_forest), loadDarkForestTrees()]); // its floors, props and pines
     if (biome.id === 'skyship') return Promise.all([loadBaked('assets/tiles/skyship/'), preloadTownSheets(TOWNSFOLK_KNIGHTS)]); // the baked ironclad, boats and galleon; the sky-knights
     if (biome.tower) return loadTower3D(); // three.js and the tower's textures
-    if (biome.cave) { G.caveNext = G.caveVariant ?? Math.floor(Math.random() * CAVE_VARIANTS.length); return loadCave3D(G.caveNext); } // three.js and this cave's textures
+    if (biome.cave) {
+      G.caveNext = G.room ? (Math.abs(G.room.dungeonSeed || G.room.seed || 1) % CAVE_VARIANTS.length) : (G.caveVariant ?? Math.floor(Math.random() * CAVE_VARIANTS.length));
+      return loadCave3D(G.caveNext);
+    } // three.js and this cave's textures
     if (biome.id === 'throne') return Promise.all([loadBiomeArt(biome), loadVelscourThrone()]); // his recoloured throne
     if (!biome.overworld) return Promise.all([loadBiomeArt(biome), mix && loadBiomeArt(mix)]);
     return Promise.resolve();
@@ -1382,11 +1441,15 @@ export const game = {
     const sky = biome.id === 'skyship';
     const towerVar = G.room ? (seed % 3) : G.towerVariant;
     const caveVar = G.room ? (seed % CAVE_VARIANTS.length) : (G.caveVariant ?? G.caveNext);
+    const sandVar = G.room ? (Math.abs(seed) % (DUNE_VARIANTS.length + 1)) : (G.sandVariant ?? G.sandNext);
+    const castleVar = G.room ? (Math.abs(seed) % CASTLE_VARIANTS.length) : (G.castleVariant ?? G.castleNext);
     const gen = forest ? generateDarkForest(depth, biome, tileset, seed) : biome.id === 'mountainside' ? generateMountain(depth, biome, seed)
       : sky ? generateSkyship(depth, biome, seed, castle3dState())
       : biome.tower ? generateTower(depth, biome, seed, towerVar)
       : biome.cave ? generateCaverns(depth, biome, seed, caveVar)
-      : biome.overworld ? generateOverworld(depth, biome, seed) : generateDungeon(depth, biome, tileset, seed);
+      : biome.id === 'sea_of_sand' && sandVar > 0 && dunes3dReady() ? generateDunes(depth, biome, seed, sandVar - 1)
+      : biome.overworld ? generateOverworld(depth, biome, seed, biome.id === 'castle' ? castleVar : null) : generateDungeon(depth, biome, tileset, seed);
+    if (biome.id === 'sea_of_sand') { c.lastSand = gen.dunes ? 1 + DUNE_VARIANTS.indexOf(gen.variant) : 0; if (gen.dunes) c.seaOfSandRuns[depth] = { seed, dunes: c.lastSand }; }
     const world = new World('dungeon', { map: gen.map, tileset, biome, depth, props: gen.props, torches: gen.torches, wallHangings: gen.wallHangings, looks: gen.looks, townTiles: gen.townTiles || null, buildings: gen.buildings || [] });
     world._generatingDungeon = true;
     if (gen.layoutId) { world.layoutId = gen.layoutId; world.layoutName = gen.layoutName; }
@@ -1528,7 +1591,17 @@ export const game = {
         sfx('gate'); UI.refresh(); this.autosave();
       });
       c.lastSkyVariant = world.sky.v.id; delete c.skyVariant;
-    } else if (biome.id === 'sea_of_sand') world.overworldScenario = createSeaOfSandScenario(world, gen, biome, () => {
+    } else if (gen.dunes) createDuneRun(world, gen, biome, () => {
+      exit.active = true; exit.color = '#40a0ff'; exit.label = 'Exit — continue';
+      const first = !c.cleared[depth];
+      c.cleared[depth] = true;
+      c.deepest = Math.max(c.deepest || 0, depth);
+      this.brokeThrough(depth);
+      if (first) { c.skillPoints++; UI.log(`Bonus skill point for winning ${gen.variant.pyramid.name}!`, '#ffd860'); }
+      addEffect(new Ring(exit.x, exit.y, 0.2, 3, 1, '#40a0ff', 5));
+      sfx('gate'); UI.refresh(); this.autosave();
+    });
+    else if (biome.id === 'sea_of_sand') world.overworldScenario = createSeaOfSandScenario(world, gen, biome, () => {
       exit.active = true; exit.color = '#40a0ff'; exit.label = 'Exit — continue';
       const first = !c.cleared[depth];
       c.cleared[depth] = true;
@@ -1590,7 +1663,8 @@ export const game = {
     });
     this.setWorld(world, gen.start, old);
     announceHappenings(world);
-    if (biome.overworld && !sky && !biome.cave) {
+    if (biome.id === 'castle') { addCastleStory(world, gen); world.ambientFx = gen.variant?.look?.ambient || null; c.lastCastle = gen.variant?.id; }
+    if (biome.overworld && !sky && !biome.cave && !gen.dunes) {
       // townsfolk on the road: reachable landmarks to walk between (game/wanderers.js)
       const spots = [], map = gen.map;
       for (let i = 0; i < 60 && spots.length < 9; i++) {
@@ -1598,8 +1672,9 @@ export const game = {
         if (map.walkable(x, y) && map.findPath(gen.start[0], gen.start[1], x, y, 9000)) spots.push([x, y]);
       }
       if (spots.length >= 2 && !biome.beta && !biome.tower) addWanderers(world, spots, biome.id === 'castle' ? 6 : forest ? 4 : 5);
-      world.raining = biome.id !== 'sea_of_sand' && !biome.tower && Math.random() < 0.3; // a wet day in the Wilds or on the walls
-      if (!biome.tower && Math.random() < 0.25) { world.darkK = biome.id === 'sea_of_sand' ? 0.45 : 0.6; world.night = true; } // nightfall: torches, spells and portals glow
+      const look = gen.variant?.look || {};   // a castle variant has its own odds of rain and of night
+      world.raining = biome.id !== 'sea_of_sand' && !biome.tower && Math.random() < (look.rain ?? 0.3); // a wet day in the Wilds or on the walls
+      if (!biome.tower && Math.random() < (look.night ?? 0.25)) { world.darkK = biome.id === 'sea_of_sand' ? 0.45 : 0.6; world.night = true; } // nightfall: torches, spells and portals glow
     }
     if (!biome.beta) recordBiomeVisit(c, biome, depth); // a beta biome leaves the overworld guarantee alone
     c.lastBiome = biome.id;
@@ -1608,13 +1683,17 @@ export const game = {
     const kin = tileset.mixed && BIOME_BY_ID[tileset.mixed];
     if (!sky) UI.centerMsg((gen.variant ? gen.variant.name : biome.name).toUpperCase(), `Depth ${depth}${kin ? ` · bleeding into the ${kin.name}` : ''}`, 2.4);
     if (world.night) UI.log(world.raining ? 'Night has fallen, and the rain with it.' : 'Night has fallen over the land.', '#a0b0d0');
-    if (biome.id === 'sea_of_sand') UI.log(`Secure ${gen.scenarioCount} marked scenario area${gen.scenarioCount===1?'':'s'} to open the exit. Rewards improve with each clear.`, '#ffe2a0');
+    if (gen.dunes) UI.log(`${gen.variant.name}: ${gen.variant.intro} ${gen.dunes.camps.length} waystones stand between you and its door.`, '#ffe2a0');
+    else if (biome.id === 'sea_of_sand') UI.log(`Secure ${gen.scenarioCount} marked scenario area${gen.scenarioCount===1?'':'s'} to open the exit. Rewards improve with each clear.`, '#ffe2a0');
     else if (biome.id === 'mountainside') UI.log('The trail switchbacks up the cliffs to the summit. A ledge a hop high can be climbed; taller cliffs only jumped down.', '#ffe2a0');
     else if (sky) UI.log(`${world.sky.v.name}: ${world.sky.v.story ? world.sky.v.blurb + ' Hold the deck.' : 'hold the deck against the Air Pirates\' boarding waves.'} ${world.sky.v.hazardText || ''}`, '#ffe2a0');
     else if (biome.tower) UI.log(`${gen.variant.name}: ${gen.variant.epithet}. Climb the stair; things wait on the floors above, and some will not wait.`, '#ffe2a0');
     else if (biome.cave) UI.log(`${gen.variant.name}: ${gen.variant.epithet}. The passages lead down to a lake under a great waterfall; the way on is a long climb to its top.`, '#ffe2a0');
     else if (forest) UI.log(`The Dark Forest closes in. The Heart lies deep in the north-east labyrinth; ${gen.glades.length} glades hold trials and treasure along the way.`, '#c8f0a0');
-    else if (biome.overworld) UI.log('Activate the glowing shrine and complete its objective to open the exit.', '#ffe2a0');
+    else if (biome.overworld) {
+      if (biome.id === 'castle' && gen.variant?.story?.intro) UI.log(gen.variant.story.intro, '#e8d0a8');
+      UI.log('Activate the glowing shrine and complete its objective to open the exit.', '#ffe2a0');
+    }
     else if (!c.tips.dungeon) { c.tips.dungeon = true; setTimeout(() => UI.log('Find the exit portal. It stays sealed until the depth\'s guardian is slain. The blue portal returns you to town.', '#ffe2a0'), 1500); }
     this.autosave();
   },

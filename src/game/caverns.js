@@ -324,13 +324,17 @@ export function createCaveRun(world, gen, biome, onSuccess) {
     if (!T || p.dead) return;
     T.t += dt;
     T.mobs = T.mobs.filter((m) => !m.dead && world.creatures.includes(m));
-    if (T.step === 'intro') { if (T.t > 2.8) next('boss'); return; }
+    // nothing up here to fight: a boss still climbing the falls hurries (climbFalls)
+    T.calm = world.creatures.some((m) => m.team === 'enemy' && !m.dead && m.targetable !== false && Math.hypot(m.x - cv.plateau.x, m.y - cv.plateau.y) < cv.plateau.r + 3) ? 0 : (T.calm || 0) + dt;
+    T.hurry = T.calm > 0.05;
+    // short beats only: the hero never stands about at the top waiting for the next boss
+    if (T.step === 'intro') { if (T.t > 0.1) next('boss'); return; }
     if (T.step === 'boss') {
       if (!T.boss) { T.boss = spawnBoss(T.i); T.idle = false; }
-      if (T.boss.dead && T.t > 2) { T.i++; T.boss = null; next(T.i < T.n ? 'rest' : 'won'); if (T.i >= T.n) win(); }
+      if (T.boss.dead && T.t > 0.5) { T.i++; T.boss = null; next(T.i < T.n ? 'rest' : 'won'); if (T.i >= T.n) win(); }
       return;
     }
-    if (T.step === 'rest') { T.idle = true; if (T.t > 4) next('boss'); }
+    if (T.step === 'rest') { T.idle = true; if (T.t > 0.1) next('boss'); }
   }
   function next(step) { const T = run.top; T.step = step; T.t = 0; T.idle = step === 'rest' || step === 'intro' || step === 'won'; area(); }
   function spawnBoss(i) {
@@ -365,7 +369,7 @@ export function createCaveRun(world, gen, biome, onSuccess) {
       if (x == null) continue;
       const a = makeMonster(world, arch, biome, lvl + (k === 0 ? 1 : 0), k === 0 && i > 0 ? 'champion' : 'normal', x, y, 0, world.looks.pick(arch));
       world.add(a); a.hunter = true; a.awake = true; T.mobs.push(a);
-      a.targetable = false; a.alpha = 0; let d = 0.8 + k * rand(0.2, 0.4); a.entering = (t) => { if ((d -= t) <= 0) enter(a, chance(0.5) ? 'drop' : 'burrow'); };
+      a.targetable = false; a.alpha = 0; let d = k * rand(0.2, 0.4); a.entering = (t) => { if ((d -= t) <= 0) enter(a, chance(0.5) ? 'drop' : 'burrow'); };
     }
     return m;
   }
@@ -373,10 +377,11 @@ export function createCaveRun(world, gen, biome, onSuccess) {
   function climbFalls(m) {
     const [lx, ly] = cv.lip, [fx, fy] = cv.plunge, land = map.randomNear(lx - 1.6, ly - 1.6, 1.2), hT = cv.HP, hB = cv.WL;
     m.x = fx; m.y = fy; m.targetable = false; m.alpha = 1;
-    let t = 0;
+    let t = 0, fast = 0;
     const dur = 2.2;
     m.entering = (dt) => {
-      t += dt; m.animT += dt; m.moving = true;
+      if (!fast && run.top?.hurry) fast = Math.max(1, (dur - t) / 0.5);   // the rest of the climb in half a second
+      t += dt * (fast || 1); m.animT += dt; m.moving = true;
       const k = Math.min(1, t / dur), up = Math.min(1, k / 0.8), hop = Math.max(0, (k - 0.8) / 0.2);
       m.x = fx + (lx - fx) * up + (land[0] - lx) * hop; m.y = fy + (ly - fy) * up + (land[1] - ly) * hop;
       m.z = (hB + (hT + 0.6 - hB) * (1 - (1 - up) * (1 - up)) + Math.sin(Math.PI * hop) * 1.2 - groundT(m.x, m.y)) * VZ;

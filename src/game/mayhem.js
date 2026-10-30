@@ -77,7 +77,7 @@ export function enter(m, kind, from) {
   const finish = () => { m.entering = null; m.targetable = true; m.alpha = undefined; m.z = 0; m.x = tx; m.y = ty; m.cd = rand(0.2, 0.6); };
   if (kind === 'drop') {
     // falls from above the top of the screen, a shadow growing under it, and lands with a shockwave
-    const dur = rand(0.9, 1.3);
+    const dur = rand(0.75, 1);
     addEffect(new Telegraph({ kind: 'circle', x: tx, y: ty, r: 1.3 * big, dur }), 'ground');
     m.z = 520;
     m.entering = (dt) => {
@@ -108,7 +108,7 @@ export function enter(m, kind, from) {
     sfx('portal', 0.35);
   } else if (kind === 'burrow') {
     // the ground heaves, then it claws up out of the dirt
-    const dur = 1.2;
+    const dur = 1;
     m.alpha = 0; m.z = -60;
     addEffect(new Telegraph({ kind: 'circle', x: tx, y: ty, r: 1.1 * big, dur: 0.6, color: '#c08040' }), 'ground');
     m.entering = (dt) => {

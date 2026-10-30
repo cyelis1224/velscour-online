@@ -3,31 +3,36 @@
 //    gate tunnels, the explorable keep and the halls (a height map: src/world/map.js, src/gfx/terrain.js);
 //  - tools/castle3d.html builds the same parts in three.js and bakes them from the game camera into per-tile pieces
 //    (assets/tiles/castle3d/), plus the drawbridge and door frames. The game never runs three.js.
-// Pure data (no canvas or DOM), so it runs under Node. Heights are terrain levels (HS = 4 world px); x, y are tiles.
+// Every castle variant (src/data/castles.js) is one layout: its curtain rings, towers, gates, stairs and where the keep,
+// the cathedral and the great hall stand. Pure data (no canvas or DOM), so it runs under Node. Heights are terrain
+// levels (HS = 4 world px); x, y are tiles.
+import { castleVariant } from '../data/castles.js';
+
 export const C3 = Object.freeze({
   W: 336, H: 304,
-  OW: 26, IW: 34,          // wall-walk levels: outer and inner curtain (the inner wall commands the outer)
+  OW: 26, IW: 34,          // the first castle's wall-walk levels: outer and inner curtain (the inner commands the outer)
   GH: 42,                  // outer gatehouse
   KF: 2, KW: 34, KT: 50,   // keep: floor, walls, great tower
 });
-const { W, H, OW, IW, GH, KF, KW, KT } = C3;
-// curtain rings and gates in wall cells (a cell is 2 x 2 tiles), as castleworld.js
-const OUT = { x0: 48, y0: 34, x1: 120, y1: 100 }, INN = { x0: 62, y0: 48, x1: 106, y1: 86 };
-const GATES = { outer: [84, 100], postern: [104, 34], inner: [96, 86], innerNorth: [72, 48] };
+const { W, H, KF, KW, KT } = C3;
 
 export const K = Object.freeze({ none: 0, wall: 1, walk: 2, parapet: 3, stair: 4, tower: 5, gate: 6, keep: 7, floor: 8, door: 9, pier: 10, bridge: 11 });
 /** Buildings: their roofs lift off while the hero is inside. */
 export const BLD = Object.freeze({ keep: 1, cathedral: 2, great_hall: 3 });
+/** A ring of wall cells (a cell is 2 x 2 tiles) as its tile bounds. */
+export const ringTiles = (R) => ({ X0: R.x0 * 2, Y0: R.y0 * 2, X1: R.x1 * 2 + 1, Y1: R.y1 * 2 + 1 });
 
-let cache = null;
+const cache = new Map();
 /**
- * The castle: per tile `hgt` (level), `kind`, `solid` (blocked), `walk` (a wall-walk tile), `cover` (masonry over a
- * walkway: tunnels, doorways), `bld` (inside a building), `struct` (drawn from the bake); and `parts` (the bake's
- * geometry), `doors`, `drawbridge`, `stairs`, `rooms`, `posts` (wall-walk muster points).
+ * Castle variant `v` (id, record or nothing for the first): per tile `hgt` (level), `kind`, `solid` (blocked), `walk`
+ * (a wall-walk tile), `cover` (masonry over a walkway: tunnels, doorways), `bld` (inside a building), `struct` (drawn
+ * from the bake); and `parts` (the bake's geometry), `doors`, `drawbridge`, `stairs`, `rooms`, `posts` (wall-walk
+ * muster points), `rings` (tile bounds and level of each curtain, outermost first), `gates` (cells per ring).
  */
-export function castle3d() {
-  if (cache) return cache;
-  const N = W * H, I = (x, y) => y * W + x;
+export function castle3d(v) {
+  v = castleVariant(v);
+  if (cache.has(v.id)) return cache.get(v.id);
+  const S = v.layout, N = W * H, I = (x, y) => y * W + x;
   const hgt = new Int16Array(N), kind = new Uint8Array(N), solid = new Uint8Array(N), walk = new Uint8Array(N);
   const cover = new Uint8Array(N), bld = new Uint8Array(N), struct = new Uint8Array(N);
   const parts = [], doors = [], stairs = [], posts = [], rooms = [];
@@ -45,12 +50,17 @@ export function castle3d() {
   // courses, buttress pilasters, framed lancet windows (see tools/castle3d.html)
   const face = (axis, a0, a1, c, dir, z0, z1, o) => parts.push({ t: 'face', axis, a0, a1, c, dir, z0, z1, ...o });
 
+  // the gates of each ring (cells): the gatehouse on the first ring's south side, then the twin-towered gates
+  const rings = S.rings, gates = rings.map(() => []);
+  gates[0].push([S.gate, rings[0].y1]);
+  for (const [cx, cy, r] of S.twins) gates[r].push([cx, cy]);
+
   // ------------------------------------------------------------- curtains
   // A ring of wall cells thickened by one tile on the ward side: the outermost row is the parapet (blocked; its
   // breastwork and merlons stand on it), the two rows inside it are the wall-walk. Gates leave a tunnel through.
   const sideOf = (R, [gx, gy]) => gy === R.y0 ? 'N' : gy === R.y1 ? 'S' : gx === R.x0 ? 'W' : 'E';
   const curtain = (R, lv, gates, tag) => {
-    const X0 = R.x0 * 2, Y0 = R.y0 * 2, X1 = R.x1 * 2 + 1, Y1 = R.y1 * 2 + 1;
+    const { X0, Y0, X1, Y1 } = ringTiles(R);
     const gateAt = (x, y) => gates.some((g) => {
       const s = sideOf(R, g), u = s === 'N' || s === 'S';
       return u ? x >= g[0] * 2 && x <= g[0] * 2 + 1 && (s === 'N' ? y - Y0 : Y1 - y) <= 2 : y >= g[1] * 2 && y <= g[1] * 2 + 1 && (s === 'W' ? x - X0 : X1 - x) <= 2;
@@ -85,13 +95,13 @@ export function castle3d() {
     }
     return { X0, Y0, X1, Y1, tag };
   };
-  const outer = curtain(OUT, OW, [GATES.outer, GATES.postern], 'outer');
-  const inner = curtain(INN, IW, [GATES.inner, GATES.innerNorth], 'inner');
+  const tags = rings.map((_, k) => k === 0 ? 'outer' : k === rings.length - 1 ? 'inner' : 'middle');
+  const tiles = rings.map((R, k) => ({ ...curtain(R, R.lv, gates[k], tags[k]), lv: R.lv }));
 
   // ------------------------------------------------------------- towers
   // Round drums on the corners: a platform at the walk's level inside a crenellated rim (blocked), open on the side the
-  // two walls come in from (gap: degrees, tile x toward y), so the walk runs straight through. The inner curtain's
-  // drums are roofed and taller: their upper walls are open on that side too, the walk passing under the roof.
+  // two walls come in from (gap: degrees, tile x toward y), so the walk runs straight through. Roofed drums are taller:
+  // their upper walls are open on that side too, the walk passing under the roof.
   const inGap = (a, [g0, g1]) => { const t = ((a - g0) % 360 + 360) % 360; return t <= ((g1 - g0) % 360 + 360) % 360; };
   const drum = (cx, cy, r, lv, roofed, gap) => {
     rect(Math.floor(cx - r), Math.floor(cy - r), Math.ceil(cx + r), Math.ceil(cy + r), (x, y, i) => {
@@ -108,11 +118,13 @@ export function castle3d() {
       parts.push({ t: 'cone', x: cx, y: cy, r: r + 0.5, z: lv + 14, h: 40, m: 'slate', cover: true });
     } else parts.push({ t: 'ringParapet', x: cx, y: cy, r, z: lv, m: 'ashlar', gap });
   };
-  // the gap faces the two walls: NW -> +x and +y, NE -> -x and +y, SW -> +x and -y, SE -> -x and -y
+  // the gap faces the two walls: NW -> +x and +y, NE -> -x and +y, SW -> +x and -y, SE -> -x and -y; a half-round
+  // interval tower's gap is its ward half (the walk runs across it)
   const GAP = { NW: [-30, 120], NE: [60, 210], SW: [-120, 30], SE: [150, 300] };
+  const HALF = { S: [170, 370], N: [-10, 190], W: [-100, 100], E: [80, 280] };
   // Square towers stand two tiles out from the wall, crenellated on their three outer sides; the walk runs through.
   const squareTower = (R, side, c, lv) => {
-    const X0 = R.x0 * 2, Y0 = R.y0 * 2, X1 = R.x1 * 2 + 1, Y1 = R.y1 * 2 + 1;
+    const { X0, Y0, X1, Y1 } = ringTiles(R);
     const u = side === 'N' || side === 'S';
     const [x0, x1, y0, y1] = u ? [c * 2 - 1, c * 2 + 2, side === 'N' ? Y0 - 2 : Y1 - 2, side === 'N' ? Y0 + 2 : Y1 + 2]
       : [side === 'W' ? X0 - 2 : X1 - 2, side === 'W' ? X0 + 2 : X1 + 2, c * 2 - 1, c * 2 + 2];
@@ -126,42 +138,64 @@ export function castle3d() {
     parts.push({ t: 'towerParapet', x0, y0, x1: x1 + 1, y1: y1 + 1, z: lv + 2, open: { N: 'S', S: 'N', W: 'E', E: 'W' }[side], m: 'ashlar' });
     box(x0 - 0.3, y0 - 0.3, x1 + 1.3, y1 + 1.3, 0, 3, 'ashlar');
   };
-  for (const [cx, cy, c] of [[98, 70, 'NW'], [240, 70, 'NE'], [98, 200, 'SW'], [240, 200, 'SE']]) drum(cx, cy, 3.4, OW, false, GAP[c]);
-  for (const c of [60, 78, 92]) squareTower(OUT, 'N', c, OW);
-  for (const c of [52, 67, 82]) { squareTower(OUT, 'W', c, OW); squareTower(OUT, 'E', c, OW); }
-  for (const c of [64, 104]) squareTower(OUT, 'S', c, OW);
-  for (const [cx, cy, c] of [[126, 98, 'NW'], [212, 98, 'NE'], [126, 172, 'SW'], [212, 172, 'SE']]) drum(cx, cy, 3.2, IW, true, GAP[c]);
-  squareTower(INN, 'W', 67, IW); squareTower(INN, 'E', 67, IW); squareTower(INN, 'N', 84, IW); squareTower(INN, 'S', 80, IW);
+  // A half-round tower on a wall (Conwy's): its outer half stands out from the wall under a crenellated rim, its ward
+  // half is open to the walk, which widens across it.
+  const halfDrum = (R, side, c, lv, r = 2.6) => {
+    const { X0, Y0, X1, Y1 } = ringTiles(R);
+    const [cx, cy] = { N: [c * 2 + 1, Y0 + 0.7], S: [c * 2 + 1, Y1 + 0.3], W: [X0 + 0.7, c * 2 + 1], E: [X1 + 0.3, c * 2 + 1] }[side];
+    drum(cx, cy, r, lv, false, HALF[side]);
+  };
+  // A square tower on a corner: it stands two tiles out from both walls, crenellated on its two outer sides.
+  const cornerSquare = (R, corner, lv) => {
+    const { X0, Y0, X1, Y1 } = ringTiles(R), n = corner[0] === 'N', w = corner[1] === 'W';
+    const [x0, x1] = w ? [X0 - 2, X0 + 3] : [X1 - 3, X1 + 2], [y0, y1] = n ? [Y0 - 2, Y0 + 3] : [Y1 - 3, Y1 + 2];
+    rect(x0, y0, x1, y1, (x, y) => {
+      if ((w ? x <= X0 : x >= X1) || (n ? y <= Y0 : y >= Y1)) mass(x, y, x, y, lv + 2, K.tower); else deck(x, y, x, y, lv, K.tower);
+    });
+    box(x0, y0, x1 + 1, y1 + 1, 0, lv, 'ashlar', { top: 'walk' });
+    const [ya, yb] = n ? [y0, Y0 + 1] : [Y1, y1 + 1], [xa, xb] = w ? [x0, X0 + 1] : [X1, x1 + 1];
+    box(x0, ya, x1 + 1, yb, lv, lv + 2, 'ashlar', { top: 'walk' });
+    box(xa, n ? yb : y0, xb, n ? y1 + 1 : ya, lv, lv + 2, 'ashlar', { top: 'walk' });
+    parts.push({ t: 'towerParapet', x0, y0, x1: x1 + 1, y1: y1 + 1, z: lv + 2, open: (n ? 'S' : 'N') + (w ? 'E' : 'W'), m: 'ashlar' });
+    box(x0 - 0.3, y0 - 0.3, x1 + 1.3, y1 + 1.3, 0, 3, 'ashlar');
+  };
+  rings.forEach((R, k) => {
+    const { X0, Y0, X1, Y1 } = tiles[k];
+    const corners = [[X0 + 2, Y0 + 2, 'NW'], [X1 - 1, Y0 + 2, 'NE'], [X0 + 2, Y1 - 1, 'SW'], [X1 - 1, Y1 - 1, 'SE']];
+    if (R.corner === 'square') for (const [, , c] of corners) cornerSquare(R, c, R.lv);
+    else for (const [cx, cy, c] of corners) drum(cx, cy, R.r ?? 3.4, R.lv, !!R.roofed, GAP[c]);
+    for (const [side, c, style] of R.towers) (style === 'half' ? halfDrum : squareTower)(R, side, c, R.lv);
+  });
 
   // ------------------------------------------------------------- the gatehouse, the moat crossing, the twin gates
-  const gx = GATES.outer[0] * 2;    // tunnel tiles gx, gx + 1
-  mass(gx - 6, 196, gx + 7, 201, GH, K.gate);
-  tunnel(gx, 196, gx + 1, 203, 0);
-  box(gx - 6, 196, gx, 202, 0, GH, 'ashlar', { top: 'walk' });
-  box(gx + 2, 196, gx + 8, 202, 0, GH, 'ashlar', { top: 'walk' });
-  parts.push({ t: 'arch', axis: 'y', x0: gx, x1: gx + 2, y0: 196, y1: 202, z0: 0, z1: GH, spring: 11, apex: 17, m: 'ashlar', cover: true });
-  parts.push({ t: 'towerParapet', x0: gx - 6, y0: 196, x1: gx + 8, y1: 202, z: GH, open: null, m: 'ashlar' });
+  const O = tiles[0], GH = S.gh ?? C3.GH, gx = S.gate * 2, gy = O.Y1 - 5;    // tunnel tiles gx, gx + 1; front at O.Y1
+  mass(gx - 6, gy, gx + 7, gy + 5, GH, K.gate);
+  tunnel(gx, gy, gx + 1, gy + 7, 0);
+  box(gx - 6, gy, gx, gy + 6, 0, GH, 'ashlar', { top: 'walk' });
+  box(gx + 2, gy, gx + 8, gy + 6, 0, GH, 'ashlar', { top: 'walk' });
+  parts.push({ t: 'arch', axis: 'y', x0: gx, x1: gx + 2, y0: gy, y1: gy + 6, z0: 0, z1: GH, spring: 11, apex: 17, m: 'ashlar', cover: true });
+  parts.push({ t: 'towerParapet', x0: gx - 6, y0: gy, x1: gx + 8, y1: gy + 6, z: GH, open: null, m: 'ashlar' });
   // the drums flank the mouth and stand out over the berm; between them the tunnel runs on to the drawbridge
   for (const cx of [gx - 3.2, gx + 5.2]) {
-    rect(Math.floor(cx - 3), 199, Math.ceil(cx + 3), 203, (x, y) => { if (Math.hypot(x + 0.5 - cx, y + 0.5 - 201.8) <= 2.5 && (x < gx || x > gx + 1)) mass(x, y, x, y, GH + 8, K.gate); });
-    cyl(cx, 201.8, 2.5, 0, GH + 8, 'ashlar', { top: 'walk' });
-    cyl(cx, 201.8, 2.8, 0, 3, 'ashlar');
-    parts.push({ t: 'ringParapet', x: cx, y: 201.8, r: 2.5, z: GH + 8, m: 'ashlar' });
+    rect(Math.floor(cx - 3), gy + 3, Math.ceil(cx + 3), gy + 7, (x, y) => { if (Math.hypot(x + 0.5 - cx, y + 0.5 - (gy + 5.8)) <= 2.5 && (x < gx || x > gx + 1)) mass(x, y, x, y, GH + 8, K.gate); });
+    cyl(cx, gy + 5.8, 2.5, 0, GH + 8, 'ashlar', { top: 'walk' });
+    cyl(cx, gy + 5.8, 2.8, 0, 3, 'ashlar');
+    parts.push({ t: 'ringParapet', x: cx, y: gy + 5.8, r: 2.5, z: GH + 8, m: 'ashlar' });
   }
-  parts.push({ t: 'arch', axis: 'y', x0: gx - 0.8, x1: gx + 2.8, y0: 202, y1: 203.6, z0: 0, z1: GH, spring: 11, apex: 19, m: 'ashlar', cover: true });
-  face('x', gx - 6, gx + 8, 196, -1, 0, GH, { course: GH - 3 });
-  face('x', gx - 1, gx + 3, 203.6, 1, 0, GH, { course: GH - 3, slits: 2 });
-  // the drawbridge (tiles gx..gx+1 x 204..207: water until it is down), a stone pier, a stone causeway to the bank
-  const drawbridge = { x0: gx, x1: gx + 2, hinge: 204, y1: 208 };
-  rect(gx, 204, gx + 1, 207, (x, y, i) => { kind[i] = K.bridge; solid[i] = 1; });
-  set(gx - 2, 208, gx + 3, 209, 0, K.pier);
-  box(gx - 2, 208, gx + 4, 210, -6, 0, 'ashlar', { top: 'setts' });
-  set(gx, 210, gx + 1, 211, 0, K.bridge);
-  box(gx - 0.15, 210, gx + 2.15, 212, -6, 0, 'ashlar', { top: 'setts' });
-  // twin-towered gates: the postern and both inner gates (towers 3 wide, 5 deep; the tunnel between)
+  parts.push({ t: 'arch', axis: 'y', x0: gx - 0.8, x1: gx + 2.8, y0: gy + 6, y1: gy + 7.6, z0: 0, z1: GH, spring: 11, apex: 19, m: 'ashlar', cover: true });
+  face('x', gx - 6, gx + 8, gy, -1, 0, GH, { course: GH - 3 });
+  face('x', gx - 1, gx + 3, gy + 7.6, 1, 0, GH, { course: GH - 3, slits: 2 });
+  // the drawbridge (tiles gx..gx+1 x hinge..hinge+3: water until it is down), a stone pier, a stone causeway to the bank
+  const hinge = O.Y1 + 3, drawbridge = { x0: gx, x1: gx + 2, hinge, y1: hinge + 4, portcullis: O.Y1 + 1.15 };
+  rect(gx, hinge, gx + 1, hinge + 3, (x, y, i) => { kind[i] = K.bridge; solid[i] = 1; });
+  set(gx - 2, hinge + 4, gx + 3, hinge + 5, 0, K.pier);
+  box(gx - 2, hinge + 4, gx + 4, hinge + 6, -6, 0, 'ashlar', { top: 'setts' });
+  set(gx, hinge + 6, gx + 1, hinge + 7, 0, K.bridge);
+  box(gx - 0.15, hinge + 6, gx + 2.15, hinge + 8, -6, 0, 'ashlar', { top: 'setts' });
+  // twin-towered gates: the postern and the inner gates (towers 3 wide, 5 deep; the tunnel between)
   const twin = ([cx, cy], R, lv) => {
     const side = sideOf(R, [cx, cy]), u = side === 'N' || side === 'S';
-    const X0 = R.x0 * 2, Y0 = R.y0 * 2, X1 = R.x1 * 2 + 1, Y1 = R.y1 * 2 + 1;
+    const { X0, Y0, X1, Y1 } = ringTiles(R);
     const [b0, b1] = { N: [Y0 - 2, Y0 + 2], S: [Y1 - 2, Y1 + 2], W: [X0 - 2, X0 + 2], E: [X1 - 2, X1 + 2] }[side];
     const g = (u ? cx : cy) * 2;
     const at = (a0, a1, fn) => (u ? fn(a0, b0, a1, b1) : fn(b0, a0, b1, a1));
@@ -178,13 +212,11 @@ export function castle3d() {
     // gate leaves across the tunnel's mouth on the camera's side (the south or east end), swinging into the tunnel
     doors.push(u ? { x: g + 1, y: b1 + 1, axis: 'x', w: 2, lv: 0, kind: 'gate', open: -1 } : { x: b1 + 1, y: g + 1, axis: 'y', w: 2, lv: 0, kind: 'gate', open: -1 });
   };
-  twin(GATES.postern, OUT, OW);
-  twin(GATES.inner, INN, IW);
-  twin(GATES.innerNorth, INN, IW);
+  for (const [cx, cy, r] of S.twins) twin([cx, cy], rings[r], rings[r].lv);
 
   // ------------------------------------------------------------- stairs up to the wall-walks
   // Two tiles wide against the ward side of the wall, three levels a step, rising along it; the top step is a hop below
-  // the walk beside it.
+  // the walk beside it. Given as [ring, side, along (tile), direction].
   const stair = (x0, y0, dir, lv, tag) => {
     const n = Math.ceil((lv - 2) / 3), steps = [];
     for (let k = 0; k < n; k++) {
@@ -198,14 +230,10 @@ export function castle3d() {
     }
     stairs.push({ x0, y0, dir, lv, tag, steps });
   };
-  stair(140, 197, '+x', OW, 'outer');    // south: rows 197-198, steps up to the walk at y 199
-  stair(184, 71, '-x', OW, 'outer');     // north
-  stair(99, 120, '+y', OW, 'outer');     // west
-  stair(237, 154, '-y', OW, 'outer');    // east
-  stair(164, 169, '+x', IW, 'inner');     // (east of the great hall)
-  stair(191, 99, '-x', IW, 'inner');
-  stair(127, 108, '+y', IW, 'inner');
-  stair(209, 140, '+y', IW, 'inner');
+  for (const [r, side, a, dir] of S.stairs) {
+    const T = tiles[r], [x0, y0] = { S: [a, T.Y1 - 4], N: [a, T.Y0 + 3], W: [T.X0 + 3, a], E: [T.X1 - 4, a] }[side];
+    stair(x0, y0, dir, rings[r].lv, tags[r]);
+  }
 
   // ------------------------------------------------------------- buildings: the keep, the cathedral, the great hall
   // Walls two tiles thick outside and one inside, floors on the inside; roofs come off while the hero is inside.
@@ -226,52 +254,54 @@ export function castle3d() {
       : { x: out === 'E' ? x1 + 1 : x0, y: y0 + w / 2, axis, w, lv: floorLv, kind: 'door', bld: id, open: out === 'E' ? -1 : 1 });
   };
   // The keep: 50 x 33. The throne room fills the west wing; the entrance hall the south-east; the great tower at the
-  // back holds the council chamber and the armoury, its walls rising to KT with a turret on each corner.
-  const KX0 = 130, KY0 = 103, KX1 = 179, KY1 = 135, TX = 154;
+  // back holds the council chamber and the armoury, its walls rising to KT with a turret on each corner. Laid out at
+  // (130, 103) and moved to the variant's corner (x, y below are relative to that origin).
+  const [KX0, KY0] = S.keep, kx = KX0 - 130, ky = KY0 - 103, X = (v) => v + kx, Y = (v) => v + ky;
+  const KX1 = X(179), KY1 = Y(135), TX = X(154);
   building(BLD.keep, KX0, KY0, KX1, KY1, KW, KF);
   rect(TX, KY0, KX1, KY0 + 1, (x, y, i) => { hgt[i] = KT; });
-  rect(KX1 - 1, KY0 + 2, KX1, 119, (x, y, i) => { hgt[i] = KT; });
+  rect(KX1 - 1, KY0 + 2, KX1, Y(119), (x, y, i) => { hgt[i] = KT; });
   box(KX0, KY0, TX, KY0 + 2, 0, KW, 'ashlar', { cap: true });
   box(KX0, KY0 + 2, KX0 + 2, KY1 + 1, 0, KW, 'ashlar', { cap: true });
-  box(KX0 + 2, KY1 - 1, KX1 + 1, KY1 + 1, 0, KW, 'ashlar', { cap: true, cuts: [[141, 144], [165, 169]] });
-  box(KX1 - 1, 120, KX1 + 1, KY1 - 1, 0, KW, 'ashlar', { cap: true });
+  box(KX0 + 2, KY1 - 1, KX1 + 1, KY1 + 1, 0, KW, 'ashlar', { cap: true, cuts: [[X(141), X(144)], [X(165), X(169)]] });
+  box(KX1 - 1, Y(120), KX1 + 1, KY1 - 1, 0, KW, 'ashlar', { cap: true });
   box(TX, KY0, KX1 + 1, KY0 + 2, 0, KT, 'ashlar', { cap: true });
-  box(KX1 - 1, KY0 + 2, KX1 + 1, 120, 0, KT, 'ashlar', { cap: true });
+  box(KX1 - 1, KY0 + 2, KX1 + 1, Y(120), 0, KT, 'ashlar', { cap: true });
   innerWall(TX, KY0 + 2, TX, KY1 - 2, KW - 4, 'ashlar');
-  rect(TX, KY0 + 2, TX, 119, (x, y, i) => { hgt[i] = KT; });
-  box(TX, KY0 + 2, TX + 1, 120, KW - 4, KT, 'ashlar', { cap: true });
-  innerWall(TX + 1, 119, KX1 - 2, 119, KT, 'ashlar');
-  innerWall(166, KY0 + 2, 166, 118, KT, 'ashlar');
-  for (const [cx, cy] of [[TX + 0.5, KY0 + 0.5], [KX1 + 0.5, KY0 + 0.5], [KX1 + 0.5, 119.5], [TX + 0.5, 119.5]]) {
+  rect(TX, KY0 + 2, TX, Y(119), (x, y, i) => { hgt[i] = KT; });
+  box(TX, KY0 + 2, TX + 1, Y(120), KW - 4, KT, 'ashlar', { cap: true });
+  innerWall(TX + 1, Y(119), KX1 - 2, Y(119), KT, 'ashlar');
+  innerWall(X(166), KY0 + 2, X(166), Y(118), KT, 'ashlar');
+  for (const [cx, cy] of [[TX + 0.5, KY0 + 0.5], [KX1 + 0.5, KY0 + 0.5], [KX1 + 0.5, Y(119.5)], [TX + 0.5, Y(119.5)]]) {
     cyl(cx, cy, 1.6, KT - 12, KT + 6, 'ashlar', { corbel: true });
     parts.push({ t: 'cone', x: cx, y: cy, r: 2, z: KT + 6, h: 12, m: 'slate', roof: BLD.keep });
   }
   const dress = { pilasters: 6, windows: { every: 6, w: 1.1, z0: 14, z1: 26 }, course: 6, course2: KW - 5 };
   face('x', KX0, TX, KY0, -1, 0, KW, dress);
   face('y', KY0, KY1 + 1, KX0, -1, 0, KW, dress);
-  face('x', KX0, KX1 + 1, KY1 + 1, 1, 0, KW, { ...dress, skip: [[140, 145], [164, 170]] });
-  face('y', 120, KY1 + 1, KX1 + 1, 1, 0, KW, dress);
+  face('x', KX0, KX1 + 1, KY1 + 1, 1, 0, KW, { ...dress, skip: [[X(140), X(145)], [X(164), X(170)]] });
+  face('y', Y(120), KY1 + 1, KX1 + 1, 1, 0, KW, dress);
   face('x', TX, KX1 + 1, KY0, -1, 0, KT, { ...dress, windows: { every: 5, w: 1.1, z0: 26, z1: 40 }, course2: KT - 5 });
-  face('y', KY0, 120, KX1 + 1, 1, 0, KT, { ...dress, windows: { every: 5, w: 1.1, z0: 26, z1: 40 }, course2: KT - 5 });
-  box(163.4, KY1 + 1, 164.4, KY1 + 2, 0, 22, 'ashlar');   // the porch: pilasters and a gabled hood over the doors
-  box(169.6, KY1 + 1, 170.6, KY1 + 2, 0, 22, 'ashlar');
-  box(163.2, KY1 + 0.6, 170.8, KY1 + 2.1, 20, 22, 'ashlar');
-  parts.push({ t: 'roof', kind: 'gable', axis: 'y', x0: 163.1, y0: KY1 + 0.6, x1: 170.9, y1: KY1 + 2.2, z: 22, h: 9, m: 'slate' });
-  door(165, KY1 - 1, 168, KY1, 'x', KF, KW - 4, BLD.keep, 'S');    // main doors
-  door(141, KY1 - 1, 143, KY1, 'x', KF, KW - 4, BLD.keep, 'S');    // the throne room's own doors
-  door(TX, 124, TX, 126, 'y', KF, KW - 6, BLD.keep, 'E');          // entrance hall -> throne room
-  door(159, 119, 161, 119, 'x', KF, KT - 12, BLD.keep, 'S');       // -> council chamber
-  door(170, 119, 172, 119, 'x', KF, KT - 12, BLD.keep, 'S');       // -> armoury
-  for (const [a, b] of [[164, 169], [140, 144]]) { deck(a, KY1 + 1, b, KY1 + 1, 1, K.stair, false); box(a, KY1 + 1, b + 1, KY1 + 2, 0, 1, 'ashlar', { top: 'setts' }); }
+  face('y', KY0, Y(120), KX1 + 1, 1, 0, KT, { ...dress, windows: { every: 5, w: 1.1, z0: 26, z1: 40 }, course2: KT - 5 });
+  box(X(163.4), KY1 + 1, X(164.4), KY1 + 2, 0, 22, 'ashlar');   // the porch: pilasters and a gabled hood over the doors
+  box(X(169.6), KY1 + 1, X(170.6), KY1 + 2, 0, 22, 'ashlar');
+  box(X(163.2), KY1 + 0.6, X(170.8), KY1 + 2.1, 20, 22, 'ashlar');
+  parts.push({ t: 'roof', kind: 'gable', axis: 'y', x0: X(163.1), y0: KY1 + 0.6, x1: X(170.9), y1: KY1 + 2.2, z: 22, h: 9, m: 'slate' });
+  door(X(165), KY1 - 1, X(168), KY1, 'x', KF, KW - 4, BLD.keep, 'S');    // main doors
+  door(X(141), KY1 - 1, X(143), KY1, 'x', KF, KW - 4, BLD.keep, 'S');    // the throne room's own doors
+  door(TX, Y(124), TX, Y(126), 'y', KF, KW - 6, BLD.keep, 'E');          // entrance hall -> throne room
+  door(X(159), Y(119), X(161), Y(119), 'x', KF, KT - 12, BLD.keep, 'S');       // -> council chamber
+  door(X(170), Y(119), X(172), Y(119), 'x', KF, KT - 12, BLD.keep, 'S');       // -> armoury
+  for (const [a, b] of [[X(164), X(169)], [X(140), X(144)]]) { deck(a, KY1 + 1, b, KY1 + 1, 1, K.stair, false); box(a, KY1 + 1, b + 1, KY1 + 2, 0, 1, 'ashlar', { top: 'setts' }); }
   // the throne dais at the north end of the throne room, two steps up
-  deck(137, KY0 + 2, 148, KY0 + 6, KF + 2, K.floor, false);
-  deck(136, KY0 + 7, 149, KY0 + 7, KF + 1, K.floor, false);
-  box(137, KY0 + 2, 149, KY0 + 7, 0, KF + 2, 'marble', { top: 'marble' });
-  box(136, KY0 + 7, 150, KY0 + 8, 0, KF + 1, 'marble', { top: 'marble' });
+  deck(X(137), KY0 + 2, X(148), KY0 + 6, KF + 2, K.floor, false);
+  deck(X(136), KY0 + 7, X(149), KY0 + 7, KF + 1, K.floor, false);
+  box(X(137), KY0 + 2, X(149), KY0 + 7, 0, KF + 2, 'marble', { top: 'marble' });
+  box(X(136), KY0 + 7, X(150), KY0 + 8, 0, KF + 1, 'marble', { top: 'marble' });
   // battlements round the wings and the great tower; flat lead roofs inside them (lifted off while you are inside)
   parts.push({ t: 'towerParapet', x0: KX0, y0: KY0, x1: TX + 1, y1: KY1 + 1, z: KW, open: 'E', m: 'ashlar' });
-  parts.push({ t: 'towerParapet', x0: TX, y0: 120, x1: KX1 + 1, y1: KY1 + 1, z: KW, open: 'N', m: 'ashlar' });
-  parts.push({ t: 'towerParapet', x0: TX, y0: KY0, x1: KX1 + 1, y1: 120, z: KT, open: null, m: 'ashlar' });
+  parts.push({ t: 'towerParapet', x0: TX, y0: Y(120), x1: KX1 + 1, y1: KY1 + 1, z: KW, open: 'N', m: 'ashlar' });
+  parts.push({ t: 'towerParapet', x0: TX, y0: KY0, x1: KX1 + 1, y1: Y(120), z: KT, open: null, m: 'ashlar' });
   // behind the battlements, rows of pitched roofs about 8 tiles across (as real keeps hide theirs)
   const ridges = (x0, y0, x1, y1, z, axis, n, h) => {
     for (let k = 0; k < n; k++) {
@@ -280,12 +310,12 @@ export function castle3d() {
     }
   };
   ridges(KX0 + 0.6, KY0 + 0.6, TX + 0.4, KY1 + 0.4, KW - 1, 'y', 3, 24);
-  ridges(TX + 0.4, 120.4, KX1 + 0.4, KY1 + 0.4, KW - 1, 'x', 2, 22);
-  parts.push({ t: 'roof', kind: 'hip', x0: TX + 0.6, y0: KY0 + 0.6, x1: KX1 + 0.4, y1: 119.4, z: KT - 1, h: 30, m: 'slate', roof: BLD.keep });
+  ridges(TX + 0.4, Y(120.4), KX1 + 0.4, KY1 + 0.4, KW - 1, 'x', 2, 22);
+  parts.push({ t: 'roof', kind: 'hip', x0: TX + 0.6, y0: KY0 + 0.6, x1: KX1 + 0.4, y1: Y(119.4), z: KT - 1, h: 30, m: 'slate', roof: BLD.keep });
   rooms.push({ id: 'throne_hall', name: 'Throne Room', tiles: [KX0 + 2, KY0 + 2, TX - 1, KY1 - 2], bld: BLD.keep, floor: KF });
-  rooms.push({ id: 'keep_hall', name: 'Entrance Hall', tiles: [TX + 1, 120, KX1 - 2, KY1 - 2], bld: BLD.keep, floor: KF });
-  rooms.push({ id: 'council', name: 'Council Chamber', tiles: [TX + 1, KY0 + 2, 165, 118], bld: BLD.keep, floor: KF });
-  rooms.push({ id: 'armoury', name: 'Armoury', tiles: [167, KY0 + 2, KX1 - 2, 118], bld: BLD.keep, floor: KF });
+  rooms.push({ id: 'keep_hall', name: 'Entrance Hall', tiles: [TX + 1, Y(120), KX1 - 2, KY1 - 2], bld: BLD.keep, floor: KF });
+  rooms.push({ id: 'council', name: 'Council Chamber', tiles: [TX + 1, KY0 + 2, X(165), Y(118)], bld: BLD.keep, floor: KF });
+  rooms.push({ id: 'armoury', name: 'Armoury', tiles: [X(167), KY0 + 2, KX1 - 2, Y(118)], bld: BLD.keep, floor: KF });
   // the cathedral (with a belfry over its south front) and the great hall
   const hall = (id, name, x0, y0, x1, y1, wallH, roofs, list, m) => {
     building(id, x0, y0, x1, y1, wallH, 0);
@@ -301,25 +331,31 @@ export function castle3d() {
     for (const r of roofs) parts.push({ t: 'roof', m: 'slate', roof: id, ...r });
     rooms.push({ id, name, tiles: [x0 + 2, y0 + 2, x1 - 2, y1 - 2], bld: id, floor: 0 });
   };
-  // the cathedral: a raised nave (clerestory walls over the aisles) under a steep roof, lean-to aisle roofs, a belfry
-  hall(BLD.cathedral, 'Cathedral', 182, 102, 209, 133, 30, [
-    { kind: 'lean', side: 'W', x0: 181.7, y0: 101.7, x1: 190, y1: 134.3, z: 30, h: 12 },
-    { kind: 'lean', side: 'E', x0: 202, y0: 101.7, x1: 210.3, y1: 134.3, z: 30, h: 12 },
-    { kind: 'gable', axis: 'y', x0: 189.7, y0: 101.7, x1: 202.3, y1: 128, z: 44, h: 34 }],
-  [[182, 116, 183, 119, 'y', 'W'], [194, 132, 197, 133, 'x', 'S']], 'chapel');
-  box(190, 102, 191, 128, 30, 44, 'chapel', { roof: BLD.cathedral }); box(201, 102, 202, 128, 30, 44, 'chapel', { roof: BLD.cathedral });
-  box(192, 127, 200, 134, 30, 58, 'chapel', { roof: BLD.cathedral });
-  parts.push({ t: 'cone', x: 196, y: 130.5, r: 4.6, z: 58, h: 40, m: 'slate', roof: BLD.cathedral, seg: 4 });
-  // the great hall: two parallel roofs
-  hall(BLD.great_hall, 'Great Hall', 128, 140, 155, 169, 24, [
-    { kind: 'gable', axis: 'y', x0: 127.7, y0: 139.7, x1: 141.9, y1: 170.3, z: 24, h: 30 },
-    { kind: 'gable', axis: 'y', x0: 141.9, y0: 139.7, x1: 156.3, y1: 170.3, z: 24, h: 30 }],
-  [[154, 152, 155, 155, 'y', 'E'], [140, 140, 143, 141, 'x', 'N']], 'ashlar');
+  // the cathedral: a raised nave (clerestory walls over the aisles) under a steep roof, lean-to aisle roofs, a belfry;
+  // laid out at (182, 102)
+  const [CX0, CY0] = S.cathedral, cxo = CX0 - 182, cyo = CY0 - 102, cX = (v) => v + cxo, cY = (v) => v + cyo;
+  hall(BLD.cathedral, 'Cathedral', CX0, CY0, cX(209), cY(133), 30, [
+    { kind: 'lean', side: 'W', x0: cX(181.7), y0: cY(101.7), x1: cX(190), y1: cY(134.3), z: 30, h: 12 },
+    { kind: 'lean', side: 'E', x0: cX(202), y0: cY(101.7), x1: cX(210.3), y1: cY(134.3), z: 30, h: 12 },
+    { kind: 'gable', axis: 'y', x0: cX(189.7), y0: cY(101.7), x1: cX(202.3), y1: cY(128), z: 44, h: 34 }],
+  [[CX0, cY(116), cX(183), cY(119), 'y', 'W'], [cX(194), cY(132), cX(197), cY(133), 'x', 'S']], 'chapel');
+  box(cX(190), CY0, cX(191), cY(128), 30, 44, 'chapel', { roof: BLD.cathedral }); box(cX(201), CY0, cX(202), cY(128), 30, 44, 'chapel', { roof: BLD.cathedral });
+  box(cX(192), cY(127), cX(200), cY(134), 30, 58, 'chapel', { roof: BLD.cathedral });
+  parts.push({ t: 'cone', x: cX(196), y: cY(130.5), r: 4.6, z: 58, h: 40, m: 'slate', roof: BLD.cathedral, seg: 4 });
+  // the great hall: two parallel roofs; laid out at (128, 140)
+  const [HX0, HY0] = S.hall, hxo = HX0 - 128, hyo = HY0 - 140, hX = (v) => v + hxo, hY = (v) => v + hyo;
+  hall(BLD.great_hall, 'Great Hall', HX0, HY0, hX(155), hY(169), 24, [
+    { kind: 'gable', axis: 'y', x0: hX(127.7), y0: hY(139.7), x1: hX(141.9), y1: hY(170.3), z: 24, h: 30 },
+    { kind: 'gable', axis: 'y', x0: hX(141.9), y0: hY(139.7), x1: hX(156.3), y1: hY(170.3), z: 24, h: 30 }],
+  [[hX(154), hY(152), hX(155), hY(155), 'y', 'E'], [hX(140), HY0, hX(143), hY(141), 'x', 'N']], 'ashlar');
 
   // ------------------------------------------------------------- wall-walk muster posts (rampart scenarios)
-  for (let x = 104; x <= 236; x += 12) if (walk[I(x, 199)] && !solid[I(x, 199)]) posts.push([x + 0.5, 199.5]);
-  for (let y = 80; y <= 190; y += 12) if (walk[I(239, y)] && !solid[I(239, y)]) posts.push([239.5, y + 0.5]);
+  for (let x = O.X0 + 8; x <= O.X1 - 5; x += 12) if (walk[I(x, O.Y1 - 2)] && !solid[I(x, O.Y1 - 2)]) posts.push([x + 0.5, O.Y1 - 1.5]);
+  for (let y = O.Y0 + 12; y <= O.Y1 - 11; y += 12) if (walk[I(O.X1 - 2, y)] && !solid[I(O.X1 - 2, y)]) posts.push([O.X1 - 1.5, y + 0.5]);
 
-  return (cache = { hgt, kind, solid, walk, cover, bld, struct, parts, doors, stairs, posts, rooms, drawbridge, outer, inner,
-    keep: [KX0, KY0, KX1, KY1] });
+  const L = { hgt, kind, solid, walk, cover, bld, struct, parts, doors, stairs, posts, rooms, drawbridge, outer: tiles[0], inner: tiles[tiles.length - 1],
+    rings: tiles, gates, keep: [KX0, KY0, KX1, KY1], variant: v.id,
+    center: [(tiles[0].X0 + tiles[0].X1) / 2, (tiles[0].Y0 + tiles[0].Y1) / 2] };
+  cache.set(v.id, L);
+  return L;
 }

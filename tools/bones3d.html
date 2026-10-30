@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bone Gibs 3D</title>
+<!-- The bones monsters burst into (tools/bones3d.js): an orbit viewer, and the bake used by tools/bones3d_bake.js.
+     The bake draws every bone from the game's iso camera, 16 turns of its tumble and its rest poses on the floor,
+     into a data sheet: R = light, G = the half-blood field (one end < .5 < the other), B = the soak field (blood
+     everywhere above a low cut), A = 255 body / 128 outline. src/gfx/bonegibs.js paints it in the gib's colours.
+     http://localhost:8123/tools/bones3d.html   ?bake for no viewer
+     Keys: 1-8 bone, B blood look (clean, one end, other end, soaked), C colours, space pauses the turn, I iso camera. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #1b1d22; overflow: hidden; font: 12px monospace; color: #dfe; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; }
+  #hud { position: fixed; left: 10px; top: 8px; white-space: pre; pointer-events: none; text-shadow: 1px 1px 0 #000; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud"></div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { BONES, buildBone } from './bones3d.js';
+
+const P = new URLSearchParams(location.search);
+const PX = 0.4;          // world px per cm: a 45 cm femur is 18 px, a hero ~50
+const TURNS = 16, YAWS = 8;
+
+const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+const scene = new THREE.Scene();
+
+const NOISE = `
+float hash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise(vec3 x) {
+  vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash(i), hash(i + vec3(1, 0, 0)), f.x), mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x), mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float fbm(vec3 p) { return 0.5 * noise(p) + 0.3 * noise(p * 2.03 + 1.7) + 0.2 * noise(p * 4.1 + 3.1); }`;
+// light from the top left, fixed to the camera like the rest of the game's art; the fields live on the bone (object
+// space), so its blood stays put while it tumbles
+const mat = new THREE.ShaderMaterial({
+  uniforms: { uAxis: { value: new THREE.Vector3(0, 1, 0) }, uMid: { value: 0 }, uLen: { value: 1 }, uSeed: { value: 0 },
+    uView: { value: 0 }, uLook: { value: 0 }, uBase: { value: new THREE.Color(0xe8dcc0) }, uCoat: { value: new THREE.Color(0x8a0b08) } },
+  vertexShader: `attribute float albedo; varying float vA; varying vec3 vP, vN;
+    void main() { vA = albedo; vP = position; vN = normalize(normalMatrix * normal); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `${NOISE}
+    uniform vec3 uAxis, uBase, uCoat; uniform float uMid, uLen, uSeed, uView, uLook; varying float vA; varying vec3 vP, vN;
+    void main() {
+      vec3 n = normalize(vN), L = normalize(vec3(-0.55, 0.8, 0.45));
+      float d = max(0.0, (dot(n, L) + 0.2) / 1.2);
+      float lum = clamp(vA * (0.24 + 0.76 * d) * (0.9 + 0.2 * (fbm(vP * 1.7 + uSeed) - 0.5)), 0.0, 1.0);
+      float h = (dot(vP, uAxis) - uMid) / uLen + 1.1 * (fbm(vP * 0.3 + uSeed + 7.0) - 0.5);
+      float hf = clamp(0.5 + 0.5 * h, 0.0, 1.0), soak = fbm(vP * 0.55 + uSeed + 19.0);
+      if (uView < 0.5) { gl_FragColor = vec4(lum, hf, soak, 1.0); return; }
+      bool blood = uLook > 2.5 ? soak > 0.36 : uLook > 1.5 ? hf < 0.5 : uLook > 0.5 ? hf > 0.5 : false;
+      vec3 c = blood ? uCoat * (0.35 + 0.9 * lum) + vec3(pow(lum, 6.0) * 0.5) : uBase * (0.25 + 0.85 * lum);
+      gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0);
+    }`,
+  side: THREE.DoubleSide,
+});
+const KINDS = Object.keys(BONES);
+const built = {};
+for (const k of KINDS) { const b = buildBone(k); built[k] = { ...b, mesh: new THREE.Mesh(b.geometry, mat) }; }
+let shown = null;
+function show(kind) {
+  if (shown) scene.remove(shown.mesh);
+  shown = built[kind]; scene.add(shown.mesh);
+  mat.uniforms.uAxis.value.copy(shown.axis); mat.uniforms.uMid.value = shown.mid; mat.uniforms.uLen.value = shown.len;
+  mat.uniforms.uSeed.value = KINDS.indexOf(kind) * 3.7;
+  return shown;
+}
+
+/** The game's camera: orthographic, 30 degrees down, from the +x +z diagonal; world units are screen px. */
+const ISO = new THREE.Vector3(Math.cos(Math.PI / 6) * Math.SQRT1_2, Math.sin(Math.PI / 6), Math.cos(Math.PI / 6) * Math.SQRT1_2);
+function isoCamera(left, right, top, bottom) {
+  const c = new THREE.OrthographicCamera(left, right, top, bottom, -4000, 4000);
+  c.position.copy(ISO).multiplyScalar(1000); c.up.set(0, 1, 0); c.lookAt(0, 0, 0);
+  c.updateMatrixWorld(); c.updateProjectionMatrix();
+  return c;
+}
+const VIEW = isoCamera(-1, 1, 1, -1).matrixWorldInverse;
+
+// ------------------------------------------------------------------ bake
+/** Pose the shown bone: frame f of its tumble, or rest pose `r` (base pose r / YAWS, yaw r % YAWS) lying on y = 0. */
+function pose(b, kind, f, r) {
+  const def = BONES[kind], m = b.mesh;
+  m.scale.setScalar(PX * def.k); m.position.set(0, 0, 0);
+  if (r == null && def.face) {
+    // a face (+z) turned to the camera wobbles round the line of sight, so it reads as a face in most turns
+    const look = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), ISO);
+    m.quaternion.setFromAxisAngle(ISO.clone().add(def.spin.clone().normalize().multiplyScalar(0.8)).normalize(), (f / TURNS) * Math.PI * 2).multiply(look);
+  } else if (r == null) {
+    m.quaternion.setFromAxisAngle(def.spin.clone().normalize(), (f / TURNS) * Math.PI * 2);
+  } else {
+    const base = new THREE.Quaternion().setFromEuler(new THREE.Euler(...def.rest[Math.floor(r / YAWS) % def.rest.length]));
+    // a face lies turned within `face` radians of the camera (at yaw pi/4), the rest all the way round
+    const yaw = def.face ? Math.PI / 4 + ((r % YAWS) / (YAWS - 1) - 0.5) * 2 * def.face : ((r % YAWS) / YAWS) * Math.PI * 2 + 0.3;
+    m.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiply(base);
+    m.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(m, true), c = bb.getCenter(new THREE.Vector3());
+    m.position.set(-c.x, -bb.min.y, -c.z);   // its middle on the floor point the game draws it at
+  }
+  m.updateMatrixWorld(true);
+}
+/** Render the posed bone at S px per world px (SS-times supersampled, kept where it covers 40% of a pixel), outline
+ *  it, crop it: { w, h, ax, ay (the origin's pixel), px: Uint8ClampedArray rgba }. */
+function shoot(b, S, SS = 4) {
+  const bb = new THREE.Box3().setFromObject(b.mesh, true), cs = [];
+  for (let i = 0; i < 8; i++) cs.push(new THREE.Vector3(i & 1 ? bb.max.x : bb.min.x, i & 2 ? bb.max.y : bb.min.y, i & 4 ? bb.max.z : bb.min.z).applyMatrix4(VIEW));
+  const m = 2 / S, x0 = Math.floor((Math.min(...cs.map((v) => v.x)) - m) * S) / S, x1 = Math.ceil((Math.max(...cs.map((v) => v.x)) + m) * S) / S;
+  const y0 = Math.floor((Math.min(...cs.map((v) => v.y)) - m) * S) / S, y1 = Math.ceil((Math.max(...cs.map((v) => v.y)) + m) * S) / S;
+  const w = Math.round((x1 - x0) * S), h = Math.round((y1 - y0) * S);
+  renderer.setSize(w * SS, h * SS, false); renderer.setClearColor(0x000000, 0);
+  renderer.render(scene, isoCamera(x0, x1, y1, y0));
+  const c = document.createElement('canvas'); c.width = w * SS; c.height = h * SS;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(renderer.domElement, 0, 0);
+  const hi = g.getImageData(0, 0, c.width, c.height).data, px = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let n = 0, r = 0, gg = 0, bl = 0;
+    for (let v = 0; v < SS; v++) for (let u = 0; u < SS; u++) {
+      const i = ((y * SS + v) * c.width + x * SS + u) * 4;
+      if (hi[i + 3] > 127) { n++; r += hi[i]; gg += hi[i + 1]; bl += hi[i + 2]; }
+    }
+    if (n < SS * SS * 0.4) continue;
+    const o = (y * w + x) * 4;
+    px[o] = Math.max(1, r / n); px[o + 1] = gg / n; px[o + 2] = bl / n; px[o + 3] = 255;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {   // a 1 px outline round the body (4-neighbours)
+    const o = (y * w + x) * 4;
+    if (px[o + 3]) continue;
+    const on = (xx, yy) => xx >= 0 && yy >= 0 && xx < w && yy < h && px[(yy * w + xx) * 4 + 3] === 255;
+    if (on(x - 1, y) || on(x + 1, y) || on(x, y - 1) || on(x, y + 1)) px[o + 3] = 128;
+  }
+  let cx0 = w, cy0 = h, cx1 = -1, cy1 = -1;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (px[(y * w + x) * 4 + 3]) { cx0 = Math.min(cx0, x); cx1 = Math.max(cx1, x); cy0 = Math.min(cy0, y); cy1 = Math.max(cy1, y); }
+  const cw = cx1 - cx0 + 1, ch = cy1 - cy0 + 1, out = new Uint8ClampedArray(cw * ch * 4);
+  for (let y = 0; y < ch; y++) out.set(px.subarray(((y + cy0) * w + cx0) * 4, ((y + cy0) * w + cx0 + cw) * 4), y * cw * 4);
+  return { w: cw, h: ch, ax: -x0 * S - cx0, ay: y1 * S - cy0, px: out };
+}
+/** Every bone: TURNS frames of its tumble and YAWS turns of each rest pose, shelf-packed on one sheet. */
+function bake(S = 2, W = 512) {
+  const t0 = performance.now(), cells = [], meta = { S, px: PX, turns: TURNS, bones: {} };
+  for (const kind of KINDS) {
+    const b = show(kind), def = BONES[kind], m = { t: [], r: [] }, halves = [], soaks = [];
+    for (let f = 0; f < TURNS; f++) { pose(b, kind, f); cells.push({ kind, list: 't', ...shoot(b, S) }); }
+    for (let r = 0; r < def.rest.length * YAWS; r++) { pose(b, kind, 0, r); cells.push({ kind, list: 'r', ...shoot(b, S) }); }
+    // the half split and the soak cut measured on the bone as drawn: the median and the 12th percentile
+    for (const c of cells) if (c.kind === kind) for (let i = 0; i < c.px.length; i += 4) if (c.px[i + 3] === 255) { halves.push(c.px[i + 1]); soaks.push(c.px[i + 2]); }
+    halves.sort((a, c) => a - c); soaks.sort((a, c) => a - c);
+    // tumbling frames are drawn round the bone's middle, lifted about half its resting height off the floor
+    meta.bones[kind] = { ...m, half: halves[halves.length >> 1], soak: soaks[Math.floor(soaks.length * 0.12)], lift: +(b.geometry.boundingSphere.radius * PX * def.k * 0.45).toFixed(1),
+      w: def.w || 0, once: def.once || 0 };
+  }
+  // shelf pack, tallest first
+  const order = cells.map((c, i) => i).sort((a, b) => cells[b].h - cells[a].h || cells[b].w - cells[a].w);
+  let x = 0, y = 0, rowH = 0;
+  for (const i of order) {
+    const c = cells[i];
+    if (x + c.w > W) { x = 0; y += rowH + 1; rowH = 0; }
+    c.x = x; c.y = y; x += c.w + 1; rowH = Math.max(rowH, c.h);
+  }
+  const sheet = document.createElement('canvas'); sheet.width = W; sheet.height = y + rowH;
+  const g = sheet.getContext('2d');
+  for (const c of cells) {
+    g.putImageData(new ImageData(c.px, c.w, c.h), c.x, c.y);
+    meta.bones[c.kind][c.list].push([c.x, c.y, c.w, c.h, +c.ax.toFixed(1), +c.ay.toFixed(1)]);
+  }
+  return { png: sheet.toDataURL('image/png'), meta, ms: Math.round(performance.now() - t0) };
+}
+window.BONES3D = { bake, KINDS };
+
+// ------------------------------------------------------------------ viewer
+if (!P.has('bake')) {
+  document.body.appendChild(renderer.domElement);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const persp = new THREE.PerspectiveCamera(32, 1, 0.1, 400);
+  persp.position.set(14, 12, 20);
+  const controls = new OrbitControls(persp, renderer.domElement); controls.update();
+  const COLS = [[0xe8dcc0, 0x8a0b08], [0xe8dcc0, 0x4ab020], [0x5a1410, 0x8a0b08], [0x2a8010, 0x4ab020], [0xc0f0ff, 0x80e0ff], [0x8a8078, 0x6a6058]];
+  let iso = false, paused = false, k = 0, look = 1, col = 0, a = 0, last = performance.now();
+  const hud = document.getElementById('hud');
+  addEventListener('keydown', (e) => {
+    if (e.key === ' ') paused = !paused;
+    else if (e.key === 'i' || e.key === 'I') iso = !iso;
+    else if (e.key === 'b' || e.key === 'B') look = (look + 1) % 4;
+    else if (e.key === 'c' || e.key === 'C') col = (col + 1) % COLS.length;
+    else if (/^[1-8]$/.test(e.key)) k = +e.key - 1;
+  });
+  mat.uniforms.uView.value = 1;
+  const loop = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!paused) a += dt * 0.8;
+    const b = show(KINDS[k]);
+    b.mesh.scale.setScalar(BONES[KINDS[k]].k); b.mesh.position.set(0, 0, 0);
+    b.mesh.quaternion.setFromAxisAngle(BONES[KINDS[k]].spin.clone().normalize(), a);
+    mat.uniforms.uLook.value = look; mat.uniforms.uBase.value.setHex(COLS[col][0]); mat.uniforms.uCoat.value.setHex(COLS[col][1]);
+    const w = innerWidth, h = innerHeight;
+    renderer.setSize(w, h, false);
+    let cam = persp;
+    if (iso) { const s = 40 / h; cam = isoCamera(-w / 2 * s, w / 2 * s, h / 2 * s, -h / 2 * s); }
+    else { persp.aspect = w / h; persp.updateProjectionMatrix(); controls.update(); }
+    renderer.setClearColor(0x2a2622, 1);
+    renderer.render(scene, cam);
+    hud.textContent = `${KINDS.map((n, i) => (i === k ? `[${i + 1} ${n}]` : `${i + 1} ${n}`)).join('  ')}\nblood (B): ${['clean', 'one end', 'other end', 'soaked'][look]}   colours (C)   ${paused ? 'paused' : 'tumbling'} (space)   ${iso ? 'iso' : 'orbit'} camera (I)`;
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

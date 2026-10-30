@@ -5,7 +5,7 @@
 // a jelly shadow, blink fades, riding on a bigger slime, and little emotes over their heads.
 import { G } from '../state.js';
 import { isoX, isoY } from '../core/view.js';
-import { TAU, makeCanvas } from '../core/util.js';
+import { TAU, makeCanvas, drawFiltered } from '../core/util.js';
 
 export let SLIME_SETS = {};
 export const SLIME_READY = fetch('assets/sprites/slimes/slimes.json').then((r) => r.json()).then((c) => { SLIME_SETS = c; return c; }).catch(() => ({}));
@@ -37,7 +37,7 @@ function tinted(img, f) {
   if (!f) return img;
   let m = tints.get(img);
   if (!m) tints.set(img, (m = {}));
-  if (!m[f]) { const c = makeCanvas(img.width, img.height), x = c.getContext('2d'); if (!('filter' in x)) return img; x.filter = f; x.drawImage(img, 0, 0); m[f] = c; }
+  if (!m[f]) { const c = makeCanvas(img.width, img.height); drawFiltered(c.getContext('2d'), f, img, 0, 0); m[f] = c; }   // (by hand where canvas filters don't work)
   return m[f];
 }
 

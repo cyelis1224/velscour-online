@@ -3,7 +3,7 @@
 // leaves, reeds) at the seams, and flowing water drawn live over the baked floor.
 // Everything here reads map.castleMat (src/world/castleworld.js); floors are baked into chunks by render.js, so the
 // edge overlays and particles cost nothing once a chunk is built.
-import { makeCanvas } from '../core/util.js';
+import { makeCanvas, recolor } from '../core/util.js';
 import { HW, HH, TW, TH } from '../core/view.js';
 import { hiddenBehind, HS } from './terrain.js';
 // Material classes of map.castleMat, written by the generator (src/world/castleworld.js).
@@ -43,17 +43,20 @@ function edgeMasks() {
   }
   return masks;
 }
-const masked = new Map();
+// per floor image (a castle variant recolours its floors: src/data/castles.js), then per floor, edge and variant
+const masked = new WeakMap();
 function maskedTile(f, key, d, v) {
   const k = key + '|' + d + '|' + v;
-  let c = masked.get(k);
+  let byImg = masked.get(f.img);
+  if (!byImg) masked.set(f.img, byImg = new Map());
+  let c = byImg.get(k);
   if (!c) {
     c = makeCanvas(MW, MH);
     const g = c.getContext('2d');
     g.drawImage(f.img, f.sx, f.sy, f.w, f.h, 0, 0, MW, MH);
     g.globalCompositeOperation = 'destination-in';
     g.drawImage(edgeMasks()[d * VARIANTS + v], 0, 0);
-    masked.set(k, c);
+    byImg.set(k, c);
   }
   return c;
 }
@@ -93,6 +96,10 @@ export function castleTileDressing(ctx, world, tx, ty, px, py, floorEntry) {
     // depth: open water darkens away from the banks, the shallows lighten
     const land = (dx, dy) => { const nx = tx + dx, ny = ty + dy; return nx >= 0 && ny >= 0 && nx < W && ny < map.h && mat[ny * W + nx] !== MAT.water; };
     const shore = land(1, 0) || land(-1, 0) || land(0, 1) || land(0, -1), near2 = shore || land(2, 0) || land(-2, 0) || land(0, 2) || land(0, -2);
+    if (map.castleWater?.tint) {   // a variant's water (src/data/castles.js): bog, blood, ice, a witch's mere
+      ctx.fillStyle = map.castleWater.tint;
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + HW, py + HH); ctx.lineTo(px, py + TH); ctx.lineTo(px - HW, py + HH); ctx.fill();
+    }
     ctx.fillStyle = shore ? 'rgba(120,170,150,0.14)' : near2 ? 'rgba(0,18,26,0.12)' : 'rgba(0,14,24,0.26)';
     ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + HW, py + HH); ctx.lineTo(px, py + TH); ctx.lineTo(px - HW, py + HH); ctx.fill();
     if (map.hgt) return;   // a height map drops the banks to the water as real faces (terrain.js)
@@ -120,7 +127,15 @@ export function castleTileDressing(ctx, world, tx, ty, px, py, floorEntry) {
 // Small sprites baked into the floor: tufts where grass meets a path or paving, pebbles and dirt on stone, leaves and
 // twigs under the trees, reeds and stones along the water. Built once per map, bucketed by floor chunk.
 let sprites = null;
-function particleSprites() {
+const tinted = new Map();
+/** The particle sprites, in a castle variant's ground palette when it has one (map.castleGround). */
+function particleSprites(palette = null) {
+  if (!palette) return baseSprites();
+  const key = JSON.stringify(palette);
+  if (!tinted.has(key)) tinted.set(key, Object.fromEntries(Object.entries(baseSprites()).map(([k, list]) => [k, list.map((c) => recolor(c, palette))])));
+  return tinted.get(key);
+}
+function baseSprites() {
   if (sprites) return sprites;
   sprites = { tuft: [], pebble: [], leaf: [], reed: [], speck: [], flower: [] };
   const px = (g, x, y, c) => { g.fillStyle = c; g.fillRect(x, y, 1, 1); };
@@ -208,7 +223,7 @@ function buildParticles(world) {
 /** Draw the baked particles of one floor chunk (world px origin wx, wy). */
 export function drawCastleParticles(g, world, wx, wy) {
   const buckets = world.castleParticles || (world.castleParticles = buildParticles(world));
-  const spr = particleSprites(), key0x = Math.floor(wx / PARTICLE_CHUNK), key0y = Math.floor(wy / PARTICLE_CHUNK);
+  const spr = particleSprites(world.map.castleGround), key0x = Math.floor(wx / PARTICLE_CHUNK), key0y = Math.floor(wy / PARTICLE_CHUNK);
   // a chunk draws its own bucket and the neighbours' particles that overhang its edge
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const b = buckets.get((key0x + dx) + ',' + (key0y + dy));
@@ -313,7 +328,8 @@ export function drawCastleWater(ctx, world, vr, time, touch) {
   ctx.save();
   ctx.lineCap = 'round';
   ctx.lineWidth = 1.1;
-  for (let k = 0; k < 3; k++) { ctx.strokeStyle = `rgba(176,226,226,${0.1 + k * 0.12})`; ctx.stroke(streaks[k]); }
+  const [sr, sg, sb] = map.castleWater?.streak || [176, 226, 226];
+  for (let k = 0; k < 3; k++) { ctx.strokeStyle = `rgba(${sr},${sg},${sb},${0.1 + k * 0.12})`; ctx.stroke(streaks[k]); }
   ctx.fillStyle = 'rgba(225,245,240,0.55)'; ctx.fill(foam[0]);
   ctx.fillStyle = 'rgba(190,225,225,0.35)'; ctx.fill(foam[1]);
   ctx.fillStyle = 'rgba(255,255,240,0.8)'; ctx.fill(glints);

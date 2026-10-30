@@ -286,6 +286,13 @@ export function generateCaverns(depth, biome, seed, force = null) {
       if (walk[j] && (reg[j] === REG.plateau || reg[j] === REG.gallery)) { walk[i] = 0; reg[i] = REG.rock; wet[i] = 0; lvl[i] = NaN; }
     }
   }
+  // where the gallery runs close by, that seam eats the notch's far end (about one seed in a hundred): the passage
+  // then ends at its last open tile on the way in, so the route ends on floor and the shaft is entered there
+  for (let k = 0; k < 30; k++) {
+    const [x, y] = XY(notchIn);
+    if (walk[I(Math.floor(x), Math.floor(y))]) break;
+    notchIn[0] += (notch[0] - notchIn[0]) * 0.12; notchIn[1] += (notch[1] - notchIn[1]) * 0.12;
+  }
 
   // ---------------------------------------------------------------- floor relief in the main caves
   // caverns: a mound or two, maybe a pool; every walkable tile then smoothed and held under the climb limit

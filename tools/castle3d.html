@@ -6,7 +6,8 @@
 <title>Castle 3D</title>
 <!-- The Castle's masonry (src/world/castle3d.js) in three.js: an orbit viewer, and the bake used by tools/castle3d_bake.js
      (per-tile pieces cut from the game camera's view, building roofs, door and drawbridge frames). Only this tool runs
-     three.js; the game draws the baked pieces. http://localhost:8123/tools/castle3d.html (add ?bake for no viewer). -->
+     three.js; the game draws the baked pieces. http://localhost:8123/tools/castle3d.html (add ?bake for no viewer, and
+     &v=<id> for a castle variant of src/data/castles.js: its layout and its materials). -->
 <style>
   html, body { margin: 0; height: 100%; background: #1d1c22; color: #ccc; font: 13px sans-serif; overflow: hidden; }
   #hud { position: fixed; left: 8px; top: 8px; }
@@ -25,6 +26,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { castle3d, C3 } from '../src/world/castle3d.js';
+import { castleVariant } from '../src/data/castles.js';
 
 // World units: one screen px at 1x. A tile is 32*sqrt2 across (its edges project to 32 x 16 px), a level is 4 px up
 // (the camera looks 30 degrees down, so world height is scaled by 1/cos 30).
@@ -32,10 +34,11 @@ const TU = 32 * Math.SQRT2, LU = 4 / Math.cos(Math.PI / 6);
 const U_TILES = 1, V_PX = 98;    // the masonry repeats every tile along a wall (so straight runs repeat exactly)
 const P = new URLSearchParams(location.search);
 const LOOK = { amb: 0.3, sky: 0.3, sun: 1.15, sunDir: [-0.6, 0.85, 0.5], bump: 3, tone: 0xbab4ac };
+let VARIANT = castleVariant(P.get('v'));   // the castle being built (castle3d_bake.js sets it with setVariant)
 
 const load = (src) => new Promise((ok, no) => new THREE.TextureLoader().load(src, ok, undefined, no));
 async function materials() {
-  const M = {};
+  const M = {}, X = VARIANT.look?.mat || {};
   const tex = async (name, rep = true) => {
     const t = await load(`../assets/source/castle3d/tex/${name}.png`);
     t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = rep ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -46,16 +49,18 @@ async function materials() {
     bump.colorSpace = THREE.NoColorSpace;
     return new THREE.MeshStandardMaterial({ map, bumpMap: bump, bumpScale: LOOK.bump, roughness: 0.92, metalness: 0, color: o.color ?? LOOK.tone, side: THREE.FrontSide });
   };
-  M.ashlar = await mk('ashlar');
-  M.walk = await mk('ashlar', { color: 0x9a948c });
-  M.setts = await mk('ashlar', { color: 0x8c8780 });
+  // a variant swaps the textures and tints of the stone, walks, treads, the cathedral, the dais, roofs and timber
+  const pick = async (k, tex, color) => (X[k] ? mk(X[k][0], { color: X[k][1] }) : mk(tex, color == null ? {} : { color }));
+  M.ashlar = await pick('ashlar', 'ashlar');
+  M.walk = await pick('walk', 'ashlar', 0x9a948c);
+  M.setts = await pick('setts', 'ashlar', 0x8c8780);
   M.lead = await mk('slate', { color: 0x7c8088 });
   M.glass = new THREE.MeshStandardMaterial({ color: 0x15171d, roughness: 0.35, metalness: 0.2 });
   M.slit = new THREE.MeshStandardMaterial({ color: 0x0c0b0a, roughness: 1 });
-  M.marble = await mk('chapel', { color: 0xfff6e8 });
-  M.chapel = await mk('chapel');
-  M.slate = await mk('slate', { color: 0xe6e9f0 });
-  M.wood = await mk('wood', { color: 0xc8c0b8 });
+  M.marble = await pick('marble', 'chapel', 0xfff6e8);
+  M.chapel = await pick('chapel', 'chapel');
+  M.slate = await pick('slate', 'slate', 0xe6e9f0);
+  M.wood = await pick('wood', 'wood', 0xc8c0b8);
   M.iron = await mk('iron');
   return M;
 }
@@ -190,7 +195,7 @@ function build(M, layout, only = null) {
       const t = 0.6;
       for (const [side, ax, a0, a1, c0, c1, out] of [['N', 'x', p.x0, p.x1, p.y0, p.y0 + t, false], ['S', 'x', p.x0, p.x1, p.y1 - t, p.y1, true],
         ['W', 'y', p.y0 + t, p.y1 - t, p.x0, p.x0 + t, false], ['E', 'y', p.y0 + t, p.y1 - t, p.x1 - t, p.x1, true]]) {
-        if (side === p.open) continue;
+        if (p.open && p.open.includes(side)) continue;   // one side ('S') or two at a corner ('SE')
         merlonRow((g, m) => add(g, m, layer, roof), ax, a0, a1, c0, c1, p.z, out, p.m);
       }
     } else if (p.t === 'ringParapet') {
@@ -295,7 +300,14 @@ function outward(g, p, both = false) {
 }
 
 // ------------------------------------------------------------------ rendering
-let renderer, scene, sun, SHADOW_FIXED = false;
+let renderer, scene, sun, SHADOW_FIXED = false, SHADOW_BOX = [170, 136, 5200];
+// the fixed shadow frustum over a whole castle: the first castle's own, else round the masonry's bounding box
+function shadowBox(layout) {
+  if (VARIANT.layout.shadow) return VARIANT.layout.shadow;
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (let i = 0; i < layout.struct.length; i++) if (layout.struct[i] || layout.bld[i]) { const x = i % C3.W, y = (i / C3.W) | 0; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return [(x0 + x1) / 2, (y0 + y1) / 2, Math.max(5200, Math.hypot(x1 - x0, y1 - y0) / 2 * TU * 1.15)];
+}
 function setup() {
   renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(1); renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -321,8 +333,8 @@ function aimSun(cam, sx, sy, w, h) {
   const cx = sx + w / 2, cy = sy + h / 2, ground = new THREE.Vector3((cx / 32 + cy / 16) / 2 * TU, 0, (cy / 16 - cx / 32) / 2 * TU);
   sun.position.copy(ground).addScaledVector(d, 6000); sun.target.position.copy(ground); sun.target.updateMatrixWorld();
   // one fixed shadow frustum for the whole castle when baking pieces, so identical tiles get identical shadows
-  const r = SHADOW_FIXED ? 5200 : Math.max(w, h) * 0.9;
-  if (SHADOW_FIXED) { const c = new THREE.Vector3(170 * TU, 0, 136 * TU); sun.position.copy(c).addScaledVector(d, 6000); sun.target.position.copy(c); sun.target.updateMatrixWorld(); }
+  const r = SHADOW_FIXED ? SHADOW_BOX[2] : Math.max(w, h) * 0.9;
+  if (SHADOW_FIXED) { const c = new THREE.Vector3(SHADOW_BOX[0] * TU, 0, SHADOW_BOX[1] * TU); sun.position.copy(c).addScaledVector(d, 6000); sun.target.position.copy(c); sun.target.updateMatrixWorld(); }
   Object.assign(sun.shadow.camera, { left: -r, right: r, top: r, bottom: -r, near: 10, far: 14000 });
   sun.shadow.camera.updateProjectionMatrix();
 }
@@ -348,8 +360,8 @@ function renderPass(group, cam, w, h, tag) {
 
 /** Bake the masonry into per-tile pieces. S: render px per world px. Returns pieces (deduplicated) and tile refs. */
 async function bake(S = 2, VP = 2048) {
-  const layout = castle3d(), M = await materials();
-  setup(); SHADOW_FIXED = true; sun.shadow.mapSize.set(8192, 8192);
+  const layout = castle3d(VARIANT), M = await materials();
+  setup(); SHADOW_FIXED = true; SHADOW_BOX = shadowBox(layout); sun.shadow.mapSize.set(8192, 8192);
   const group = build(M, layout, (p) => !p.roof);
   scene.add(group);
   // screen extent of the castle (world px)
@@ -503,7 +515,7 @@ function drawbridgeFrame(M, D, angle) {
   return g;
 }
 function portcullisFrame(M, D, lift) {
-  const g = new THREE.Group(), y = 202.15, z0 = lift, z1 = lift + 19;
+  const g = new THREE.Group(), y = D.portcullis ?? 202.15, z0 = lift, z1 = lift + 19;
   for (let k = 0; k <= 6; k++) { const x = D.x0 + (D.x1 - D.x0) * k / 6; g.add(slab(M, x - 0.06, y, x + 0.06, y + 0.12, z0 - 1.2, z1, 'iron')); }
   for (let k = 0; k <= 5; k++) { const z = z0 + 1 + k * 3.4; g.add(slab(M, D.x0, y - 0.02, D.x1, y + 0.14, z, z + 0.6, 'iron')); }
   return g;
@@ -567,7 +579,8 @@ function bakeFrames(M, layout, S) {
   const res = { drawbridge: null, portcullis: null, doors: [] };
   const ease = (k) => k / (N - 1);
   res.drawbridge = { anchor: [(D.x0 + D.x1) / 2, D.hinge + 0.02], frames: shoot([...Array(N)].map((_, k) => drawbridgeFrame(M, D, Math.PI / 2 * (1 - ease(k)))), [(D.x0 + D.x1) / 2, D.hinge + 0.02], [D.x0 - 1, D.hinge - 2, D.x1 + 1, D.y1, 42]) };
-  res.portcullis = { anchor: [(D.x0 + D.x1) / 2, 202.2], frames: shoot([...Array(N)].map((_, k) => portcullisFrame(M, D, 16 * ease(k))), [(D.x0 + D.x1) / 2, 202.2], [D.x0, 201, D.x1, 203, 40]) };
+  const py = (D.portcullis ?? 202.15) + 0.05;   // the portcullis groove, just inside the gate's mouth
+  res.portcullis = { anchor: [(D.x0 + D.x1) / 2, py], frames: shoot([...Array(N)].map((_, k) => portcullisFrame(M, D, 16 * ease(k))), [(D.x0 + D.x1) / 2, py], [D.x0, py - 1.2, D.x1, py + 0.8, 40]) };
   layout.doors.forEach((d, i) => {
     const phis = [0, 0.3, 0.6, 0.9, 1.2, Math.PI / 2];
     const across = d.axis === 'x' ? d.y : d.x, along = d.axis === 'x' ? d.x : d.y;
@@ -597,7 +610,7 @@ async function bakeAll(S = 2) {
 
 // ------------------------------------------------------------------ viewer
 async function view() {
-  const layout = castle3d(), M = await materials();
+  const layout = castle3d(VARIANT), M = await materials();
   setup();
   const group = build(M, layout);
   scene.add(group);
@@ -615,7 +628,7 @@ async function view() {
 }
 /** One framed view (roofs on), centred on tile (tx, ty): w x h world px at S render px each, on a grass ground. */
 async function preview(tx, ty, w = 1400, h = 900, S = 1) {
-  const layout = castle3d(), M = await materials();
+  const layout = castle3d(VARIANT), M = await materials();
   if (!renderer) setup();
   const group = build(M, layout);
   scene.add(group);
@@ -631,7 +644,7 @@ async function preview(tx, ty, w = 1400, h = 900, S = 1) {
 }
 /** Debug: the gate with the portcullis at `lift` and the drawbridge at `angle`, masonry visible. */
 async function gateDebug(lift = 16, angle = 0.6) {
-  const layout = castle3d(), M = await materials();
+  const layout = castle3d(VARIANT), M = await materials();
   if (!renderer) setup();
   const group = build(M, layout, (p) => !p.roof), D = layout.drawbridge;
   const pc = portcullisFrame(M, D, lift), db = drawbridgeFrame(M, D, angle);
@@ -643,14 +656,14 @@ async function gateDebug(lift = 16, angle = 0.6) {
   return renderer.domElement.toDataURL('image/png');
 }
 async function bboxDebug() {
-  const layout = castle3d(), M = await materials(), D = layout.drawbridge, out = {};
+  const layout = castle3d(VARIANT), M = await materials(), D = layout.drawbridge, out = {};
   for (const [k, a] of [['flat', 0], ['up', Math.PI / 2]]) { const g = drawbridgeFrame(M, D, a); g.updateMatrixWorld(true);
     const b = new THREE.Box3().setFromObject(g); out[k] = [b.min.x / TU, b.min.z / TU, b.min.y / LU, b.max.x / TU, b.max.z / TU, b.max.y / LU].map((v) => +v.toFixed(2)); }
   const pc = portcullisFrame(M, D, 0); const b = new THREE.Box3().setFromObject(pc); out.pc = [b.min.x / TU, b.min.z / TU, b.min.y / LU, b.max.x / TU, b.max.z / TU, b.max.y / LU].map((v) => +v.toFixed(2));
   return out;
 }
 async function doorDebug(i = 0, phi = 0.6) {
-  const layout = castle3d(), M = await materials(), d = layout.doors[i];
+  const layout = castle3d(VARIANT), M = await materials(), d = layout.doors[i];
   if (!renderer) setup();
   const group = build(M, layout, (p) => !p.roof), df = doorFrame(M, d, phi);
   scene.add(group, df);
@@ -660,7 +673,8 @@ async function doorDebug(i = 0, phi = 0.6) {
   scene.remove(group, df);
   return renderer.domElement.toDataURL('image/png');
 }
-window.CASTLE3D = { bakeAll, preview, castle3d, gateDebug, bboxDebug, doorDebug };
+const setVariant = (id) => { VARIANT = castleVariant(id); return VARIANT.id; };
+window.CASTLE3D = { bakeAll, preview, castle3d, gateDebug, bboxDebug, doorDebug, setVariant };
 if (!P.has('bake')) view();
 </script>
 </body>

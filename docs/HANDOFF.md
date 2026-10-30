@@ -14,6 +14,407 @@ Contents
 
 ---
 
+## October 29, 2026 — optimization and pathing sweep of every map, for phones (branch `perf/mobile-map-sweep`)
+- **Request:** an optimization sweep and pathing check of all maps, especially the newest modes, optimized for mobile in
+  particular; make sure it looks great and runs great on all platforms.
+- **How it was measured:** no GPU in this container (SwiftShader), so draw times say little about a phone; the script
+  cost does. New `tools/tests/mode_cpu.js [modes] [secs] [throttle]`: a hero auto-plays each kind of map on the 844x390
+  touch layout at 4x CPU throttle and it prints ms per frame in `game.update` (and render's own script), the worst
+  frame and what inside costs most (inclusive/self). New `defense/tests/perf.js` does the same for a Defense battle on an
+  iPhone-sized screen, `defense/tests/maps.mjs` checks every Defense stage's routes and posts (no browser).
+- **Found and fixed (CPU; every change checked to give identical results where it says so):**
+  - Auto-play's distance field (`buildNav`): the plain BFS (dunes, caverns, forest: 36k-60k tiles every 0.35 s) went
+    through `walkableTile`/`stepsOk` calls; now straight off the typed arrays and `map.stepMask()` (identical fields,
+    0 of 410k tiles differ; 2.8x faster on the dunes, 4x in the caverns). `frontier()` allocated an array and closure
+    per tile each second; now inline (same tile).
+  - The Castle's road field (`buildRoadNav`, 100k tiles): two `Set.has` per step for the raised drawbridge; a byte
+    mask now (23-27 ms -> 9 ms a build, identical c/d/p). And it no longer runs in one go: `roadJob`/`stepRoadNav`
+    build the next field over the following frames, 2 ms a frame, while the last one serves (identical when sliced
+    into 24-42 pieces); `roadPath` joins the way at its point nearest the hero (the field's origin can lag a few tiles);
+    a hero more than 6 tiles from the origin (a teleport) gets it at once.
+  - Monster A* (`findPath`) and the flow field read the typed arrays and `stepMask` too (identical paths on 2,100
+    random queries over 7 maps, identical flow fields). The A* budget is now 10 searches *and* 3 ms a frame (the first
+    always runs; a monster without one keeps its path and tries next frame), and path smoothing looks at most 24 nodes
+    ahead (movers re-plan long before; a long castle path was smoothed against its far end first, costing more than
+    the search). `map.stepMask()` is built in `setWorld`, behind the loading screen.
+  - The small minimap walked every tile of the map 5x a second (100k in the Castle) before culling; now only the
+    window it shows (pixel-identical; Castle 3.9 -> 1.3 ms).
+  - `renderWorld` projected every prop (2,600 in the Castle, 1,100 in the Wilds) each frame to cull it; a tile-box
+    pre-filter (the view widened by the farthest any prop reaches and the ground's height range, `propReach`, built in
+    `setWorld`) skips ~80% of them first; checked over 11 maps x 40 views: never drops a prop the exact test keeps. Not
+    used on the Serpentine Tower (its warp bends tile space).
+  - The HUD read two element rects (a forced layout) every 0.25 s for the log's height; now only when the buff row's
+    size or the layout changes.
+  - Result, `game.update` at 4x throttle, mean / worst frame (before -> after): Castle 24.9/191 -> 11.3/30 ms, dunes
+    16.7/109 -> 6.5/21, Dark Forest 18.6/196 -> 9.0/27, Depth's Edge 9.0/26 -> 4.7/9, Mountainside 12.2/30 -> 6.1/17,
+    Catacombs 14.1/34 -> 8.2/28, town 1.8/57 -> 1.2/6; Breach, Sky Battle, Tower, rifts unchanged (already 2-12 ms;
+    the rift's worst frames are 17-34 ms, a single 139 ms frame seen once did not come back in three more rifts).
+- **Pathing bugs found and fixed:**
+  - **Depth's Edge Caverns:** about 1 seed in 120 the route was cut short of the notch (3 of 360 seeds): the seam of
+    rock kept between the high gallery and the floor below ate the notch's inner end where the gallery ran close, so
+    `notchIn` (the route's last waypoint and the shaft trigger) was solid rock. `generateCaverns` now pulls `notchIn`
+    back along the notch to its last open tile (good seeds unchanged: nothing is drawn from the RNG).
+    `caverns_map.mjs 60` (360 seeds) all ok; `caverns.js 0` (auto-play delve, climb, summit) passes.
+- **Checked, no bugs:** every generator (`dunes_map.mjs all`, `caverns_map.mjs`, `breach_gen.mjs` 60 seeds,
+  `sea_of_sand_generation.mjs` 100, `castle_overworld.mjs` 11 castles x 55 seeds x 35 scenarios), Defense's 300 stages
+  (461 routes, every rift reaches the Heart by the shortest road), `mobs.js` (389 monsters, 0 stuck, every guardian
+  arrives), `pets.js`, `legion.js`, `autoloops.js`, `castle_autoplay.js`, `castle_variants.js` (in 25 / 48 s),
+  `scenarios.js` (all finish; the two rampart fights' 28 s waits are the known ones).
+- **Mobile / all platforms:**
+  - **three.js is vendored** (`vendor/three/`, 0.170.0, MIT, 690 KB): the import maps (`index.html`,
+    `defense/index.html`) pointed at cdn.jsdelivr.net, which this container (and any network that blocks or loses it)
+    can't reach; the Tower and the Caverns then fell back to the Wilds, the pyramids to the flat maze, Defense's packs
+    failed. Same origin also saves a phone a DNS + TLS handshake. The tools' bake pages still use the CDN.
+  - **Canvas filters everywhere:** WebKit has long lacked `ctx.filter` or drawn offscreen canvases unfiltered, so
+    baked tints (wall hangings, frozen/charmed monsters, slime colours, pet tints, the target window, Defense's elite /
+    ghost monsters and region recolours) came out plain on iPhones. `util.drawFiltered` / `filterPixels` (both games)
+    test once and otherwise put the colour filters through the pixels by the CSS matrices (within 4/255 of Chromium's
+    own; `globalThis.VELSCOUR_NO_CANVAS_FILTER = true` forces the fallback for tests). Defense's corpses and stunned
+    heroes used a `ctx.filter` every frame; now baked looks.
+  - **Phone HUD:** the scenario objective (dunes, Dark Forest, Breach) sat on the stance buttons at 844x390, also on
+    Greed and the stats at 667x375, and on the stats and the menu column in portrait; MADNESS/SMITE crossed the Auto
+    button in portrait. Moved (under the stance row in landscape; the rift bar's place in portrait; the bars to the
+    left column): no overlaps at 844x390, 667x375, 390x844, 1280x720.
+- **Left alone (worth knowing):** the 3D modes' cost under SwiftShader is ~80% PBR fragment shading (Tower: MeshStandard
+  with bump maps and 6 lights); a real phone GPU does that far faster, so the look was kept (switching to Lambert on
+  touch would be the lever if a real phone struggles). Defense's battle script is light (sim < 1 ms, draw ~9 ms at 4x).
+  A Defense change was tried and taken back: giving stages 178 and 258 (exactly as many roadside posts as heroes) a
+  spare post moved the seeded dedicated Commander from stage 260 to 298 by day 56, so the fitted calendar leans on
+  them; `maps.mjs` lists them and fails only if a stage ever has fewer posts than heroes.
+- **Verified:** the above, plus `flow.js`, `mobile.js`, `hud.js`, `seethrough.js` (3 of 3; one failure under full
+  load, flaky as noted before), `town.js`, `rooms.js`, `overworld.js`, `autoplay.js wizard 5 mobile`, `castle_walls.js`,
+  `tower.js 0 0,1 noauto`, `dunes.js golden`, `dark_forest.js noshots noauto`, `mountain.js noshots noauto`,
+  `breach.js`, `rifts.js` (+ `phone`), `sea_of_sand.js`, `spectate.js mobile`, `defense/tests/iphone.js`,
+  `modes_smoke.mjs 30`. `defense/tests/defense.js mobile` fails "mode bossrush/vault" on `main` too, and its 3D pack
+  step needs 3-6 more taps than it gives under SwiftShader, on `main` too.
+- **Not verified:** real phones and Safari/WebKit (still only Chromium emulating them); GPU frame times.
+- **Second pass, the rest of the main game** (the user: "do this on normal VELSCOUR too"):
+  - Pathing everywhere: `rooms.js` on all 33 dungeon biomes x 4 levels (every floor tile, exit and chest reachable),
+    `mobs.js 41` (every one of the 41 biomes: 1,239 monsters, 5 stuck = 0.4%, every guardian arrives; the test now loads
+    each biome's art with `game.loadLevelArt`, it threw on the Dark Forest past its first ten levels),
+    `biome_scenarios.js` on all 32 biomes (640 scenarios, all finish), `velscour.js noauto`, `raid.js 30`.
+  - `mode_cpu.js dungeons,raid,velscour,unbound` (every dungeon biome, a BOSS ROOM, Velscour, Unbound; new modes and
+    `PHONE=portrait`): 6-15 ms of update a frame at 4x, render script 8-24 ms, spread over many small loops (no single
+    lever left; the particle cap is already 1,400 on touch). Portrait runs in line with landscape.
+  - **Velscour's demons:** his summons' looks were chosen (and their sprites built) on the frame the first one stepped
+    out (a 45-96 ms frame at 4x). `setupVelscour` chooses them with the level, and `warmLevelArt` now also builds every
+    look the level has chosen (`looks.all()`), not only those of the creatures standing in it. No spike in three fights;
+    live canvases +~50 (+3 MB) on entering a level, no growth over a seeded 12-level `levelmem` run against `main`.
+  - **Phone HUD in fights:** in boss fights and rifts the boss bar ran over the area name, the stats and the menu
+    buttons, the rift bar over the stance, MADNESS/SMITE over the target window (portrait), the log over the target
+    window and the auto-play line (landscape). Landscape: one centre column under the stance/Greed row (`--cc-left`)
+    stacks the boss bar, then the rift bar or the objective; the log is fitted below the whole left column (only a line
+    or two while a target is up on a short phone). Portrait: MADNESS/SMITE (and Rage) on the right under Greed, the boss
+    bar in its own band below, the rift bar and the objective moved into the left column's flow (`layoutMobile`).
+    No overlaps in the Dunes, Dark Forest, Breach, rifts, BOSS ROOMs, Velscour and the castles at 844x390, 667x375 and
+    390x844. `mobile.js`, `hud.js`, `rifts.js phone`, `spectate.js mobile`, `breach.js town,rules`, `options.js` pass.
+
+## October 29, 2026 — Riftgate at portal size, VELSCOUR DEFENSE on the title screen (branch `feat/riftgate-title`)
+- **Request:** make the blue portal to the Defense game the same size as the other portals, and add a blue button
+  to the title screen that goes to VELSCOUR DEFENSE as well.
+- **Done:** `drawRiftgate` (`src/gfx/riftgate.js`) draws its whole effect at `SCALE` 0.65 round its foot, so the vortex
+  matches the dungeon and Breach portals (drawn 1.3x in `drawPortal`); its `reach` is 1.7 like theirs. The title
+  menu has a `btn blue` VELSCOUR DEFENSE button under Heroes (`.btn.blue` in `css/style.css`) that opens
+  `defense/index.html`.
+- **Verified:** `tools/tests/riftgate.js` (12 seeds, now also clicks the title button), `flow.js`, `titlefx.js`;
+  title shots at 1280x720, 844x390 and 390x844.
+
+## October 29, 2026 — VELSCOUR DEFENSE: Acts II-V (300 stages), side modes, balance for months, iPhone (branch `feat/defense-act2`)
+- **Request:** balance the Defense game thoroughly so it can't be beaten in a day and takes weeks upon weeks of
+  stronger cards to reach the end; use tons of different VELSCOUR monsters; add 120 levels (Acts II and III) and more
+  cards; then go to level 300 with two more acts, letting players get quite a way before it gets hard and stalls,
+  with other modes (different endless and challenge modes) for currency and pulls on the side; pinch-to-zoom and
+  mouse-wheel zoom; remove auto-campaign; make the UI fit an iPhone in portrait and landscape, especially the cards.
+  Then commit, PR and merge.
+- **Done:** see [`defense/docs/DEFENSE.md`](../defense/docs/DEFENSE.md): five acts and 30 regions (300 stages, 5,000
+  waves, 40 maps, all 690 painted monsters fielded, captains/warlords and three new monster roles), 584 dialogs
+  (`part5-12.js`, the arc in `defense/docs/STORY.md`), 3,106 cards (96 heroes, 64 relics, 690 monster trophies),
+  Rift Seals, essence, Awakening to 10 stars, ten side modes (`meta/modes.js`, the Modes tab), pinch/wheel zoom and
+  drag-pan, auto-campaign removed, auto-battle that holds every road, the iPhone layout pass (safe areas, a portrait
+  battle HUD, cards and 3D packs fitted to narrow screens).
+- **Design calls made without asking** (worth confirming): the time gate is Rift Seals (40, one every 30 minutes;
+  a battle without one pays a seventh of its gold) rather than stamina, so play is never blocked; essence is the
+  scarce currency (ascension, Awakening, refining) and Awakening to 10 stars is the long sink; the calendar the curve
+  is fitted to (day 1 about 40 stages, day 7 about 100, day 28 about 165, the Demon Lord after three to four months);
+  the challenges sit at 50-80% of the frontier's strength so a player keeping pace wins them; the Works' Forge of Valor
+  goes to level 120 as the late gold sink; Bastion's Resolve builds to +60%; armour grows slowly after Act I (it made physical heroes useless late); Act IV/V region names and bosses; the final
+  boss is "Velscour's Shadow" (the Demon Lord himself stays the main game's).
+- **Verified:** `defense/tests/balance.mjs` with real battles: a casual Commander wins on day 104, a dedicated one
+  is at 267 of 300 on day 84 (calendar 268), a grinder at 259 on day 42; nobody passes stage 29 on day 1 or 134 in a
+  week (table in DEFENSE.md); `calibrate.mjs` (two seeds a stage, per-map terrain factors),
+  `defense/tests/iphone.js` (every view fits at 390x844 and 844x390, no errors), `defense/tests/defense.js` (menus,
+  stages from all five acts, three modes, wheel zoom, 3D packs, inspector), `defense/tests/modes_smoke.mjs`,
+  `defense/tools/check_dialogs.mjs` (584 dialogs, 0 problems).
+- **Not verified:** real iPhones and Safari (Chromium with an iPhone viewport and touch only); human play balance
+  (the curve is fitted to auto-play).
+
+## October 29, 2026 — VELSCOUR DEFENSE: a separate tower-defense card game behind the Riftgate (branch `feat/velscour-defense`)
+- **Request:** a bigger, crazier blue/black portal in town leading to a completely different game in the VELSCOUR
+  universe, VELSCOUR DEFENSE: a gacha game with no microtransactions (heroes, gear and more to roll for), named
+  characters of each class built from all of VELSCOUR's art (the newest held weapons too), everything as packs of
+  cards that look like Magic: The Gathering cards, 3D foil pack opening, Fantasica as the model (5 videos, articles,
+  screenshots researched) but free, a character tower defense on predetermined paths with VELSCOUR's monsters and
+  class projectiles/slashes, isometric with height mapping, an auto-play mode, at least 80 levels, 20 dialogs from each
+  of the 16 characters at the beginning and end of levels, and kept in its own area of the codebase. Then: 1,000 waves
+  that get incrementally harder; in-match upgrades that reset and permanent ones outside; 30 maps that unlock as you
+  clear them; tests and iteration so it is not too easy but not too steep; daily login and hourly rewards; red dots;
+  an auto-play that plays well and upgrades heroes (but never spends currency or opens packs); all sorts of powers;
+  the Bard's music only on an occasional charge-up attack. Then commit, PR and merge.
+- **Done:** see [`defense/docs/DEFENSE.md`](../defense/docs/DEFENSE.md) (the design, the Fantasica findings, the systems,
+  the difficulty fitting) and [`defense/docs/STORY.md`](../defense/docs/STORY.md) (the cast and the arc). All in
+  `defense/` (own page, modules, save, tests, tools); the main game only gained `src/gfx/riftgate.js`, the Riftgate
+  in `enterTown` (`world.portals`, after the dungeon portal, the Breach and before the Abyssal Rift gate) with
+  `confirmRiftgate`, and one line in `drawPortal`.
+- **Design calls made without asking** (worth confirming): Fantasica's heroes-as-towers (no blocking, no hero life) over
+  classic blockers; 80 stages share the 1,000 waves (6 to 20 per stage) rather than an endless mode; stages 31-80 replay
+  the 30 battlefields turned, in their region's tiles; Bastion's Resolve (+6% attack per defeat in a row at a stage, up
+  to +36%) so no stage walls; gold levels every hero to 100 and duplicates only add stars; the Bastion Works research
+  is the Commander's, not auto-play's; Defense's eighth region is "Beyond the Riftgate" (the main game has an Abyssal
+  Rift gate); the Bard plays one of the main game's two-bar melodies on the harpsichord in Crescendo.
+- **Verified:** `defense/tests/defense.js` and `defense.js mobile` (boot, every menu, briefing, a stage played on auto
+  through its scenes to a win, five later regions, an Armory pack and a hero x10 summon in 3D, the inspector),
+  `defense/tests/balance.mjs` (the whole campaign in about 200 auto battles, 57 of 80 first-try wins, worst stage a
+  dozen tries), `defense/tools/check_dialogs.mjs` (320 dialogs), `tools/tests/riftgate.js` (12 town seeds), `flow.js`.
+- **Not verified:** real phones and Safari/iOS; human play balance (the curve is fitted to auto-play).
+
+## October 28, 2026 — auto-play loops and the waits left (branch `fix/autoplay-loops`)
+- **Request:** a gifted level-350 Lancer stood in a won Abyssal Rift (Tier 1, Obsidian Vault, Warlord Brannoc slain)
+  in its loot pile, "AUTO · Picking up Ruv Sigil", 30 s DPS 0; "go over all the pathing stuff everywhere", characters
+  stuck in weird loops or waiting for things that take too long to spawn.
+- **Not reproduced exactly** (the gifted Lancer leaves a won rift 2-4 s after the win in every headless run, with a
+  full bag and auto-pickup too), so every way auto-play could go round in circles there was closed:
+  - **Loot** (`lootStep`): the 8 s give-up clock was shared and reset whenever the target changed or a frame found
+    nothing, so two items it couldn't take (or one it lost sight of for a frame) kept it "Picking up" for good; a pile
+    it couldn't take cost 8 s an item. Now the time is summed per target (`spend`, also shrines and commissions), and
+    10 s with nothing coming off the ground gives up everything within 6 tiles (`lootDry`). Items dropped from the bag
+    (`dropFromBag`, also auto-play's `makeRoom`) are never auto-picked up again (`g.dropped`; a click still takes them).
+  - **Frozen hero** (`Player.update`): the Caverns (`toShaft`), the Dunes' tomb and the Tower's roof sweep the
+    hazards away when a section changes; a dash, leap or beam the hero was in kept `p.channel` pointing at the swept
+    effect, so he could never move or attack again. A channel no longer in the world's hazards is now let go.
+  - **Fights** (`combat`): the no-damage watchdog was 12 s / 25 s and started over whenever the target changed; it is
+    per target now (`stalls`), walks right up at 4 s, damage only at 6 s, leaves it 30 s at 12 s. A shunned foe used
+    to be fought on when it was the only one in sight (`pickTarget` skips it only with others about): `foes` and
+    `huntGoal` now leave shunned foes out. Hunting a foe gains no ground in 8 s of trying (`hunts`): shunned 30 s.
+  - **Dodging** (`goTo` → `holdEdge`): with a telegraph or burning ground between him and his goal he stepped in,
+    dodged out and stepped in again each frame ("Dodging!" flipping 55 times in 8 s). He now waits at the edge up to
+    1.5 s, then walks through (2 s of no dodging while above 60% life); not when running for cover or a raid mechanic.
+  - **Scenario markers**: the escort's "far altar" is only where to lead the soul (its `use` does nothing) but
+    auto-play walked to it and "used" it for 20 s; markers with `inert` are skipped. Scenario markers' statuses read as
+    their labels ("Smash the idol", not "Opening the The far altar").
+- **Spawn waits** (the rule from the entry below):
+  - **Dungeon scenarios** (`scenarios.js`): the relic's three waves came 8 s apart whatever happened (now the next
+    comes 0.6 s after one is cut down); the ward's waves 3 s after its attackers are gone (now 0.8 s); the hourglass
+    slaughter's waves every 6 s while its clock ran (now 0.5 s after a wave falls).
+  - **Sea of Sand dune rooms** (`dunes.js`): the guardians woke two at a time 9 s apart (the next pair now stirs 0.6 s
+    after the woken ones fall), the storm's pairs every 5 s and the oasis's waves every 3.2 s even with nothing alive.
+  - **Sky Battle** (`skybattle.js`; a stall soak caught a Necromancer standing on the deck 17-26 s): every wave
+    waited 2.5 s, then boats took 4.5 s to come alongside and 0.9 s to drop the ramp; the flagship's duel ran 26 s with
+    boarders only at 9 s and 18 s. Now the next wave is called while the last two boarders of this one stand, and with
+    nothing on the deck to hit (`S.calm`) `hurry()` brings the next arrival at once, one at a time (a boarder in the
+    air lands in 0.25 s, else a docked boat's next leaps, else the nearest boat is alongside in 0.4 s, else the
+    flyover drops, else the next boat sets out); the flagship closes 6x faster on a clear deck and sends boarders in
+    threes all the way in; beats before the mid-boss/parley scenes 0.3 s, between gauntlet champions 0.3 s. Longest
+    stretch with nothing to hit, first wave to victory: 9-15 s before, 0.83-0.93 s now (docs/SKY_BATTLE.md).
+- **Also fixed:** `townlife.js` dog chase read `dog.goal[0]` after the dog had already arrived (a thrown update).
+- **Left alone:** town errands (10 s with Homunculus, 8-10 s listening to townsfolk) are the town-life features, not
+  loops; zone/hold captures; monster pathing (`mobs.js`: 320 monsters, 0 stuck, every guardian arrives) and pets
+  (`pets.js` passes; its one failure seen once was a flaky idle-wander check, also on `main`).
+- **Tools:** `tools/tests/autoloops.js` builds each loop on purpose and times the escape (on `main`: 47 s for an
+  untakeable pile, frozen for good after a swept dash, 8+ s at the far altar, 33 s on an unhurtable foe, 55 dodges and
+  8 s to cross burning ground; now 9.7 s, free, 0, 11.7 s, 1 dodge and 2.6 s; and out of a won rift 3.5 s after the win).
+  `tools/tests/stalls.js [class] [minutes] [standard|rift|breach] [gift] [autoloot] [fullbag] [god]` is the stall
+  finder that found them: a soak that flags a status unchanged > 7 s, the hero parked 10 s, 15 s without a kill and
+  flip-flops, each with the auto-play state (it never fails; read the flags).
+- **Verified:** `autoloops.js` (all six; the same test on `main` fails five), `flow.js`, `rifts.js` (auto-play: the
+  Guardian dead at 17% of the clock, on to tier 3), `skills.js lancer`, `autoplay.js lancer 12` (depth 4, no deaths)
+  and `paladin 10` (depth 3, no deaths), `mobs.js`, `pets.js`, `happenings.js`, `townlife.js` (every event),
+  `biome_scenarios.js` (every mechanic completes), `dunes.js all`, `skystories.mjs`, `skyship.js all`, `skyship.js
+  stories`, `skyship.js clear auto` (auto-play battles 178-208 s, longest wait 0.9 s outside the captains' own
+  entrances: a 3.4 s rope swing, a 1.3 s leap), the real main loop (rAF, loading, drawing) with a gifted Lancer through
+  rift tiers 1, 4, 7 and 10 (out 2-3 s after each win), and `stalls.js` soaks (Lancer descent, rifts and Breach,
+  Necromancer, Paladin: what is left is long walks, hold objectives and slow fights against uniques).
+- **Not verified:** the user's own save (relics, settings, the bag) was not available; the exact loop in the
+  screenshot never happened headless, on `main` or here.
+
+## October 28, 2026 — no standing about waiting for spawns (branch `fix/no-spawn-waits`)
+- **Request:** the Paladin sometimes stood still for 5-20 s waiting for a scenario's or spawn routine's next monsters;
+  no spawn wait over about a second, but don't spawn everything at once.
+- **Found and fixed** (the rule everywhere: waves stay staggered, but the moment the hero has nothing to hit the next
+  one comes, or whatever is on its way hurries):
+  - **Serpentine Tower roof** (the 5-20 s): 3 s intro, 3.5 s rests, a pirate boat's 5 s approach + 1.25 s ramp + crew
+    0.55 s apart, rope climbs of 2.45 s, and the flagship's 8 s approach + ramp + a 5 s gangplank walk only after the
+    roof was clear. Now 0.1 s beats; the next wave is called while two of the current one still stand; the flagship
+    sails 2.5 s into wave 3; and with nothing on the roof to hit everything arriving hurries (docs/SERPENTINE_TOWER.md).
+  - **Depth's Edge summit**: 2.8 s intro, a 2 s minimum per boss, 4 s rests, adds 0.8 s late. Now 0.1 s beats, adds at
+    once, and a boss climbing the falls finishes in half a second when nothing is up there to hit.
+  - **Cursed Chest**: waves were 7 s apart even when one was dead in two; now the next comes 0.5 s after it falls.
+  - **Velscour's Challenge**: only 5 foes were sent, so a cleared area meant running the clock out; now with no foe
+    within 10 tiles Velscour sends 4-6 more within 0.6 s (staggered drops).
+  - **Dark Forest Lantern Vigil**: waves every 12 s with nothing between. The lantern waves keep their 12 s clock (calling
+    them on clear grew them too fast and the lanterns all went out by 25 s); now, with nothing alive between waves, a
+    small pack comes out of the dark at the hero after half a second. Wisps: 1 s between them, not 1.5 s.
+  - **Ambush entrances** (`mayhem.js enter`): drops 0.75-1 s (were 0.9-1.3), burrows 1 s (were 1.2).
+- **Left alone (not spawn waits):** overworld scenarios already spawn the next phase the moment the last dies; the
+  zone/fairy-ring captures (4-6 s standing on a point) are holds; the Castle rampart fights' "longest wait" in
+  `scenarios.js` is the bot walking the wall walk to foes that already exist.
+- **Verified:** a frame-by-frame measurement of the longest stretch with nothing targetable, from the roof's start to
+  the captain landing (11 tower scenarios) and through the summit (1-3 bosses), with foes dying instantly and 1.5 s
+  after landing: tower 1.0-1.3 s worst (was ~14 s before the captain), summit 0.35-0.7 s. Then `tower.js` (all 20
+  roof scenarios won, portal open; auto-play took the tower in 4 game minutes), `caverns.js` (all 6 summits +
+  auto-play), `dark_forest.js noshots noauto` (all 13 trials; the vigil won, longest wait 2.1 s), `happenings.js`,
+  `mayhem.js`, `flow.js`, `autoplay.js paladin 12` (depth 4, no deaths). `tower.js` now shoots the flagship once it
+  docks and clears wave 3 before waiting for the captain, since the 'ship' step can now last one frame; its wait for a
+  boat stops when the flagship sails (boatless roofs are now won inside that minute). On main as of PR #211:
+  `tower_edge.js`, `flow.js`, `mayhem.js`, `caverns.js 0`, `tower.js 0 0,1,4`, `dark_forest.js noshots noauto` pass.
+  `happenings.js`'s "auto-play used >= 6/9 interactables" is noisy: 12 repeats of that trial gave a mean of 8.25/9 here
+  (one 5/9; one full run 4/9) vs 8.7/9 on main; the low ones had no challenge running and the cursed chest now ends
+  sooner (10-19 s vs 17-21 s), so it reads as chance, but watch it.
+- **Local servers:** a stray "Failed to load resource" 404 can fail a long test's exit code: `python -m http.server`
+  has a listen backlog of 5, so a burst of module requests gets refused on `::1` and Chromium retries
+  `127.0.0.1:8123`, where another project's server may be listening. Serve on a free port with a bigger backlog
+  (`h.ThreadingHTTPServer.request_queue_size = 256`) and set `BASE_URL`.
+## October 28, 2026 — the Sea of Sand's ten dune variants and their pyramids (branch `feat/sea-of-sand-variants`)
+- **Request:** ten new Sea of Sand variants: rolling dunes from height mapping, smooth transitions and desert
+  textures, much bigger than the original with more checkpoints, new scenarios, new enemies and boss fights
+  hand-picked to fit, in a Sea of Sand palette swap. Then: three.js pyramids to explore, BIG ones, entered from
+  outside, going down and round through rooms of fights and scenarios to a boss deep inside and the portal on.
+- **Done:** see [SEA_OF_SAND_DUNES.md](SEA_OF_SAND_DUNES.md). `src/data/dunes.js` (ten variants: sands, sky, dune
+  shape, waystones, pyramid, roster, swap, bosses), `src/world/dunes.js` (the generator: dunes 168-188 tiles a side
+  against the classic 72, six to nine waystones on a zig-zag caravan trail, ridges, oases, the plaza and the
+  pyramid in the far corner; the tomb: seven chambers on a ring of landings and ramped corridors, about 19 tiles
+  down to a 30x30 burial chamber, a treasury), `src/gfx/dunes3d.js` (two three.js scenes; the sand is the pack's own
+  floor tiles unprojected into seamless squares and recoloured; procedural masonry with glyph bands; smooth or
+  stepped pyramids with a gold capstone and a sinking door slab; oases; braziers and sconces; seals; baked
+  obelisks, columns, urns, sarcophagus; a skirt of dunes past the map's edges), `src/game/dunes.js` (eight waystone
+  fights, six tomb-room fights plus a tomb boss, the door, the burial chamber's master, the portal, the HUD, the
+  Quest Log page, auto-play's `objective` and `duty`).
+- **Also fixed on the way:** monster names doubled a look's tint ("Copper Copper Sun Wizard": `monster.js` skips a
+  tint the art's name already has). Auto-play gained a general `duty` push (`autoplay.js`, before combat): a
+  scenario can name a place the hero must reach mid-fight, and after 5 s of fighting he pushes through to it for
+  up to 3 s (only the dunes use it so far).
+- **Design calls made without asking** (worth confirming):
+  - The classic flat maze stays in the rotation as variant 0 of 11, picked at random but never the one seen last
+    (`c.lastSand`). The skull's words `pyramid`, `pyramids`, `dunes`, `tomb` go straight to a dune variant.
+  - The tomb is a second region of the same tile grid (east of the dunes), not a separate level: the party fades
+    from the door to the entrance hall, the way back seals, and only the hero's region is drawn and picked.
+  - The bosses are raid bosses on plain templates (no signature casts) wearing the chosen art: the tomb boss at
+    half life and the master at full. Breakables (obelisks, egg sacs, canopic jars) are static monsters with art
+    `va_crystal`, `eb_m105` and `gold_chalice`.
+  - The 2D light map is driven by a copy of the biome with `dark` 0.06 by day (0.42 at night), not the Sea of
+    Sand's own 0.58, which turned the sunlit sand to mud.
+  - Dig progress is kept when the hero steps off a cache (it used to drain); a room's fight starts only a tile
+    inside it, so its slab never shuts the hero out; a room's foes always arrive inside it (a spawn radius used to
+    reach past the closed slab into the next landing and softlock the room), and any that get out are put back.
+  - Breakable relics have 0.9x a champion golem's life (the waves round them are the fight).
+- **Verified:** `dunes_map.mjs all 8` (10 variants x 8 seeds: trail, tomb, climb, depth, counts), `dunes.js all`
+  (every variant live: picking error 0, a camp, the door, the tomb, a room won, the master killed, the portal
+  walkable, shots looked at), `dunes.js moonlit,copper mobile`, `dunes.js golden auto noflow` (a level-1 paladin in god
+  mode takes the whole level by itself in 40 game minutes: seven waystones by 17, the door, six rooms, the master), `data_check.mjs`,
+  `sea_of_sand_generation.mjs`, `sea_of_sand.js`, `scenarios.js none` (the classic Sea of Sand routes),
+  `balance_model.mjs`, `flow.js`, `hud.js`, `mobile.js`, `autoplay.js wizard 5`. Frame cost at 844x390 on this
+  machine's GPU (d3d11): 60 fps on the dunes and in the tomb, also at 4x CPU throttle.
+- **Not verified:** real phones (only the 844x390 headless layout and a desktop GPU); Safari's WebGL.
+
+## October 28, 2026 — held weapons and off-hands: 50 designs per class set, by rarity (branch `feat/held-gear`)
+- **Request:** the hero visibly holds his weapon and off-hand: three.js models posed in the 2D sprite's fists as if the
+  sprite were a flat card (the user drew the Paladin's mace held across the body, head up on the belt); then every
+  class with a class-fitting off-hand; then 50 unique designs per class weapon/off-hand across the rarities, fancier
+  by rarity, palette-swappable, with small versions as icons and ground drops, gems as glowing dots, rarity glows and
+  particles (fire, frost, lightning crackles, orbits...), faint rarity sparkles on armor/helmets, and settings to turn
+  the held gear and its effects off. The gear must turn with the hero.
+- **Tools:** `tools/handheld3d.js` (the rig: sprite as a depth card, per-armor fists found by template matching, a
+  dome fist the haft passes into; `bakePiece`/`bakeIcon`), `tools/handheld3d_kits.js` (the class poses, `POSE`),
+  `tools/weapons3d_parts.js` (rarity material kits, clean-steel blades with bright edges, jewels, runes, shards,
+  markers), `tools/weapons3d_families.js` (swords, axes, maces, spears, lances, staves, wands, bows, arrows, pistols,
+  bombs, lutes, drums, boomerangs, shields, tomes, orbs, skulls, idols, lanterns, jars, daggers, crossbows, scythes),
+  `tools/weapons3d.js` (35 SETS, 50 seeded designs each: 10/10/9/8/7/6), `tools/weapons3d.html` (review sheets),
+  `tools/weapons3d_bake.js` (bake; `HELD_OUT` bakes elsewhere). Textures: `assets/source/materials/`.
+- **Game:** `assets/sprites/held/` (per set a lossless WebP atlas of held sprites, region masks and icons; json with
+  offsets from the fist, sockets and effect points; `index.json` with every class's fists per armor), `src/data/held.js`
+  (`heldSetOf`, `CLASS_FOCUS`, `heldElement`), `src/gfx/heldart.js` (looks, recolour, the hero composite, icons,
+  inventory portrait, the effects layer), `src/gfx/heldfx.js` (stateless particles), hooks in `Player.artFrame` /
+  `drawArtLayer`, `itemIcon`, `itemIconURL`, ground drops, `loadClassPack`, settings `heldGear` / `heldFx`.
+- **Gameplay change:** new off-hand bases (tome, skull, idol, lantern, jar, bomb, drum, quiver, rang) with spell,
+  crit or cast implicits; every class but the Barbarian now starts and shops with its own off-hand
+  (`CLASSES[].offhand`); random off-hands favour shields and orbs and the wearer's own kind.
+- **Verified:** `heldgear.js all` (16 classes x 5 rarities x both facings, settings, icons, ground), `herolook.js`,
+  `flow.js`, `ui.js`, `hud.js`, `mobile.js`, `autoplay.js gunner 6`, `data_check.mjs`.
+- **Not done:** attack/walk poses (the stance is locked, the gear rides the standing sprite), the select screen shows
+  the hero without his gear, the Paladin's catalog items keep their painted icons, a Ranger with a bow and a shield
+  shows only the bow (both want the left hand).
+
+## October 28, 2026 — the castles on phones (branch `fix/castle-phone-pass`)
+- **Request:** test the new castles, especially on phones. No real phone was available: Chromium emulating one
+  (`tools/tests/castle_phone.js`: touch, 844 x 390 and 390 x 844 at DPR 2, the CPU slowed 4x, the machine's GPU), plus the
+  live site in a phone-sized browser (all eleven castles' pages served from the `/velscour/` path; Hoarfrost played in
+  portrait: name card, log, touch controls fine).
+- **Found and fixed:** Goldspire ran at 0.6 fps (1.4 s a frame). Its five 4096 px pages (about 320 MB of textures) each
+  held pieces from all over the castle, so every frame drew from all of them, and past the GPU's texture budget they were
+  swapped in and out every frame. `python tools/castle3d.py repack` re-cuts a castle's published pages into 2048 px
+  pages grouped by where their pieces stand (skyline-packed, cropped, checked pixel for pixel; `pack` runs it after a
+  bake); a view now draws from three or four. All eleven castles re-cut, Ironcrown too: Goldspire 30 fps. Downloads grew
+  a little (all castles 110 -> 123 MB; Goldspire 17 -> 20 MB): grouping by place compresses worse.
+- **Found and fixed:** 42 of the 55 herald and lord lines were longer than the two-line speech bubble and were cut off
+  with an ellipsis (on every screen). They speak in the forge's three-line bubble now, each line held 3.8 s or one second
+  per 15 characters; `castle3d.js` checks every story line fits at the real font.
+- **Measured, left alone:** each castle visit decodes 30-87 Mpx of castle art; the emulated phone's browser sits at about
+  800-900 MB in a castle and lets the castle go when you leave (castles never follow each other). A 1x bake would
+  quarter that but look soft (phones draw the castle at about 1.3 device px per baked px). Building a castle level takes
+  2-8 s on the slowed CPU, behind the loading screen.
+- **Verified:** `castle_phone.js` for every castle in a fresh browser after the re-cut (all pass: 12-42 fps on the
+  slowed phone, the busier the machine the lower; the joystick walks the hero over every drawbridge in 7-13 s; name card
+  and herald on screen), `castle3d.js` (re-cut art loads and draws, every story line fits its bubble). Not rerun after
+  the re-cut: the portrait pass (portrait was checked on the live site before it).
+- **Not verified:** a real phone, Safari/iOS (WebKit has its own image and canvas memory limits).
+
+---
+
+## October 28, 2026 — ten Castle variants: their own layouts, stone, palettes and stories (branch `feat/castle-variants`)
+- **Request:** ten new unique variants of the Castle overworld: palette swaps so the castles are different colours,
+  different layouts, different little stories.
+- **Done:** see [CASTLE_VARIANTS.md](CASTLE_VARIANTS.md). `src/data/castles.js` holds eleven castles (the old one is
+  Ironcrown) as data: layout (rings, tower styles, gates, stairs, where the keep/cathedral/hall stand), look (bake
+  materials, ground recolour, water tint, particles, night/rain odds, forest trees), plan (river, mere/bog pools, ward
+  yards, village, fields, graveyard, siege, ruin) and story (intro, herald, lord, dressing `set`).
+  `src/world/castle3d.js` builds any layout (new: square corner towers, half-round interval towers, one to three rings,
+  any gatehouse x); `src/world/castleworld.js` reads every coordinate from the layout and plan (bailey lanes and roads
+  are worked out from the gates, the wall-walk lanterns and the milestones from the curtain and the roads) and dresses
+  each story (`STORY_SETS`). Each variant has its own bake in `assets/tiles/castle3d/<id>/` (`castle3d_bake.js <id>`,
+  `castle3d.py pack <id>`); the game loads only the one it builds (`loadCastle3D(v)` through `loadBaked`), picked at
+  random but never the last one seen (`c.lastCastle`); `G.castleVariant` forces one. New textures: five more stones cut
+  from the Castle Keep pack's ten-material sheet, nine painted roofs (`castle3d.py textures`). `src/game/castlestory.js`:
+  the herald by the road and the lord in the council chamber. Variant particles via `world.ambientFx` (world.js), water
+  tint/current colour via `map.castleWater` (castleground.js), five more tent cloths (castle.js).
+- **Ported onto main** (the work began on an older base): main's height-mapped castle (moat faces, arched bridges,
+  banners, trails, road nav, loose scatter) is kept and reads the variant's rings, gates, river and roads; Ironcrown
+  keeps main's bake and main's inner south stair (x 164).
+- **Bugs fixed:** main's 16 wall-walk lanterns were added and then deleted again by the "nothing stands in the masonry"
+  pass, leaving their tiles blocked by nothing you could see; they now stay (`onWall`). Main's fallen masonry could land
+  at a stair's foot and wall off a stair (seen on Goldspire's inner ring): it and the story dressing keep two tiles clear
+  of every stair. Auto-play's road field (`buildRoadNav`) plans across the raised drawbridge (`map.planOpen`), so a goal
+  inside the walls isn't given up at the moat; the bridge still comes down as the hero nears it. The ground's edge-blend
+  cache was keyed by floor index only, so a castle visited after another drew the previous castle's colours along its
+  seams (now keyed by image). `assets/source/castle3d/out/` (the bakes' PNG pages, ~380 MB) is git-ignored.
+- **Design calls made without asking** (worth confirming): Ironcrown stays in the rotation as one of eleven; the same
+  three buildings (keep, cathedral, great hall) in every castle, moved, so all 35 scenarios work everywhere; the
+  gatehouse always faces south (the drawbridge frames are baked that way) and posterns are on the north side (the
+  painted bridge spans north-south); every variant keeps a siege camp (its scenarios need the engines and cages), restyled
+  by its story; the bakes add about 100 MB of lossless WebP to the repo (7-17 MB a castle, loaded one at a time).
+- **Verified:** `castle_overworld.mjs` (11 castles x 55 seeds, all 35 scenarios each, main's stricter
+  checks generalised: at most 0.1% of any wall-walk out of reach), `castle3d.js --castle=all` (bakes, stairs, throne
+  room, drawbridge, roof fade, herald), `castle_visual.js --castle=all` (looked at a sample), `castle_variants.js` (a
+  level-30 auto-play hero gets into every castle and starts its scenario in 25-83 s), `scenarios.js` (every scenario
+  finishes; Hexenmere's rampart siege and Solenne's last stand on the ramparts flag 29-30 s waits between fights, as
+  they did before the port), main's `castle_walls.js`, `castle_keep.js`, `castle_autoplay.js` and `skyship.js` (the
+  Sky Battle shares the bake loader), `flow.js`, `mobile.js`, `hud.js`, `autoplay.js wizard 5`, `data_check.mjs`.
+- **Not verified:** real phones: a castle's bake decodes to 2-5 pages of 4096 px (Goldspire, the biggest, about 60 Mpx).
+- **Tools:** `node tools/castle_map.mjs [ids]` draws top-down plans without a browser (layout design);
+  `castle_overworld.mjs [seeds] [ids]` checks every variant against all 35 scenarios; `castle3d.js` and
+  `castle_visual.js` take `--castle=ids|all`; `scenarios.js - <ids|all>` plays the Castle scenarios in chosen castles
+  (by default they rotate through all eleven); `castle_variants.js [ids]` lets auto-play find its way in.
+
+---
+
 ## October 28, 2026 — THE ENDGAME: Heresies, Abyssal Rifts, Velscour Unbound, Infernal Marks (branch `feat/endgame`)
 - **Request (user):** "What would you suggest as an endgame? People have beaten Velscour and want more." Then: build all
   four suggestions (not the later options: hardcore, seasons, affix rerolls), balance them over several iterations, check
@@ -2924,7 +3325,13 @@ Do these in order, unless the user asks for something else. Their feedback after
   - `sparkle(x,y,z,color,n=1,spread=.3)` (:104).
   - `smoke(x,y,z,color,n=4,size=8)` (:110).
   - `bloodSpray(x,y,z,angle,n,color,force=1)` (:117).
-  - `gibs(x,y,z,n,color,boneColor,force=1,sets)`. With `sets` (from `gibSets()` in combat.js: bone, flesh, limb, bug, demon, eye by gore type/arch) every other chunk is a sprite from `assets/sprites/gibs.webp` (cut from `assets/source/gibs/gibs_1..5.jpg` by `python3 tools/process_assets.py gibs`, `tools/gibpack.py`), capped at 90 live (40 on touch). Rock, spark and ecto keep plain rects.
+  - `gibs(x,y,z,n,color,boneColor,force=1,sets)`. With `sets` (from `gibSets()` in combat.js: bone, flesh, limb, bug, demon, eye by gore type/arch) every other chunk is a sprite from `assets/sprites/gibs.webp` (cut from `assets/source/gibs/gibs_1..5.jpg` by `python3 tools/process_assets.py gibs`, `tools/gibpack.py`), capped at 90 live (40 on touch). The other chunks (all of them for rock, spark and ecto) are bones, `gibs(..., sets, {blood, scale, loose})`:
+    three.js skulls, rib cages, ribs, femurs, humeri, pelvises, jaws and vertebrae (`tools/bones3d.js`, true to size against each other; viewer
+    `tools/bones3d.html`) baked by `node tools/bones3d_bake.js` into `assets/sprites/bones.webp` + `.json`, a data sheet of 16 tumbling turns and
+    8-16 lying poses per bone (R light, G half-blood field, B soak field, A body/outline). `src/gfx/bonegibs.js` paints it per bone colour + blood
+    colour + look (clean, blood on one end, the other end, soaked) on first use. A third are bone-white (`boneColor`), the rest in the gib's
+    `color`; blood is `o.blood` (combat passes the monster's; null for skeletons, so theirs stay clean). A burst holds at most one skull, rib
+    cage, pelvis and jaw; `loose` (Whirlwind's rage chunks off the living) none. Rects only until the sheet loads. Test: `tools/tests/bonegibs.js`.
   - `addDecal(x,y,color,size=1,kind='splat'|'pool'|'scorch'|'frost',alpha=.9)` (:144).
   - Effect classes:
     - `Ring(x,y,r0,r1,dur,color,width=4,{z=2,fill,add=true})` (:152)
@@ -2983,6 +3390,15 @@ Do these in order, unless the user asks for something else. Their feedback after
 - If `G.mode==='game' && G.world`, the frame runs `game.update(dt); game.render()`. Otherwise it runs `renderTitle(dt)`.
 - Exceptions are caught and sent to `reportError`. Only the first 4 reach `UI.log`; all go to the console.
 - After that, `input.endFrame()` always runs, then the next rAF is requested.
+- **Hidden pages** (minimised, covered by other windows, a locked PC) get no rAF, and their timers are throttled to
+  1/s, then to 1/min after five minutes. A Blob Web Worker (`startTicker`) posts 30 ticks a second; `tick()` steps
+  `game.update` (no render) in `<= 1/30` s steps to catch the game clock up to real time while `document.hidden`, or
+  when rAF has been silent for 500 ms on a visible page whose ticks still arrive on time. Both drivers share `last`, so
+  nothing is stepped twice. `loop()` sets `lastFrame` before the frame-rate cap's early return: the cap compares with
+  `last`, which the ticker keeps moving, so counting only drawn frames left the ticker in charge and nothing drawn
+  after a hidden spell. `warmLevelArt` skips its loading-screen yields while hidden, because chained timers can
+  wait a minute. Test: `background.js` (raw CDP, because Playwright pins pages visible). The OS still suspends phone
+  browsers when locked, and Chrome's Energy Saver can freeze a silent hidden tab after 5 minutes.
 - `game.update` (game.js:319) order:
   1. Key toggles (I/K/T/B/H/Tab/M/Esc).
   2. `G.paused = ui.modal || (pauseMenus && dungeon && panel open)`.

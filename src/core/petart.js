@@ -1,7 +1,7 @@
 // Animated summon atlases (tools/build_pet_animations.py): one row per pet, poses named in catalog.json
 // (idle, dead, summoned, cheer/happy, scared, walk, fly, swoop, attack, active, damaged). Slime Lord pets and revived
 // monsters keep their own sprites. Every cell shares a floor line; restH is the rest pose's height above it.
-import { makeCanvas } from './util.js';
+import { makeCanvas, drawFiltered } from './util.js';
 
 let CAT = {};
 fetch('assets/sprites/pets/catalog.json').then((r) => r.json()).then((c) => { CAT = c; }).catch(() => { CAT = {}; });
@@ -85,10 +85,8 @@ export function petTintImage(img, filter) {
   if (!filter) return img;
   img._petTint ||= {};
   if (img._petTint[filter]) return img._petTint[filter];
-  const c = makeCanvas(img.width, img.height), x = c.getContext('2d');
-  if (!('filter' in x)) return img;
-  x.filter = filter;
-  x.drawImage(img, 0, 0);
+  const c = makeCanvas(img.width, img.height);
+  drawFiltered(c.getContext('2d'), filter, img, 0, 0);   // (by hand where canvas filters don't work)
   img._petTint[filter] = c;
   return c;
 }

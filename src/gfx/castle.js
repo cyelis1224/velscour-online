@@ -63,8 +63,11 @@ export function castleStrip(id,category,sx,w,px,py){
  return {...s,sx:s.sx+sx,w,ox:-px,oy:-py,strip:true};
 }
 export function castleFloorTiles(palette=null){
- const img=imageFor('floors',palette);
- return castleFrames('floors').map(f=>({img,sx:f.x,sy:f.y,w:f.w,h:f.h,lum:0.02,seamless:true,name:f.id,castle:true}));
+ const img=imageFor('floors');
+ return castleFrames('floors').map(f=>{const t={img,sx:f.x,sy:f.y,w:f.w,h:f.h,lum:0.02,seamless:true,name:f.id,castle:true};
+  // a variant's ground palette (src/data/castles.js) is recoloured on first draw, so generation stays canvas-free
+  if(palette)Object.defineProperty(t,'img',{get:()=>imageFor('floors',palette),enumerable:true});
+  return t;});
 }
 export function castleFloorIndex(fragment){return castleFrames('floors').findIndex(f=>f.id.includes(fragment)||f.name?.includes(fragment));}
 export function castleKeepFloorTiles(){
@@ -142,7 +145,10 @@ export function castleCarpetTiles(){
 }
 // A procedural pixel-art ridge tent for the siege lines (the pack has none): ridge along x, the door in its +x gable.
 // 140 x 120 px, pivot at the ground centre of its 2 x 3 tile footprint; drawn on first use.
-const TENT_CLOTH=[['#8c7a5a','#6b5c42','#a8946c','#4a3f2c'],['#7a2a24','#5a1e1a','#9a3a30','#3a1210'],['#5a6a4a','#434f37','#72845e','#2c3424']];
+// cloths: canvas, red, green; then the Castle variants' (src/data/castles.js): white, royal blue, rose, ochre, black
+const TENT_CLOTH=[['#8c7a5a','#6b5c42','#a8946c','#4a3f2c'],['#7a2a24','#5a1e1a','#9a3a30','#3a1210'],['#5a6a4a','#434f37','#72845e','#2c3424'],
+  ['#d8d4c8','#a8a49a','#f2efe6','#6a665e'],['#3a5aa8','#2a4078','#5a7ad0','#18284a'],['#b85a7a','#8a3a58','#d87a9a','#4a1a2a'],
+  ['#c8a46a','#9a7a48','#e0c08a','#5a4428'],['#3a3634','#24201e','#55504c','#100e0c']];
 const tentCache=new Map();
 export function castleTent(variant=0){
  const v=variant%TENT_CLOTH.length,spr={sx:0,sy:0,w:140,h:120,ox:-70,oy:-86,name:'castle_tent_'+v,category:'tent',castle:true,isometric:true};

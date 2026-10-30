@@ -104,10 +104,21 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
   function launchBoat(kind, dz, crew, o = {}) {
     const dock = dockSpot(kind, dz), from = { x: dock.x - 16, y: dock.y + 18, lv: dock.lv + 40 };
     const K = A.skiffs[kind], spots = K.deck.slice().sort(() => Math.random() - 0.5);
-    const b = { kind, dz, x: from.x, y: from.y, lv: from.lv, alpha: 0, ramp: 0, phase: Math.floor(rand(0, 4)), st: 'in', t: 0, dock, from, wait: o.wait ?? 0.9, hold: o.hold ?? 2.5, leap: o.leap !== false,
+    const b = { kind, dz, x: from.x, y: from.y, lv: from.lv, alpha: 0, ramp: 0, phase: Math.floor(rand(0, 4)), st: 'in', t: 0, dock, from, wait: o.wait ?? 0.9, hold: o.hold ?? 2.5, leap: o.leap !== false, wave: o.wave,
       crew: crew.map((c, i) => ({ ...c, x: spots[i % spots.length][0] + rand(-0.15, 0.15), z: spots[i % spots.length][2] + rand(-0.15, 0.15), h: c.h ?? CREW.find((a) => a.art === c.art)?.h ?? 56, flip: false, ph: rand(0, 6) })) };
     S.boats.push(b);
     return b;
+  }
+  /** Bring a boat still coming in alongside within `s` seconds. */
+  const rushBoat = (b, s) => { if (b.st === 'in') b.fast = Math.max(b.fast || 1, (4.5 - b.t) / s); };
+  /** An empty boat lying at dock `dz` casts off: another is coming in there. */
+  const castOff = (dz) => { for (const b of S.boats) if (b.dz === dz && b.st === 'dock' && !b.crew.length && !b.stay) { b.st = 'out'; b.t = 0; } };
+  /** A dock for the next boat: one with no crew alongside or coming in (now that waves overlap), else any. */
+  function freeDock() {
+    const busy = (d) => S.boats.some((b) => b.dz === d && (b.st === 'in' || (b.st === 'dock' && (b.crew.length || b.stay))));
+    const free = DOCKS.filter((d) => !busy(d)), d = pick(free.length ? free : DOCKS);
+    castOff(d);
+    return d;
   }
   /** A gasbag crossing high over the deck, stern to bow, dropping boarders on ropes as it passes. */
   function flyover(n, wave) {
@@ -116,10 +127,12 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     return b;
   }
   function boatTick(b, dt) {
-    b.t += dt;
+    // run.rushing: nothing on the deck to fight, so this one's next boarder comes now (hurry); b.fast: rushing alongside
+    const rush = run.rushing === b, sp = b.st === 'in' && b.fast ? b.fast : rush && b.st === 'fly' ? 8 : 1;
+    b.t += dt * sp;
     if (b.st === 'fly') {
-      b.y -= dt * 5.5; b.lv = 95 + Math.sin(b.t * 0.8) * 2; b.alpha = clamp(Math.min(b.t / 1.2, (b.y - (OY - 30)) / 6), 0, 1);
-      if (b.drops > 0 && b.y < OY + 12 && (b.dropT = (b.dropT ?? 0) - dt) <= 0) {
+      b.y -= dt * 5.5 * sp; b.lv = 95 + Math.sin(b.t * 0.8) * 2; b.alpha = clamp(Math.min(b.t / 1.2, (b.y - (OY - 30)) / 6), 0, 1);
+      if (b.drops > 0 && b.y < OY + 12 && ((b.dropT = (b.dropT ?? 0) - dt) <= 0 || rush)) {
         b.dropT = 0.45; b.drops--;
         const to = near(b.x + 3 + rand(-2.5, 2.5), b.y + rand(-1, 1));
         spawnPirate(pickCrew().id, chance(0.25) ? 'champion' : 'normal', null, to, b.wave, 'rope', () => [b.x + 0.4, b.y + 0.2, b.lv]);
@@ -134,8 +147,8 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
       b.alpha = clamp(b.t / 0.8, 0, 1) * (v.fog ? clamp(k * 1.6, 0, 1) : 1);
       if (k >= 1) { b.st = 'dock'; b.t = 0; sfx('thud', 0.6); camera.shake(3); }
     } else if (b.st === 'dock') {
-      b.lv = b.dock.lv + bob * 0.4; b.ramp = clamp(b.t / 0.5, 0, 1);
-      if (b.leap && b.t > b.wait && b.crew.length && (b.nextLeap = (b.nextLeap ?? 0) - dt) <= 0) { b.nextLeap = 0.32; leapOff(b, b.crew.shift()); }
+      b.lv = b.dock.lv + bob * 0.4; b.ramp = Math.min(1, Math.max(b.ramp + (rush ? dt * 8 : 0), b.t / 0.5));
+      if (b.leap && b.crew.length && b.t > (rush ? Math.min(b.wait, 0.1) : b.wait) && ((b.nextLeap = (b.nextLeap ?? 0) - dt) <= 0 || rush)) { b.nextLeap = 0.32; leapOff(b, b.crew.shift()); }
       if (!b.crew.length && b.t > b.wait + 0.5) { b.holdT = (b.holdT || 0) + dt; if (b.holdT > b.hold && !b.stay) { b.st = 'out'; b.t = 0; } }
     } else if (b.st === 'out') {
       const k = clamp(b.t / 4, 0, 1), e = k * k;
@@ -154,14 +167,17 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
   function leap(m, from, to, o = {}) {
     const d = Math.hypot(to[0] - from[0], to[1] - from[1]), dur = o.dur ?? 0.55 + d / 11, arc = o.arc ?? 60 + d * 6;
     const lvTo = o.toLv ?? lvAt(to[0], to[1]);
-    let t = 0;
-    m.targetable = false; m.awake = true; m.moving = true;
+    let t = 0, fast = 0;
+    m.targetable = false; m.awake = true; m.moving = true; m.boarding = !!o.board;
     m.entering = (dt) => {
-      t += dt; m.animT += dt;
+      // a boarder in the air with nothing on the deck to fight (hurry): the rest of the leap takes a quarter second
+      if (!fast && o.board && m.rush) fast = Math.max(1, (dur - t) / 0.25);
+      t += dt * (fast || 1); m.animT += dt;
       const k = Math.min(1, t / dur);
       m.x = from[0] + (to[0] - from[0]) * k; m.y = from[1] + (to[1] - from[1]) * k;
       m.z = (from[2] * (1 - k) + lvTo * k) * HS + arc * Math.sin(Math.PI * k) - elevationAt(m.x, m.y);
       if (k >= 1) {
+        m.boarding = m.rush = false;
         if (o.perch) { m.x = to[0]; m.y = to[1]; m.z = lvTo * HS - elevationAt(m.x, m.y); m.moving = false; m.entering = () => {}; o.perch(m); return; }
         m.entering = null; m.targetable = true; m.z = 0; m.x = to[0]; m.y = to[1]; m.cd = rand(0.2, 0.5); m.moving = false;
         smoke(m.x, m.y, 4, '#6a5a4a', 3, 9); sfx('thud', m.captain ? 1 : 0.4);
@@ -195,13 +211,15 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
   function rappelIn(m, to, anchor) {
     const top = 70 + rand(0, 30); let t = 0;
     const rope = { a: anchor || (() => [to[0] - 0.6, to[1] + 0.4, lvAt(to[0], to[1]) + top + 30]), m };
-    m.targetable = false; m.awake = true; m.x = to[0]; m.y = to[1]; S.ropes.push(rope);
+    m.targetable = false; m.awake = true; m.boarding = true; m.x = to[0]; m.y = to[1]; S.ropes.push(rope);
     const dur = rand(1.0, 1.4);
+    let fast = 0;
     m.entering = (dt) => {
-      t += dt; m.animT += dt;
+      if (!fast && m.rush) fast = Math.max(1, (dur - t) / 0.25);   // hurry: the rest of the slide takes a quarter second
+      t += dt * (fast || 1); m.animT += dt;
       const k = Math.min(1, t / dur);
       m.z = top * HS * (1 - k * k) + Math.sin(t * 9) * 2 * (1 - k);
-      if (k >= 1) { drop(S.ropes, rope); m.entering = null; m.targetable = true; m.z = 0; m.cd = rand(0.2, 0.5); smoke(m.x, m.y, 2, '#6a5a4a', 2, 7); sfx('thud', 0.4); }
+      if (k >= 1) { drop(S.ropes, rope); m.boarding = m.rush = false; m.entering = null; m.targetable = true; m.z = 0; m.cd = rand(0.2, 0.5); smoke(m.x, m.y, 2, '#6a5a4a', 2, 7); sfx('thud', 0.4); }
     };
   }
   function spawnPirate(art, rank, from, to, wave = run.wave, how = 'leap', anchor = null) {
@@ -210,7 +228,7 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     if (a.shot && m.proj) m.proj = { ...m.proj, fx: a.shot };
     if (v.crew) { m.artH = a.h; m.split = false; if (a.name) m.name = a.name; }   // a story's boarders keep their size; a slime doesn't split into the dungeon's looks
     world.add(m); m.sky = true; m.wave = wave; live.add(m);
-    if (how === 'rope') rappelIn(m, to, anchor); else leap(m, from, to);
+    if (how === 'rope') rappelIn(m, to, anchor); else leap(m, from, to, { board: true });
     return m;
   }
   function spawnCaptain(id, from, to, rank = 'boss', onLand, o = {}) {
@@ -222,7 +240,7 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     if (o.hp) { m.maxHp *= o.hp; m.hp = m.maxHp; }
     world.add(m); live.add(m);
     if (o.swing) { m.x = from[0]; m.y = from[1]; m.z = from[2] * HS - elevationAt(m.x, m.y); swingAcross(m, o.swing, to, { dur: 1.7, onLand }); }
-    else leap(m, from, to, { arc: 140, onLand });
+    else leap(m, from, to, { arc: 140, onLand, board: true });
     return m;
   }
   /** A boat's worth of boarders for a wave: random archetypes (bruisers rarer), elites first. */
@@ -527,34 +545,56 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
   };
 
   // ---- waves
-  function startWave(n) {
-    run.wave = n; run.phase = 'waves';
+  function startWave(n, quiet = false) {
+    run.wave = n; run.phase = 'waves'; run.t = 0;
     const W = SKY_WAVES[n];
-    UI.centerMsg(`BOARDING WAVE ${n + 1}`, n === SKY_WAVES.length - 1 ? 'The last of them' : `${W.boats} boat${W.boats > 1 ? 's' : ''} alongside`, 2.2);
+    if (!quiet) UI.centerMsg(`BOARDING WAVE ${n + 1}`, n === SKY_WAVES.length - 1 ? 'The last of them' : `${W.boats} boat${W.boats > 1 ? 's' : ''} alongside`, 2.2);
     sfx('boss', 0.5);
-    const docks = DOCKS.slice().sort(() => Math.random() - 0.5);
     let champ = W.champion || 0, uniq = W.unique || 0;
     for (let b = 0; b < W.boats; b++) {
       const k = Math.min(champ, 1 + (b === 0 ? 1 : 0)), u = Math.min(uniq, 1);
       champ -= k; uniq -= u;
-      run.later(b * 2.2, () => launchBoat(boatKind(), docks[b % docks.length], crewList(W.n[b], k, u, n)));
+      run.later(b * 2.2, () => launchBoat(boatKind(), freeDock(), crewList(W.n[b], k, u, n), { wave: n }), n);
     }
-    if (n >= 2) run.later(7, () => { flyover(2 + Math.floor(n / 2), n); UI.centerMsg('', 'Boarders on ropes, overhead!', 1.6); });
+    if (n >= 2) run.later(7, () => { flyover(2 + Math.floor(n / 2), n); UI.centerMsg('', 'Boarders on ropes, overhead!', 1.6); }, n);
   }
   run.timers = [];
-  run.later = (s, fn) => run.timers.push([s, fn]);
-  const waveLeft = () => S.boats.some((b) => (b.crew.length && b.leap) || (b.st === 'fly' && b.drops > 0)) || [...live].some((m) => !m.dead && m.wave === run.wave && !m.captain) || run.timers.length > 0;
+  /** A timer; `tag` (a wave) marks one that sends boarders, which hurry() may fire early. */
+  run.later = (s, fn, tag) => run.timers.push([s, fn, tag]);
+  /** Boarders of wave `w` still to come over the rail: not yet set out, on a boat alongside or coming in, under the flyover. */
+  const coming = (w) => run.timers.some((q) => q[2] === w) || S.boats.some((b) => b.wave === w && ((b.crew.length && b.leap) || (b.st === 'fly' && b.drops > 0)));
+  /** Nothing on the deck to hit: the next foe on its way hurries, one arrival at a time so they don't all land at once:
+   *  boarders already in the air, else a docked boat's next leaper, else the boat coming in soonest, else the flyover,
+   *  else the next boat (or the flagship's next boarder) sets out now. Returns the boat to rush this frame. */
+  function hurry() {
+    let air = false;
+    for (const m of live) if (!m.dead && m.entering && m.boarding) air = m.rush = true;
+    if (air) return null;
+    const crewed = S.boats.filter((b) => b.leap && b.crew.length);
+    const docked = crewed.find((b) => b.st === 'dock'); if (docked) return docked;
+    const inb = crewed.reduce((a, b) => (b.st === 'in' && (!a || b.t > a.t) ? b : a), null); if (inb) { rushBoat(inb, 0.4); return null; }
+    const fly = S.boats.find((b) => b.st === 'fly' && b.drops > 0); if (fly) return fly;
+    const tm = run.timers.reduce((a, q) => (q[2] !== undefined && (!a || q[0] < a[0]) ? q : a), null); if (tm) tm[0] = 0;
+    return null;
+  }
 
   // ---- the mid-boss: a captain and an escort come over from a gasbag
+  /** His gasbag sets out while the last of the third wave still stand; captain and escort stay aboard for his scene. */
+  function midBoat() {
+    if (run.midBoat) return run.midBoat;
+    const id = v.mid_boss, a = capOf(id);
+    castOff(3);
+    const b = run.midBoat = launchBoat('gasbag', 3, [{ art: a.art, swap: a.swap, cap: id, captain: true }, ...crewList(3, 1, 0, 99)], { leap: false, hold: 3 });
+    b.crew[0].h = a.h; b.crew[0].x = 0; b.crew[0].z = 0;
+    return b;
+  }
   function midBoss() {
     run.phase = 'mid';
-    const id = v.mid_boss, a = capOf(id), dz = 3;
-    const b = launchBoat('gasbag', dz, [{ art: a.art, swap: a.swap, cap: id, captain: true }, ...crewList(3, 1, 0, 99)], { wait: 1e9, hold: 3 });
-    b.crew[0].h = a.h; b.crew[0].x = 0; b.crew[0].z = 0;
-    run.midBoat = b;
+    const id = v.mid_boss, a = capOf(id), b = midBoat();
     const capFace = () => b.crew[0] && b.crew[0].captain ? crewFace(b, b.crew[0]) : faceOf(run.midM);
     scene('mid', [
-      // pick the gasbag up out in the clouds and follow it in
+      // pick the gasbag up out in the clouds and follow it in (in a second and a half at most: the scene waits on it)
+      { do: () => rushBoat(b, 1.5) },
       on(() => boatAt(b), 0.85, 1.3, { pace: 900 }),
       { until: () => b.st === 'dock', max: 8 },
       on(capFace, 2.1, 0.9, { wait: true, push: 0.03 }),
@@ -572,7 +612,7 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
       on(() => faceOf(run.midM), 1.7, 0.4, { push: 0.02 }),
       { wait: 0.7 },
       backToHero(0.8),
-    ], () => { b.wait = 0.3; });
+    ], () => { b.leap = true; b.wait = 0.3; });
   }
 
   // ---- the parley, the truce and the twist
@@ -583,6 +623,7 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     [run.k1, run.k2] = makeKnights();
     // they come over from a gasbag under a white flag, the knights at their captain's side on its deck: the captain
     // stays still (no fighting in a parley)
+    castOff(3);
     const b = launchBoat('gasbag', 3, [], { wait: 0.6, hold: 1e9, leap: false }); b.stay = true; run.parleyBoat = b;
     const onBoat = (dx, dz) => () => [b.x + dx, b.y + dz, b.lv];
     run.k1.follow = onBoat(0.7, -1.2); run.k2.follow = onBoat(0.7, 1.4);
@@ -1040,6 +1081,7 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     for (const tm of run.timers.slice()) if ((tm[0] -= dt) <= 0) { drop(run.timers, tm); tm[1](); }
     for (const b of S.boats) boatTick(b, dt);
     S.boats = S.boats.filter((b) => !b.dead);
+    run.rushing = null;
     galleonTick(dt);
     knightTick(dt);
     for (const s of S.shots) { s.t += dt; if (s.t >= s.dur && !s.done) { s.done = true; if (s.onHit) s.onHit(); } }
@@ -1058,21 +1100,22 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
     if (run.phase !== 'intro' && run.phase !== 'victory' && run.phase !== 'done') weather(dt);
     captainMoves(dt);
     knightsFight(dt);
+    // nothing on the deck to fight: whatever is on its way hurries (hurry), so the hero never stands about waiting
+    S.calm = world.creatures.some((m) => m.team === 'enemy' && !m.dead && !m.entering && m.targetable !== false) ? 0 : (S.calm || 0) + dt;
+    if (S.calm > 0.05) run.rushing = hurry();
     if (run.phase === 'waves') {
-      if (!waveLeft() && (run.t > 1.5)) {
-        run.pause = (run.pause ?? 2.5) - dt;
-        if (run.pause <= 0) {
-          run.pause = undefined;
-          const W = SKY_WAVES[run.wave];
-          if (run.wave >= 0 && W.mid && !run.midDone) { run.midDone = true; midBoss(); }
-          else if (run.wave + 1 < SKY_WAVES.length) { startWave(run.wave + 1); run.t = 0; }
-          else parley();
-        }
-      }
+      // the next wave is called once this one is all over the rail and down to its last two, so it is on its way in
+      // time; the mid-boss's gasbag sets out then too, but his scene and the parley wait for a clear deck
+      const W = SKY_WAVES[run.wave], last = run.wave + 1 >= SKY_WAVES.length, mid = W && W.mid && !run.midDone;
+      const left = [...live].filter((m) => !m.dead), over = !coming(run.wave), few = over && left.length <= 2 && left.every((m) => !m.entering);
+      if (few && !last && !mid) startWave(run.wave + 1);
+      else if (few && mid) midBoat();
+      if (over && !left.length && (last || mid) && (run.pause = (run.pause ?? 0.3) - dt) <= 0) { run.pause = undefined; if (last) parley(); else { run.midDone = true; midBoss(); } }
     } else if (run.phase === 'mid') {
-      if (run.midM && run.midM.dead && !waveLeft()) { UI.centerMsg(`${run.midM.name.toUpperCase()} FALLS`, 'More sails on the wind', 2.4); world.boss = null; run.phase = 'waves'; run.t = 0; }
+      if (run.midM && run.midM.dead && !run.midBoat.crew.length) { UI.centerMsg(`${run.midM.name.toUpperCase()} FALLS`, 'More sails on the wind', 2.4); world.boss = null; startWave(run.wave + 1, true); }
     } else if (run.phase === 'flagship') {
-      const g = S.galleon; run.duelT += dt;
+      const g = S.galleon;
+      run.duelT += dt * (S.calm > 0.05 ? 6 : 1);   // she closes over about 26 s, faster while nothing is on the deck to fight
       g.k = Math.min(1, run.duelT / 26);
       if ((run.volleyT -= dt) <= 0) { run.volleyT = rand(3.2, 4.4); volleyAtDeck(3 + (g.k > 0.5 ? 1 : 0)); }
       if ((run.returnT -= dt) <= 0) {   // the ironclad's port battery answers
@@ -1080,15 +1123,20 @@ export function createSkyBattle(world, gen, biome, depth, opts, onSuccess) {
         const to = [g.x + rand(-2, 2), g.y + rand(-8, 8), g.lv + rand(0, 1) * LV];
         cannon(shipPort(), to, () => { burst(to[0], to[1], to[2] * HS, 'fire', 14, 4); smoke(to[0], to[1], to[2] * HS, '#3a3230', 5, 16); if (chance(0.4) && g.burn.length < 7) g.burn.push([rand(-3, 3), rand(-1, 1), rand(-12, 12)]); sfx('explode', 0.3); }, 1.0);
       }
-      if (run.duelT > 9 && !run.drop1) { run.drop1 = true; for (let i = 0; i < 3; i++) run.later(i * 0.4, () => spawnPirate(pickCrew().id, i ? 'normal' : 'champion', galleonPort(), near(OX - 3 + rand(-1, 2), OY + rand(-6, 8)), 98)); }
-      if (run.duelT > 18 && !run.drop2) { run.drop2 = true; for (let i = 0; i < 4; i++) run.later(i * 0.4, () => spawnPirate(pickCrew().id, 'normal', galleonPort(), near(OX - 3 + rand(-1, 2), OY + rand(-6, 8)), 98)); }
+      // her boarders come over in threes all the way in (a champion leads every other three), the next three while the
+      // last of these still stands
+      const fb = [...live].filter((m) => !m.dead && m.wave === 98);
+      if (g.k < 1 && fb.length <= 1 && fb.every((m) => !m.entering) && !coming(98)) {
+        const lot = run.lots = (run.lots || 0) + 1;
+        for (let i = 0; i < 3; i++) run.later(i * 0.4, () => spawnPirate(pickCrew().id, i === 0 && lot % 2 ? 'champion' : 'normal', galleonPort(), near(OX - 3 + rand(-1, 2), OY + rand(-6, 8)), 98), 98);
+      }
       if (g.k >= 1 && ![...live].some((m) => !m.dead)) hooks();
     } else if (run.phase === 'final') {
 
       if (run.finals.length && run.finals.every((m) => m.dead) && ![...live].some((m) => !m.dead)) { world.boss = null; if (GA) gauntletIntro(); else victory(); }
       else if (world.boss && world.boss.dead) world.boss = run.finals.find((m) => !m.dead) || null;
     } else if (run.phase === 'gauntlet') {
-      if (run.gBoss.every((m) => m.dead) && ![...live].some((m) => !m.dead)) { world.boss = null; run.phase = 'gauntlet-next'; run.later(1.2, () => nextGauntlet()); }
+      if (run.gBoss.every((m) => m.dead) && ![...live].some((m) => !m.dead)) { world.boss = null; run.phase = 'gauntlet-next'; run.later(0.3, () => nextGauntlet()); }
       else if (world.boss && world.boss.dead) world.boss = run.gBoss.find((m) => !m.dead) || null;
     } else if (run.phase === 'master') {
       if (run.masterM && run.masterM.dead && ![...live].some((m) => !m.dead)) masterFalls();

@@ -1,11 +1,13 @@
 // The Castle's baked 3D masonry (docs/CASTLE_3D.md): per-tile pieces cut from tools/castle3d.html's render, drawn as
 // the terrain columns of the Castle's height map (gfx/terrain.js), plus each building's roof cut into 32 px columns.
-// assets/tiles/castle3d/index.json: S (atlas px per world px), pages, pieces [page, sx, sy, w, h, ox, oy] (ox/oy in
+// <dir>/index.json: S (atlas px per world px), pages, pieces [page, sx, sy, w, h, ox, oy] (ox/oy in
 // world px from the tile's ground corner, screen (x - y) * 32, (x + y) * 16), tiles [tile, layer, piece, ...] (layer 0
 // the masonry, 1 what stands over a walkway: tunnel vaults, lintels, roofed drums), roofs [{ bld, strips: [[piece, col]] }].
 // The Sky Battle's ironclad (docs/SKY_BATTLE.md, assets/tiles/skyship/) is baked the same way and loads through here
 // too, with its sprites (the galleon, the boats, the engine props: { S, f: [[page, sx, sy, w, h, ox, oy], ...] }) and
-// anchors. One set is loaded at a time.
+// anchors. Each castle variant (src/data/castles.js) has a bake of its own in a folder of its own (`look.dir`; the first
+// castle's is assets/tiles/castle3d/ itself). One set is loaded at a time.
+import { castleVariant } from '../data/castles.js';
 const DIR = 'assets/tiles/castle3d/';
 let state = null, loading = null, loadingDir = null;
 
@@ -26,9 +28,11 @@ export function loadBaked(dir) {
   })).catch((e) => { loading = null; throw e; });
   return loading;
 }
-/** The Castle's masonry. */
-export const loadCastle3D = () => loadBaked(DIR);
-export const castle3dState = () => state;
+const castleDir = (v) => { const V = castleVariant(v); return DIR + (V.look?.dir ? V.look.dir + '/' : ''); };
+/** Castle variant `v`'s masonry (the first castle when omitted). */
+export const loadCastle3D = (v) => loadBaked(castleDir(v));
+/** The loaded set (castle variant `v`'s only, when given). */
+export const castle3dState = (v) => (state && (v == null || state.dir === castleDir(v)) ? state : null);
 /** Draw a pixel of every page onto ctx (the screen, behind the loading screen): the GPU takes the pages in then, not
  *  on the level's first frame (~120-200 ms on the Sky Battle). The next frame paints over it. */
 export function warmBaked(ctx) {

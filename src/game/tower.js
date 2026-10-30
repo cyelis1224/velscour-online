@@ -307,20 +307,29 @@ export function createTowerRun(world, gen, biome, onSuccess) {
     if (!T || p.dead) return;
     T.t += dt;
     T.mobs = T.mobs.filter((m) => !m.dead && world.creatures.includes(m));
+    // nothing on the roof to fight: whatever is on its way hurries (boats, ramps, gangplanks, climbers), so the hero
+    // never stands about waiting for the next foe
+    T.calm = world.creatures.some((m) => m.team === 'enemy' && !m.dead && m.targetable !== false) ? 0 : (T.calm || 0) + dt;
+    T.hurry = T.calm > 0.05;
+    if (T.hurry) for (const s of [...T.ships, ...(T.step === 'ship' ? [T.flag, T.flag2] : [])]) if (s) s.rush = true;
     const busy = T.step.startsWith('wave') || T.step === 'final';
     // events while the fight is on
     if (busy || T.step === 'ship') for (const [k, rate] of Object.entries(sc.ev)) {
       T.ev[k] ??= rand(4, 60 / rate);
       if ((T.ev[k] -= dt) <= 0) { T.ev[k] = (60 / rate) * rand(0.7, 1.3); EVENTS[k]?.(); }
     }
-    if (T.step === 'intro') { if (T.t > (sc.ambush ? 1 : 3) && !T.mobs.length) next('wave1'); return; }
+    if (T.step === 'intro') { if (T.t > 0.1 && !T.mobs.length) next('wave1'); return; }
     if (T.step.startsWith('wave')) {
       const k = +T.step[4];
       if (!T.spawned) { T.spawned = true; spawnWave(k); }
-      if (T.t > 2 && !T.mobs.some((m) => m.waveMob)) { T.spawned = false; next(k < 3 ? 'rest' + (k + 1) : 'ship'); }
+      // the flagship sets sail once the last wave is on the roof, so it is alongside when the roof is clear
+      if (k === 3 && !T.sailed && T.t > 2.5 && !held(FLAG) && !held(LEFT) && !(sc.second && held(FAR))) sail();
+      // the next wave is called while the last two of this one still stand (on the roof), so it is on its way in time
+      const left = T.mobs.filter((m) => m.waveMob === k);
+      if (T.t > 0.5 && left.length <= 2 && left.every((m) => m.targetable !== false)) { T.spawned = false; next(k < 3 ? 'rest' + (k + 1) : 'ship'); }
       return;
     }
-    if (T.step.startsWith('rest')) { T.idle = true; if (T.t > 3.5) next('wave' + T.step[4]); return; }
+    if (T.step.startsWith('rest')) { T.idle = true; if (T.t > 0.1) next('wave' + T.step[4]); return; }
     if (T.step === 'ship') { arrival(dt); return; }
     if (T.step === 'final') {
       if (tw.look && T.final && !T.final.entering) tw.look = null;
@@ -331,6 +340,8 @@ export function createTowerRun(world, gen, biome, onSuccess) {
     if (T.step === 'won' && sc.treasure && !T.barge && T.t > 4) treasure();
   }
   function next(step) { const T = run.top; T.step = step; T.t = 0; T.idle = step.startsWith('rest') || step === 'intro'; area(); }
+  /** A wave's boat still coming in to (or moored at) the dock at angle a. */
+  const held = (a) => run.top.ships.some((s) => (s.state === 'in' || s.state === 'docked') && Math.abs(Math.atan2(Math.sin(s.phi - a), Math.cos(s.phi - a))) < 0.6);
   const area = () => HUD.setArea(`Depth ${depth}`, `${v.name} · ${run.title}`);
 
   // ---- waves
@@ -355,7 +366,7 @@ export function createTowerRun(world, gen, biome, onSuccess) {
       else { const arch = pick(world.roster || biome.roster), m = makeMonster(world, arch, biome, lvl + (rank === 'normal' ? 0 : 1), rank, 0, 0, 0); world.add(m); list.push(m); }
     }
     if (sc.kegs) for (let i = 0; i < 2 + k; i++) list.push(pirate(0, 0, 'normal', AIR_ART.find((a) => a.id === 'ap_powder_keg_runner')));
-    for (const m of list) { m.waveMob = true; m.awake = true; m.hunter = true; T.mobs.push(m); }
+    for (const m of list) { m.waveMob = k; m.awake = true; m.hunter = true; T.mobs.push(m); }
     arrive(list, how);
   }
   /** Bring monsters onto the roof the way the wave says. */
@@ -417,9 +428,12 @@ export function createTowerRun(world, gen, biome, onSuccess) {
     m.x = g.AX + Math.cos(a) * out; m.y = g.AY + Math.sin(a) * out; m.z = -260; m.alpha = 0; m.targetable = false;
     const rope = { x: hx, y: hy, z: top, m, t: -delay, phase: 'throw', from: [m.x, m.y, -360] };
     tw.ropes.push(rope);
-    let t = -delay;
+    let t = -delay, fast = 0;
     m.entering = (dt) => {
-      t += dt; m.animT += dt;
+      // the hero has nothing to fight: the rest of the climb takes half a second (the rope keeps pace)
+      if (!fast && run.top?.hurry) fast = Math.max(1, (2.45 - t) / 0.5);
+      if (fast > 1) rope.t += dt * (fast - 1);
+      t += dt * (fast || 1); m.animT += dt;
       if (t < 0.7) return;
       m.alpha = undefined; m.moving = true;
       if (t < 2.1) { const k = (t - 0.7) / 1.4; m.z = -260 + (top + 260) * k; rope.phase = 'climb'; }
@@ -442,7 +456,7 @@ export function createTowerRun(world, gen, biome, onSuccess) {
     if (!sh) { crew.forEach((m) => { const [x, y] = roofSpot(3, 8); m.x = x; m.y = y; enter(m, 'drop'); }); return; }
     run.top.ships.push(sh);
     crew.forEach((m) => { m.targetable = false; m.alpha = 0; m.x = -50; m.y = -50; m.entering = () => {}; });
-    let t = 0, sent = 0, lastT = 0;
+    let t = 0, sent = 0, lastT = -1;   // the first of the crew steps off as soon as the ramp is down
     const tick = {
       ground: true, draw() {},
       update(dt) {
@@ -455,7 +469,7 @@ export function createTowerRun(world, gen, biome, onSuccess) {
         }
         if (!sh.ready) return true;
         t += dt;
-        if (sent < crew.length && t - lastT > 0.55) { walkOff(crew[sent], sh.board(sent % 3, 3), 2.6); sent++; lastT = t; }
+        if (sent < crew.length && t - lastT > (run.top.hurry ? 0.15 : 0.55)) { walkOff(crew[sent], sh.board(sent % 3, 3), 2.6); sent++; lastT = t; }
         if (sent >= crew.length && t - lastT > 4) { sh.leave(); return false; }
         return true;
       },
@@ -465,13 +479,16 @@ export function createTowerRun(world, gen, biome, onSuccess) {
   /** Walk a monster along a boarding path ([camera-frame x, z, height] points) onto the roof. */
   function walkOff(m, path, speed, done) {
     const pts = path.map(([x, y, h]) => [g.AX + x, g.AY + y, (h - g.roofZ) * VZ]);
-    let i = 0, f = 0;
+    const seg = (j) => Math.max(0.01, Math.hypot(pts[j + 1][0] - pts[j][0], pts[j + 1][1] - pts[j][1]) + Math.abs(pts[j + 1][2] - pts[j][2]) / VZ);
+    let i = 0, f = 0, fast = 0;
     m.alpha = undefined; m.targetable = false; m.awake = true;
     [m.x, m.y, m.z] = pts[0];
     m.entering = (dt) => {
       m.animT += dt; m.moving = true;
-      const a = pts[i], b = pts[i + 1], len = Math.max(0.01, Math.hypot(b[0] - a[0], b[1] - a[1]) + Math.abs(b[2] - a[2]) / VZ);
-      f += speed * dt / len;
+      const a = pts[i], b = pts[i + 1], len = seg(i);
+      // the hero has nothing to fight: the rest of the way takes half a second
+      if (!fast && run.top?.hurry) { let left = len * (1 - f); for (let j = i + 1; j < pts.length - 1; j++) left += seg(j); fast = Math.max(speed, left / 0.5); }
+      f += (fast || speed) * dt / len;
       if (f >= 1) { f = 0; i++; if (i >= pts.length - 1) { [m.x, m.y] = map.nudge(b[0], b[1], 0.4); m.z = 0; m.entering = null; m.targetable = true; m.moving = false; m.cd = rand(0.2, 0.5); if (done) done(); return; } }
       const A = pts[i], Bp = pts[i + 1];
       m.x = A[0] + (Bp[0] - A[0]) * f; m.y = A[1] + (Bp[1] - A[1]) * f; m.z = A[2] + (Bp[2] - A[2]) * f;
@@ -480,15 +497,20 @@ export function createTowerRun(world, gen, biome, onSuccess) {
   }
 
   // ---- the last boss on its airship
+  function sail() {
+    const T = run.top;
+    T.sailed = true;
+    UI.centerMsg('A SAIL ON THE WIND', `${capName(captain)} comes for the tower`, 3.2);
+    sfx('boss');
+    const ship = T.early && T.early.state !== 'gone' ? null : sc.ship;
+    T.flag = ship && airshipsReady() ? spawnShip(ship, FLAG, g, { dur: 8, tint: sc.ghost ? 0x9fd8c0 : null, ghost: sc.ghost }) : T.early;
+    if (sc.second && airshipsReady()) T.flag2 = spawnShip(sc.second, FAR, g, { dur: 9, from: -1 });
+  }
   function arrival(dt) {
     const T = run.top;
-    if (!T.flag) {
-      T.idle = false;
-      UI.centerMsg('A SAIL ON THE WIND', `${capName(captain)} comes for the tower`, 3.2);
-      sfx('boss');
-      const ship = T.early && T.early.state !== 'gone' ? null : sc.ship;
-      T.flag = ship && airshipsReady() ? spawnShip(ship, FLAG, g, { dur: 8, tint: sc.ghost ? 0x9fd8c0 : null, ghost: sc.ghost }) : T.early;
-      if (sc.second && airshipsReady()) T.flag2 = spawnShip(sc.second, FAR, g, { dur: 9, from: -1 });
+    if (!T.boarding) {
+      T.boarding = true; T.idle = false;
+      if (!T.sailed) sail();
       for (let i = 0; i < (sc.escorts || 0); i++) boatIn(pick(['gasbag', 'cutter', 'hauler']), freeDock(), Array.from({ length: 3 }, () => { const m = pirate(0, 0); m.awake = true; m.hunter = true; T.mobs.push(m); return m; }));
       T.wait = 0;
     }

@@ -10,6 +10,7 @@ import { rollItem, rollGem, itemName, itemColor, goldPile, goldScale, MATERIALS,
 import { potionIcon } from '../core/assets.js';
 import { artIcon } from '../core/classart.js';
 import { gearIcon } from '../core/gearart.js';
+import { heldIcon } from '../gfx/heldart.js';
 import { AUGMENTS } from '../data/rings.js';
 import { depthLevel } from '../data/depth.js';
 import { filterPasses } from './lootfilter.js';
@@ -92,7 +93,7 @@ export class GroundItem {
       const k = Math.min(1, dt * 9);
       this.x += (p.x - this.x) * k; this.y += (p.y - this.y) * k;
     }
-    const auto = this.kind !== 'item' || ((G.touch || G.settings.autoLoot) && filterPasses(this.item)); // the loot filter (game/lootfilter.js)
+    const auto = !this.dropped && (this.kind !== 'item' || ((G.touch || G.settings.autoLoot) && filterPasses(this.item))); // the loot filter (game/lootfilter.js); never what the hero dropped
     if (this.t > 0.35 && (d < 0.55 || (p.lootTarget === this && d < 1.2)) && (auto || p.lootTarget === this)) {
       if (p.pickup(this)) {
         if (p.lootTarget === this) p.lootTarget = null;
@@ -140,7 +141,7 @@ export class GroundItem {
       ctx.fillStyle = g; ctx.fillRect(px - 9, py - 110, 18, 110);
       ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
-    const art = this.kind === 'item' && !this.item.sealed && ((this.item.art && artIcon(this.item)) || gearIcon(this.item));
+    const art = this.kind === 'item' && !this.item.sealed && ((this.item.art && artIcon(this.item)) || gearIcon(this.item) || heldIcon(this.item));
     const s = this.kind === 'gold' ? 20 : art ? 30 : this.kind === 'key' ? 26 : 22;
     if (this.kind === 'item' && this.item.rarity >= 2) {
       const col = itemColor(this.item), r = this.item.sealed ? SEAL_RARITY : this.item.rarity;
@@ -217,7 +218,7 @@ export function itemIcon(item, size = 48) {
   if (item.type === 'potion') return potionIcon(item.color, size);
   if (item.slot === 'ring') return ringIcon(MATERIALS[item.tier].color, elem((AUGMENTS[(item.aug && item.aug[0] || {}).id] || {}).el || 'arcane').glow, item.rarity, size);
   if (item.art) { const a = artIcon(item, size); if (a) return a; }
-  { const g = gearIcon(item, size); if (g) return g; }
+  { const g = gearIcon(item, size) || heldIcon(item, size); if (g) return g; } // body/head gear art, the held weapon designs
   const key = `${item.icon}|${item.tier}|${item.rarity}|${item.base}|${size}`;
   let c = iconCache.get(key);
   if (c) return c;

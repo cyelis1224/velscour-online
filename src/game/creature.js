@@ -1,7 +1,7 @@
 // Base class for every living thing: player, monsters, summons.
 import { G } from '../state.js';
 import { isoX, isoY, screenDirToTile } from '../core/view.js';
-import { TAU, rand, chance, clamp, makeCanvas } from '../core/util.js';
+import { TAU, rand, chance, clamp, makeCanvas, drawFiltered } from '../core/util.js';
 import { spawn, glowSprite, ELEM } from '../gfx/vfx.js';
 import { pixelSprite } from '../gfx/pixelart.js';
 import { classSprite } from '../core/assets.js';
@@ -14,7 +14,7 @@ import { TURRET3D, drawTurret3D } from '../gfx/gunner3d.js';
 let UID = 0;
 
 // frozen / charmed tints: the CSS filter runs once into a cached copy of the image, not on every draw (a per-draw
-// ctx.filter is a slow software path, in Safari above all); without ctx.filter support the tint just doesn't show
+// ctx.filter is a slow software path, in Safari above all); without ctx.filter support it is put through by hand
 const FREEZE = 'hue-rotate(180deg) saturate(1.6) brightness(1.2)', CHARM = 'hue-rotate(90deg)';
 const tints = { [FREEZE]: new WeakMap(), [CHARM]: new WeakMap() };
 function tinted(img, f) {
@@ -23,8 +23,7 @@ function tinted(img, f) {
   if (!c) {
     c = makeCanvas(img.width, img.height);
     const x = c.getContext('2d');
-    if (!('filter' in x)) return img;
-    x.filter = f; x.drawImage(img, 0, 0);
+    drawFiltered(x, f, img, 0, 0);
     c._art = img._art;
     tints[f].set(img, c);
   }
@@ -524,8 +523,9 @@ export class Creature {
     ctx.beginPath(); ctx.ellipse(px, py, Math.max(5, sw - bobR), Math.max(2.5, sh - bobR * 0.35), 0, 0, TAU); ctx.fill();
     const lx = this.lunge > 0 ? (Math.cos(this.facing) - Math.sin(this.facing)) * this.lunge * 8 : 0;
     const ly = this.lunge > 0 ? (Math.cos(this.facing) + Math.sin(this.facing)) * this.lunge * 4 : 0;
-    const dx = -a.ax * k, dy = -a.ay * k * (isHero ? 1 : sy);
-    const where = { img: a.img, x: px + lx, y: py + ly - z, dx, dy, k, flip: this.flip, rot: rot + (this.moving ? lean : 0), sx, sy };
+    const squash = isHero ? 1 : sy;
+    const dx = -a.ax * k, dy = -a.ay * k * squash;
+    const where = { img: a.img, x: px + lx, y: py + ly - z, dx, dy, k, sq: squash, flip: this.flip, rot: rot + (this.moving ? lean : 0), sx, sy };
     if (this.drawArtLayer) this.drawArtLayer(ctx, 'back', where);
     ctx.save();
     if (this.alpha !== undefined) ctx.globalAlpha = this.alpha;

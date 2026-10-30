@@ -23,3 +23,5 @@ android/app/src/main/assets/public/
 
 # Claude Code worktrees (the harness makes them for parallel agents)
 .claude/worktrees/
+assets/source/castle3d/out/
+defense/tests/out/

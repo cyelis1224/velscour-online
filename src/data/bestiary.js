@@ -600,6 +600,8 @@ export function rollLooks(biome, rnd = Math.random) {
       return a ? { arch: a.arch, look: lookOf(a) } : null;
     },
     ids() { return [...bosses, ...Array.from(chosen.values()).flat().map((l) => l.art)]; },
+    /** Every look chosen so far, {art, swap} (game.js warmLevelArt builds their sprites). */
+    all() { return Array.from(chosen.values()).flat(); },
   };
 }
 

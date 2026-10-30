@@ -106,7 +106,7 @@ its glade stone. Foes are awake hunters, so a phase never stalls.
 | The Witch-Lights | Five wisps, one at a time; each flees the hero and must be caught (150 s). Each catch calls shades. |
 | The Brood Mother | Burn five egg sacs (each hatches spiders), then slay the Brood Mother, who keeps calling her brood. |
 | The Hanging Effigies | Burn four guarded effigies; while any hangs, foes slain near one may rise again. |
-| The Lantern Vigil | The glade goes dark for 80 s; waves drain the lanterns; relight snuffed ones; all four out = fail. |
+| The Lantern Vigil | The glade goes dark for 80 s; waves (every 12 s) drain the lanterns, and with nothing left alive between them a few come out of the dark at the hero; relight snuffed ones; all four out = fail. |
 | The Druid Circle | Five standing stones flash a sequence (3, 4, then 5); touch them in order. A wrong stone calls guardians and replays. |
 | Wolf Moon | The Moon-Eyed Alpha howls every 9 s and the pack answers; kill the alpha. |
 | Lost in the Woods | Three children are hiding at dead ends 10-30 tiles out; find each and lead them back; a child hurt too much is lost. |

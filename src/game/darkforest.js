@@ -221,7 +221,7 @@ const TRIALS = {
         x.wisp = x.mark('Witch-Light', p, (mk) => {
           x.unmark(mk); x.wisp = null; S.stage++; x.flash([mk.x, mk.y], '#9fe8ff', 2.2);
           x.spawn(x.roster(['wraith', 'bat']), x.near([mk.x, mk.y], 3), 'normal', 2 + S.stage);
-          if (S.stage >= S.goal) S.done = true; else S.wait = 1.5;
+          if (S.stage >= S.goal) S.done = true; else S.wait = 1;
         }, '#9fe8ff', 1.6);
       };
       S.done = false; S.wait = 0; x.next();
@@ -320,6 +320,11 @@ const TRIALS = {
         S.waveT = 12; S.wave++;
         x.lamps.forEach((pr, i) => { if (pr && (i + S.wave) % 2 === 0) x.spawn(x.roster(['wraith', 'ghoul', 'bat', 'shroom']), x.near([pr.x, pr.y], 1.5), 'normal', 1 + Math.ceil(S.wave / 2)); });
       }
+      // nothing left alive between waves: a few come out of the dark at the hero (not the lanterns), so the vigil is never
+      // spent standing about
+      const p = x.world.player;
+      S.quiet = x.live() ? 0 : (S.quiet || 0) + dt;
+      if (S.quiet > 0.5 && S.waveT > 1.5 && p) { S.quiet = 0; x.spawn(x.roster(['wraith', 'ghoul', 'bat', 'shroom']), x.near([p.x, p.y], 5), 'normal', 1 + Math.ceil(S.wave / 2)); }
       let lit = 0;
       x.lamps.forEach((pr, i) => {
         if (!pr) return;

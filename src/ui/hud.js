@@ -1,6 +1,6 @@
 // In-game HUD built on top of the provided skill-bar art.
 import { G } from '../state.js';
-import { el, fmt, fmtInt, escapeHtml, clamp } from '../core/util.js';
+import { el, fmt, fmtInt, escapeHtml, clamp, drawFiltered } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { A, potionIcon } from '../core/assets.js';
 import { UI, $, droppable } from './ui.js';
@@ -171,6 +171,12 @@ export const HUD = {
 
   layoutMobile() {
     const portrait = G.touch && innerHeight > innerWidth;
+    // upright, the rift bar and the scenario objective join the left column's flow under the auto-play line (the
+    // column's height changes with the area name, the target window and the stats, so a fixed place gets run into);
+    // otherwise they stand after the boss bar, in the centre column (css: #boss-bar ~)
+    const rift = $('#rift-bar'), obj = $('#sand-objective');
+    if (portrait && rift.parentElement !== $('#hud-top-left')) $('#hud-top-left').append(rift, obj);
+    else if (!portrait && rift.parentElement === $('#hud-top-left')) $('#boss-bar').after(rift, obj);
     const compact = G.touch && (portrait || !G.settings.mobileSkillBar);
     document.body.classList.toggle('compact-mobile-hud', compact);
     const hud = $('#hud'), img = $('#hud-img'), xp = $('#xp-track'), xpText = $('#xp-text'), rail = $('#hud-rail');
@@ -579,11 +585,15 @@ export const HUD = {
           row.appendChild(d);
         }
       }
-      // the message log grows up from the skill bar: keep it below the buff row (phones in landscape are short)
-      const lg = $('#log');
-      if (lg && !document.body.classList.contains('portrait')) {
-        const room = Math.floor(lg.getBoundingClientRect().bottom - row.getBoundingClientRect().bottom - 6);
-        const v = row.children.length && room > 0 ? room + 'px' : '';
+      // the message log grows up from the skill bar: keep it below the buff row (phones in landscape are short);
+      // measured only when the row's size or the layout changed, since reading rects forces a layout mid frame
+      // (below the whole left column: the target window and the auto-play line stand under the buff row)
+      const lg = $('#log'), lk = row.children.length + '|' + innerWidth + 'x' + innerHeight + '|' + document.body.className + '|' + $('#target-box').className + '|' + $('#auto-status').className;
+      const lr = lg && this.last.logFit !== lk && !document.body.classList.contains('portrait') && lg.getBoundingClientRect();
+      if (lr && lr.width) {   // (not while the HUD is hidden: nothing has a size then)
+        this.last.logFit = lk;
+        const room = Math.floor(lr.bottom - $('#hud-top-left').getBoundingClientRect().bottom - 6);
+        const v = Math.max(0, room) + 'px';
         if (lg.style.maxHeight !== v) lg.style.maxHeight = v;
       }
     }
@@ -663,9 +673,7 @@ export const HUD = {
     const dw = bw * k, dh = bh * k;
     g.clearRect(0, 0, S, S);
     g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
-    g.filter = 'brightness(1.35) contrast(1.1)'; // dungeon art is dark; lift it so it reads small
-    g.drawImage(img, bx, by, bw, bh, (S - dw) / 2, S - pad - dh, dw, dh);
-    g.filter = 'none';
+    drawFiltered(g, 'brightness(1.35) contrast(1.1)', img, bx, by, bw, bh, (S - dw) / 2, S - pad - dh, dw, dh); // dungeon art is dark; lift it so it reads small
   },
 
   /** The level-up banner: a dark vignette, the title and new level bleeding in from blur, then Velscour's two lines. */

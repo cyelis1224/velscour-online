@@ -99,6 +99,15 @@ boat's ramp; `skiff2`: two boats at once), `stairs` (out of the turret) or `tele
 rings), `storm` (lightning strikes), `gust` (the wind shoves everyone across the roof) and `fire` (cinderbombs leave
 burning patches).
 
+**The hero never stands about waiting** (the user's rule: no more than about a second with nothing to hit). The intro
+and the rests between waves are a tenth of a second; the next wave is called while the last two of the current one
+still stand on the roof, so its boats and climbers are already on their way. The flagship sets sail 2.5 s into wave
+3 (once no wave boat holds its docks), so it is alongside when the roof is clear. And whenever nothing on the roof can
+be hit (`run.top.hurry`, 0.05 s after the last foe falls), everything still arriving hurries: a boat's or the
+flagship's approach finishes in 0.3 s (`ship.rush` in `gfx/tower3d.js`), its ramp drops in a sixth of a second, the
+crew step off at once and every 0.15 s, the rest of a gangplank walk or a rope climb takes half a second. Measured
+with an instant-kill hero: the longest stretch with nothing to hit is about 1.2 s, nearly all of it a landing.
+
 | # | Scenario | What happens |
 |---|---|---|
 | 0 | The Black Sail | Admiral Veyl's galleon; boarders |
