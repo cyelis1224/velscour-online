@@ -171,6 +171,7 @@ export const HUD = {
   },
 
   layoutMobile() {
+    if (!A.hudGeo) return;
     const portrait = G.touch && innerHeight > innerWidth;
     // upright, the rift bar and the scenario objective join the left column's flow under the auto-play line (the
     // column's height changes with the area name, the target window and the stats, so a fixed place gets run into);

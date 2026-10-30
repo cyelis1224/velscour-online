@@ -39,7 +39,8 @@ async function runTest() {
 
     // Ensure we are in game / town
     await page.evaluate(async () => {
-      const { G, game } = window.VELSCOUR;
+      const { G } = window.VELSCOUR;
+      const { game } = await import('/src/game/game.js');
       const { newCharData } = await import('/src/game/save.js');
       const { GameChat } = await import('/src/ui/chat.js');
       const { TouchUI } = await import('/src/ui/touch.js');
@@ -58,8 +59,8 @@ async function runTest() {
       G.touch = true;
       document.body.classList.add('touch', 'portrait');
 
-      if (!G.game.map) {
-        await G.game.startSinglePlayer(G.char, false);
+      if (!game.map) {
+        await game.startSinglePlayer(G.char, false);
       }
       const { HUD } = await import('/src/ui/hud.js');
       GameChat.init();
