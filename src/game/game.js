@@ -999,27 +999,31 @@ export const game = {
     const keep = this.carrySummons(oldWorld);
     clearVfx();
     UI.closeAll();
-    p.x = start[0]; p.y = start[1]; p.z = 0;
-    p.channel = null; p.path = null; p.moveTarget = null; p.attackTarget = null; p.interact = null; p.lootTarget = null;
-    p.status = {}; p.dead = false; p.kbx = p.kby = 0; p.castLock = 0;
-    world.player = p;
-    world._generatingDungeon = false;
-    world.add(p);
-    for (const s of keep) {
-      const [x, y] = world.map.randomNear(p.x, p.y, 1.5);
-      s.x = x; s.y = y; s.world = world; s.aggro = null; s.foe = null; s.nav = null; s.fol = null;
-      world.add(s);
+    if (p) {
+      p.x = start[0]; p.y = start[1]; p.z = 0;
+      p.channel = null; p.path = null; p.moveTarget = null; p.attackTarget = null; p.interact = null; p.lootTarget = null;
+      p.status = {}; p.dead = false; p.kbx = p.kby = 0; p.castLock = 0;
+      world.player = p;
+      world.add(p);
+      for (const s of keep) {
+        const [x, y] = world.map.randomNear(p.x, p.y, 1.5);
+        s.x = x; s.y = y; s.world = world; s.aggro = null; s.foe = null; s.nav = null; s.fol = null;
+        world.add(s);
+      }
     }
+    world._generatingDungeon = false;
     if (G.remotePlayers) {
       for (const rp of G.remotePlayers.values()) {
-        rp.destroySummons();
-        rp.destroySig();
+        if (rp.destroySummons) rp.destroySummons();
+        if (rp.destroySig) rp.destroySig();
         const rpState = rp._lastState;
         const remoteKind = rpState?.worldKind || 'town';
         const sameWorld = (!rpState && world.kind === 'town') || (rpState && remoteKind === world.kind && (world.kind !== 'dungeon' || rpState.depth === world.depth));
         if (sameWorld) {
-          const rx = (rpState && typeof rpState.x === 'number') ? rpState.x : (world.map.randomNear(p.x, p.y, 1.8)?.[0] || p.x + 1);
-          const ry = (rpState && typeof rpState.y === 'number') ? rpState.y : (world.map.randomNear(p.x, p.y, 1.8)?.[1] || p.y + 1);
+          const px = p ? p.x : start[0];
+          const py = p ? p.y : start[1];
+          const rx = (rpState && typeof rpState.x === 'number') ? rpState.x : (world.map.randomNear(px, py, 1.8)?.[0] || px + 1);
+          const ry = (rpState && typeof rpState.y === 'number') ? rpState.y : (world.map.randomNear(px, py, 1.8)?.[1] || py + 1);
           rp.x = rx; rp.y = ry; rp.targetX = rx; rp.targetY = ry;
           rp.world = world;
           world.add(rp);
@@ -1029,18 +1033,20 @@ export const game = {
       }
     }
     G.world = world;
-    p.recompute(); // the Heresies in force read the level the hero stands in (game/heresies.js)
+    if (p) p.recompute(); // the Heresies in force read the level the hero stands in (game/heresies.js)
     Cine.abort(); // a cut scene belongs to the world it played in
     useTerrain(world.map); // a height map lifts the ground plane (gfx/terrain.js); flat maps clear it
     useTower(world); // the Serpentine Tower lays the grid onto its spiral stair (game/tower.js)
     useCaverns(world); // the Depth's Edge Caverns lift everything onto their smooth height field (game/caverns.js)
     useDunes(world); // so do the Sea of Sand's dunes and pyramids (game/dunes.js)
     camera.computeZoom();
-    camera.follow(p.x, p.y, 0, true);
-    world.map.reveal(p.x, p.y, 12);
+    if (p) {
+      camera.follow(p.x, p.y, 0, true);
+      world.map.reveal(p.x, p.y, 12);
+      preloadBarFx(p, SKILLS);
+    }
     world.map.stepMask(); // the steps every path search reads (map.js), worked out here rather than mid fight
     propReach(world); // and the props' culling box (render.js), once the ground's heights are set
-    preloadBarFx(p, SKILLS);
     if (G.room && net.connected) {
       net.sendLootRequest(world.kind, world.depth || 0);
     }
@@ -1425,7 +1431,7 @@ export const game = {
   },
 
   buildDungeon(depth, biome, mix = null) {
-    const c = G.char;
+    const c = G.char || (G.char = newCharData('barbarian', 'Hero'));
     c.depth = depth;
     if (G.room) G.room.depth = depth;
     if (biome.tower && !tower3dReady()) { UI.log('Clouds hide the Serpentine Tower today (three.js could not be loaded).', '#a0a0a0'); biome = BIOME_BY_ID.overworld; }

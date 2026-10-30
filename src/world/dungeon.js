@@ -319,7 +319,7 @@ export function generateDungeon(depth, biome, tileset, seed, opts = {}) {
 
   // ---- spawns
   const spawns = [];
-  const roster = biome.roster;
+  const roster = biome.roster && biome.roster.length ? biome.roster : ['ghoul', 'skeleton'];
   const rnd = () => rng.next();
   const looks = rollLooks(biome, rnd); // this level's bestiary: which art and palette swap each archetype gets
   const dens = density(depth) * (opts.density || 1); // opts.density: Abyssal Rifts thin the packs (data/rifts.js RIFT_DENSITY)
