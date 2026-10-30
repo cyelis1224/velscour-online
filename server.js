@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.2.2' };
+    return { version: '1.2.3' };
   }
 }
 
@@ -424,6 +424,7 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Mobile portrait mode redesign with upward-expanding bottom-docked chat, flank special action buttons, repositioned ATK button, enlarged 108px minimap, and Android fullSensor dynamic rotation",
         "Organized Settings dialog into 5 clean category tabs (General, Audio, Graphics, HUD & UI, Auto-Play) with instant responsive navigation across desktop and mobile",
         "Multiplayer Bard Music Synchronization: live melodic note playback, rhythm audio, cadences, staff notation, and custom sheet titles replicated to all party members",
         "Vanity Appearance Slots: wear any armor or helmet look while retaining full combat stats, set bonuses, and sockets with 'Hide Helmet' support",
@@ -476,8 +477,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.2.2'}`,
-          filename: `Velscour-${pkg.version || '1.2.2'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.2.3'}`,
+          filename: `Velscour-${pkg.version || '1.2.3'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -529,7 +530,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.2.2'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.2.3'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -846,7 +847,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.2.2';
+        const serverVer = getPackageInfo().version || '1.2.3';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -899,7 +900,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.2.2',
+          serverVersion: getPackageInfo().version || '1.2.3',
         }));
 
         if (reconnectedRoom) {

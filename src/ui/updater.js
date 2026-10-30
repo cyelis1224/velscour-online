@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.2.2';
+export const CURRENT_BUILD_VERSION = '1.2.3';
 
 /**
  * Returns the effective client version.
@@ -191,12 +191,12 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.2.2' : currentVer,
+        serverVersion: forceTestUpdate ? '1.2.3' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.2.2' : currentVer,
+          version: forceTestUpdate ? '1.2.3' : currentVer,
           changelog: [
             'Bard Music Sheets: paste tablature or note names, lock sheets, and load them into 5 Tab slots under paper doll to play songs during combat',
             'Death Knight 3D Flying Greatsword: equipped two-handed blade flies beside hero and rests on back with 50 unique greatsword designs',
