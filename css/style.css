@@ -3971,6 +3971,64 @@ body.touch .reliquary-panel .codex-cell {
   animation: logo-in 2s;
 }
 
+.settings-dialog {
+  width: min(580px, 94vw);
+  max-width: min(580px, 94vw);
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 2px solid var(--gold-dim);
+  margin: 0 0 14px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 0;
+}
+
+.settings-tab-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  text-align: center;
+  font-family: var(--font-head);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  color: #a8977c;
+  background: #140d08;
+  border: 1px solid #4a3018;
+  border-bottom: 2px solid transparent;
+  border-radius: 5px 5px 0 0;
+  cursor: pointer;
+  transition: background 0.1s ease, color 0.1s ease;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.settings-tab-btn:hover {
+  color: #ffd860;
+  background: #23160e;
+}
+
+.settings-tab-btn.active {
+  color: #ffd860;
+  background: linear-gradient(180deg, #382012, #1b0e07);
+  border-color: var(--gold-dim);
+  border-bottom: 2px solid #ffd860;
+  text-shadow: 0 0 6px rgba(255, 216, 96, 0.4);
+}
+
+.settings-tab-pane {
+  display: none;
+  min-height: 220px;
+}
+
+.settings-tab-pane.active {
+  display: block;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -4919,6 +4977,16 @@ body.touch.portrait .class-text {
 body.touch.portrait .settings-grid {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px 10px;
+}
+
+body.touch.portrait .settings-tab-btn {
+  font-size: 11px;
+  padding: 6px 3px;
+  letter-spacing: 0.2px;
+}
+
+body.touch.portrait .settings-tab-pane {
+  min-height: 180px;
 }
 
 body.touch.portrait .help-keys {

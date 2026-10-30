@@ -498,45 +498,87 @@ export function victoryScreen(onContinue) {
   show(s);
 }
 
+let activeSettingsTab = 'general';
+
 export function settingsDialog() {
   const st = G.settings;
-  const html = `<div class="settings-grid">
-    <label>Game version</label><div style="display:flex;gap:8px;align-items:center;"><span style="color:#ffd860;font-family:var(--font-head);font-size:12px;font-weight:700;">v${getClientVersion()}</span><button class="btn small" data-check-update>Check for Updates</button></div>
-    <label>Cloud save (Google account)</label><button class="btn small" data-cloud></button>
-    <label>Hero backups</label><button class="btn small" data-backups>View</button>
-    <label>Sound effects</label><input type="range" min="0" max="1" step="0.05" value="${st.sfx}" data-k="sfx">
-    <label>Music</label><input type="range" min="0" max="1" step="0.05" value="${st.music}" data-k="music">
-    <label>Ambience</label><input type="range" min="0" max="1" step="0.05" value="${st.amb ?? 0.5}" data-k="amb">
-    <label>Camera zoom</label><input type="range" min="0.7" max="1.6" step="0.05" value="${st.zoom}" data-k="zoom">
-    <label>Gore</label><select data-k="gore"><option value="0">Off</option><option value="1">Bloody</option><option value="2">Extreme</option></select>
-    <label title="30 draws half the frames: smoother than a frame rate that keeps dipping, and a phone stays cooler (a hot phone slows itself down after a long session)">Frame rate cap</label><select data-k="fpsCap"><option value="0">None</option><option value="30">30 fps (cooler phone)</option></select>
-    <label>Damage numbers</label><input type="checkbox" data-k="dmgNumbers" ${st.dmgNumbers ? 'checked' : ''}>
-    <label>Screen shake</label><input type="checkbox" data-k="shake" ${st.shake ? 'checked' : ''}>
-    <label title="The hero, monsters and pets keep a coloured outline over spells, walls and darkness (hidden only behind another creature)">See-through outlines</label><input type="checkbox" data-k="outlines" ${st.outlines !== false ? 'checked' : ''}>
-    <label title="Off: a bar shows only for a moment over a monster you hit, and never over bosses">Life bars over every enemy (bosses too)</label><input type="checkbox" data-k="lifeBars" ${st.lifeBars !== false ? 'checked' : ''}>
-    <label title="A line along the foot of the dungeon's walls, drawn over every spell (not over creatures)">Outline wall bases</label><input type="checkbox" data-k="wallLines" ${st.wallLines ? 'checked' : ''}>
-    <label title="Off: a Sky Battle cut scene you have already watched once plays at 20x">Don't skip cutscenes</label><input type="checkbox" data-k="noSkipCine" ${st.noSkipCine ? 'checked' : ''}>
-    <label>Hero stats plaque (Battle Ledger)</label><input type="checkbox" data-k="showHeroStats" ${st.showHeroStats !== false ? 'checked' : ''}>
-    <label>Target info box</label><input type="checkbox" data-k="showTargetBox" ${st.showTargetBox !== false ? 'checked' : ''}>
-    <label>Target portrait sprite</label><input type="checkbox" data-k="showTargetSprite" ${st.showTargetSprite !== false ? 'checked' : ''}>
-    <label>Player chat bubbles</label><input type="checkbox" data-k="showChatBubbles" ${st.showChatBubbles !== false ? 'checked' : ''}>
-    <label>Chat in side notifications</label><input type="checkbox" data-k="chatInSideLog" ${st.chatInSideLog !== false ? 'checked' : ''}>
-    <label title="The hero holds his weapon and off-hand, each in its own look">Show weapons and off-hands</label><input type="checkbox" data-k="heldGear" ${st.heldGear !== false ? 'checked' : ''}>
-    <label title="Glows, particles and gem sparks on held weapons, and sparkles on rare armor and helmets (with weapons shown)">Weapon and gear effects</label><input type="checkbox" data-k="heldFx" ${st.heldFx !== false ? 'checked' : ''}>
-    <label title="The Death Knight's flying sword: his equipped sword as a flat 2D object, the same sword as a live 3D model, or the old Runeblade">Death Knight's flying sword</label><select data-k="dkBlade" data-str="1">${[['sprite', 'Equipped sword (2D)'], ['model', 'Equipped sword (3D)'], ['runeblade', 'Runeblade']].map(([v, n]) => `<option value="${v}"${(st.dkBlade || 'sprite') === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
-    <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
-    <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
-    <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
-    <label>Pause while menus open (Single Player)</label><input type="checkbox" data-k="pauseMenus" ${st.pauseMenus !== false ? 'checked' : ''}>
-    <label>Show gold labels</label><input type="checkbox" data-k="showGoldLabels" ${st.showGoldLabels ? 'checked' : ''}>
-    <label title="An icon per summoning skill next to the buffs, with how many of its minions are out">Minion counts with the buffs</label><input type="checkbox" data-k="minionCounts" ${st.minionCounts !== false ? 'checked' : ''}>
-    <label>Hide dropped item names</label><input type="checkbox" data-k="hideItemNames" ${st.hideItemNames ? 'checked' : ''}>
-    <label>Lock skill bar (auto-play only fills empty slots)</label><input type="checkbox" data-k="lockSkillBar" ${st.lockSkillBar ? 'checked' : ''}>
-    <label>Auto skill point assignment (auto-play)</label><input type="checkbox" data-k="autoSkillPoints" ${st.autoSkillPoints !== false ? 'checked' : ''}>
-    <label title="Off: auto-play leaves your attribute points (Strength, Dexterity, Vitality, Energy) for you to spend">Auto attribute point assignment (auto-play)</label><input type="checkbox" data-k="autoStatPoints" ${st.autoStatPoints !== false ? 'checked' : ''}>
-    <label title="Off: auto-play never equips, sells, buys, stashes, sockets, upgrades or enchants gear; in town it only buys potions. A full bag doesn't stop it: it keeps playing and leaves new gear on the ground. Locked items (the lock in the item's panel) are never touched either way">Auto-play manages gear (equip, sell, buy, upgrade)</label><input type="checkbox" data-k="autoGear" ${st.autoGear !== false ? 'checked' : ''}>
+  const html = `<div class="settings-tabs">
+    <button type="button" class="settings-tab-btn" data-tab="general">General</button>
+    <button type="button" class="settings-tab-btn" data-tab="audio">Audio</button>
+    <button type="button" class="settings-tab-btn" data-tab="graphics">Graphics</button>
+    <button type="button" class="settings-tab-btn" data-tab="hud">HUD &amp; UI</button>
+    <button type="button" class="settings-tab-btn" data-tab="autoplay">Auto-Play</button>
+  </div>
+  <div class="settings-tab-pane" data-pane="general">
+    <div class="settings-grid">
+      <label>Game version</label><div style="display:flex;gap:8px;align-items:center;"><span style="color:#ffd860;font-family:var(--font-head);font-size:12px;font-weight:700;">v${getClientVersion()}</span><button class="btn small" data-check-update>Check for Updates</button></div>
+      <label>Cloud save (Google account)</label><button class="btn small" data-cloud></button>
+      <label>Hero backups</label><button class="btn small" data-backups>View</button>
+      <label>Pause while menus open (Single Player)</label><input type="checkbox" data-k="pauseMenus" ${st.pauseMenus !== false ? 'checked' : ''}>
+      <label title="Off: a Sky Battle cut scene you have already watched once plays at 20x">Don't skip cutscenes</label><input type="checkbox" data-k="noSkipCine" ${st.noSkipCine ? 'checked' : ''}>
+    </div>
+  </div>
+  <div class="settings-tab-pane" data-pane="audio">
+    <div class="settings-grid">
+      <label>Sound effects</label><input type="range" min="0" max="1" step="0.05" value="${st.sfx}" data-k="sfx">
+      <label>Music</label><input type="range" min="0" max="1" step="0.05" value="${st.music}" data-k="music">
+      <label>Ambience</label><input type="range" min="0" max="1" step="0.05" value="${st.amb ?? 0.5}" data-k="amb">
+    </div>
+  </div>
+  <div class="settings-tab-pane" data-pane="graphics">
+    <div class="settings-grid">
+      <label>Camera zoom</label><input type="range" min="0.7" max="1.6" step="0.05" value="${st.zoom}" data-k="zoom">
+      <label title="30 draws half the frames: smoother than a frame rate that keeps dipping, and a phone stays cooler (a hot phone slows itself down after a long session)">Frame rate cap</label><select data-k="fpsCap"><option value="0">None</option><option value="30">30 fps (cooler phone)</option></select>
+      <label>Gore</label><select data-k="gore"><option value="0">Off</option><option value="1">Bloody</option><option value="2">Extreme</option></select>
+      <label>Screen shake</label><input type="checkbox" data-k="shake" ${st.shake ? 'checked' : ''}>
+      <label title="The hero, monsters and pets keep a coloured outline over spells, walls and darkness (hidden only behind another creature)">See-through outlines</label><input type="checkbox" data-k="outlines" ${st.outlines !== false ? 'checked' : ''}>
+      <label title="A line along the foot of the dungeon's walls, drawn over every spell (not over creatures)">Outline wall bases</label><input type="checkbox" data-k="wallLines" ${st.wallLines ? 'checked' : ''}>
+      <label title="The hero holds his weapon and off-hand, each in its own look">Show weapons and off-hands</label><input type="checkbox" data-k="heldGear" ${st.heldGear !== false ? 'checked' : ''}>
+      <label title="Glows, particles and gem sparks on held weapons, and sparkles on rare armor and helmets (with weapons shown)">Weapon and gear effects</label><input type="checkbox" data-k="heldFx" ${st.heldFx !== false ? 'checked' : ''}>
+      <label title="The Death Knight's flying sword: his equipped sword as a flat 2D object, the same sword as a live 3D model, or the old Runeblade">Death Knight's flying sword</label><select data-k="dkBlade" data-str="1">${[['sprite', 'Equipped sword (2D)'], ['model', 'Equipped sword (3D)'], ['runeblade', 'Runeblade']].map(([v, n]) => `<option value="${v}"${(st.dkBlade || 'sprite') === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
+    </div>
+  </div>
+  <div class="settings-tab-pane" data-pane="hud">
+    <div class="settings-grid">
+      <label>Damage numbers</label><input type="checkbox" data-k="dmgNumbers" ${st.dmgNumbers ? 'checked' : ''}>
+      <label title="Off: a bar shows only for a moment over a monster you hit, and never over bosses">Life bars over every enemy (bosses too)</label><input type="checkbox" data-k="lifeBars" ${st.lifeBars !== false ? 'checked' : ''}>
+      <label>Hero stats plaque (Battle Ledger)</label><input type="checkbox" data-k="showHeroStats" ${st.showHeroStats !== false ? 'checked' : ''}>
+      <label>Target info box</label><input type="checkbox" data-k="showTargetBox" ${st.showTargetBox !== false ? 'checked' : ''}>
+      <label>Target portrait sprite</label><input type="checkbox" data-k="showTargetSprite" ${st.showTargetSprite !== false ? 'checked' : ''}>
+      <label>Player chat bubbles</label><input type="checkbox" data-k="showChatBubbles" ${st.showChatBubbles !== false ? 'checked' : ''}>
+      <label>Chat in side notifications</label><input type="checkbox" data-k="chatInSideLog" ${st.chatInSideLog !== false ? 'checked' : ''}>
+      <label title="An icon per summoning skill next to the buffs, with how many of its minions are out">Minion counts with the buffs</label><input type="checkbox" data-k="minionCounts" ${st.minionCounts !== false ? 'checked' : ''}>
+      <label>Show gold labels</label><input type="checkbox" data-k="showGoldLabels" ${st.showGoldLabels ? 'checked' : ''}>
+      <label>Hide dropped item names</label><input type="checkbox" data-k="hideItemNames" ${st.hideItemNames ? 'checked' : ''}>
+      <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
+    </div>
+  </div>
+  <div class="settings-tab-pane" data-pane="autoplay">
+    <div class="settings-grid">
+      <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
+      <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
+      <label>Lock skill bar (auto-play only fills empty slots)</label><input type="checkbox" data-k="lockSkillBar" ${st.lockSkillBar ? 'checked' : ''}>
+      <label>Auto skill point assignment (auto-play)</label><input type="checkbox" data-k="autoSkillPoints" ${st.autoSkillPoints !== false ? 'checked' : ''}>
+      <label title="Off: auto-play leaves your attribute points (Strength, Dexterity, Vitality, Energy) for you to spend">Auto attribute point assignment (auto-play)</label><input type="checkbox" data-k="autoStatPoints" ${st.autoStatPoints !== false ? 'checked' : ''}>
+      <label title="Off: auto-play never equips, sells, buys, stashes, sockets, upgrades or enchants gear; in town it only buys potions. A full bag doesn't stop it: it keeps playing and leaves new gear on the ground. Locked items (the lock in the item's panel) are never touched either way">Auto-play manages gear (equip, sell, buy, upgrade)</label><input type="checkbox" data-k="autoGear" ${st.autoGear !== false ? 'checked' : ''}>
+    </div>
   </div>`;
-  const d = UI.dialog({ title: 'Settings', html, buttons: [{ label: 'Done', fn: () => { camera.computeZoom(); if (UI.hud) UI.hud.applyVisibilitySettings(); saveSettings(); } }] });
+  const d = UI.dialog({ title: 'Settings', html, cls: 'settings-dialog', buttons: [{ label: 'Done', fn: () => { camera.computeZoom(); if (UI.hud) UI.hud.applyVisibilitySettings(); saveSettings(); } }] });
+  const tabBtns = d.box.querySelectorAll('.settings-tab-btn');
+  const tabPanes = d.box.querySelectorAll('.settings-tab-pane');
+  const setTab = (name) => {
+    activeSettingsTab = name;
+    tabBtns.forEach((btn) => btn.classList.toggle('active', btn.dataset.tab === name));
+    tabPanes.forEach((pane) => pane.classList.toggle('active', pane.dataset.pane === name));
+  };
+  tabBtns.forEach((btn) => {
+    btn.onclick = () => {
+      sfx('ui');
+      setTab(btn.dataset.tab);
+    };
+  });
+  if (!['general', 'audio', 'graphics', 'hud', 'autoplay'].includes(activeSettingsTab)) activeSettingsTab = 'general';
+  setTab(activeSettingsTab);
   d.box.querySelector('[data-k=gore]').value = String(st.gore);
   d.box.querySelector('[data-k=fpsCap]').value = String(st.fpsCap || 0);
   d.box.querySelector('[data-backups]').onclick = () => { sfx('ui'); backupsDialog(); };
