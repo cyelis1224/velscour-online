@@ -68,6 +68,37 @@ const classes = (process.argv[3] || 'paladin,wizard').split(',');
     await shot(`dmgscale_${cls}_${D}`);
     console.log(`${r.cls} D${r.D} (mlvl ${r.L}) life ${r.life} | scale ${r.scale.toPrecision(3)} normal monster life ${r.monLife.toFixed(1)} | ${r.n} numbers: hit ${r.hit} (${(100 * r.hit / r.life).toFixed(1)}% of life) crit ${r.crit} max ${r.maxShown} | plaque atk ${r.atk} dps ${r.dps} avg ${r.avg} | weapon ${r.tip}`);
   }
+  // thorns (combat.js) land on the shown scale x Fortitude: a normal attacker dies in ~40 blows at every depth; weapon
+  // figures read ~100 for a Common of the depth (shownWeapon), never the 0.0x they were
+  const th = await page.evaluate(async () => {
+    const { G, game } = window.VELSCOUR;
+    const { BIOME_BY_ID } = await import('/src/data/biomes.js');
+    const { makeMonster } = await import('/src/game/monster.js');
+    const { rollItem } = await import('/src/data/items.js');
+    const { depthLevel, shownWeapon } = await import('/src/data/depth.js');
+    const { hit } = await import('/src/game/combat.js');
+    const out = [];
+    for (const D of [5, 60, 500, 1500]) {
+      await game.newChar('paladin', 'Thorny');
+      document.querySelectorAll('.screen').forEach((s) => s.remove()); G.ui.modalCount = 0; G.ui.closeAll();
+      const c = G.char, L = depthLevel(D), p = G.player;
+      c.level = Math.min(3000, L + 2); c.depth = D;
+      const sh = rollItem(L, { slot: 'offhand', rarity: 4, generic: true }); sh.unid = false;
+      sh.affixes = sh.affixes.filter((a) => a.s !== 'thorns'); const v = Math.max(1, Math.round(2 + L * 0.25)); sh.affixes.push({ s: 'thorns', v });
+      c.equip.offhand = sh;
+      game.buildDungeon(D, BIOME_BY_ID.catacombs);
+      G.godMode = true; p.recompute();
+      const m = makeMonster(G.world, 'skeleton', G.world.biome, L, 'normal', p.x + 1, p.y); G.world.add(m);
+      const hp0 = m.hp; let n = 0, got = 0; // blocked blows strike nothing back: average the ones that land
+      for (let i = 0; i < 30; i++) { const h = m.hp; hit(m, p, 1, 'phys', {}); if (h > m.hp) { n++; got += h - m.hp; } m.hp = hp0; }
+      const w = rollItem(L, { slot: 'weapon', rarity: 0, generic: true }), [a, b] = (await import('/src/data/items.js')).itemDmg(w);
+      out.push({ D, v, thorns: Math.round(p.st.thorns), blows: +(hp0 / Math.max(1e-9, got / Math.max(1, n))).toFixed(1), weapon: Math.round(shownWeapon((a + b) / 2, depthLevel(D))) });
+    }
+    G.godMode = false;
+    return out;
+  });
+  console.log('thorns / weapon: ' + th.map((t) => `D${t.D} affix ${t.v} -> ${t.thorns} thorns, a normal dies in ${t.blows} blows; Common weapon reads ${t.weapon}`).join(' | '));
+  if (th.some((t) => !(t.blows > 5 && t.blows < 400) || t.weapon < 50 || t.weapon > 200)) { console.log('FAIL: thorns or weapon figures off the scale'); process.exitCode = 1; }
   const bad = rows.filter((r) => !r.n || r.maxShown > r.life * 50);
   if (bad.length) { console.log('FAIL: shown damage off the scale of hero life:', bad.map((r) => `${r.cls} D${r.D}`).join(', ')); process.exitCode = 1; }
   report(errors, 20);

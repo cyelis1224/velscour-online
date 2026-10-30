@@ -1,7 +1,8 @@
 // Item cells and tooltip HTML.
 import { G } from '../state.js';
 import { el, escapeHtml, fmtInt, fmtDmg } from '../core/util.js';
-import { shownDmg, heroDmgLevel } from '../data/depth.js';
+import { shownWeapon, shownDmg, heroDmgLevel } from '../data/depth.js';
+import { SKILLS, effLevel } from '../data/skills.js';
 import { itemName, itemBaseLine, itemColor, itemStats, itemDmg, itemArmor, statLabel, RARITY, GEMS, gemStats, gemName, LEGENDARY, legendaryDesc, powerLevel, SLOT_NAMES, POTION_INFO, MAX_GEM_TIER, augTarget } from '../data/items.js';
 import { AUGMENTS } from '../data/rings.js';
 import { elem } from '../gfx/vfx.js';
@@ -13,10 +14,23 @@ import { keyName } from '../data/melodies.js';
 import { RELIC_COLORS, RELIC_NAMES, SIGILS, SIGIL_MAX, sigilStats, sigilCap } from '../data/items.js';
 import { HEIRLOOM_BY_ID, COVENANT_BY_ID, PIECE_BY_ID, POWERS, GLYPHWORDS, glyphOf, wornSets, powerText, lineValue, TUNE } from '../data/relics.js';
 
-// power figures (weapon damage, flat damage, thorns) on the shown scale of the hero's depth (data/depth.js)
-const shown = (v) => fmtDmg(shownDmg(v, heroDmgLevel(G.char)));
-const POWER = { flatDmg: 1, thorns: 1 };
-const label = (s, v, trees) => statLabel(s, POWER[s] ? shown(v) : v, trees);
+// weapon figures (an item's Damage, flat weapon damage) on the weapon scale of the hero's depth (data/depth.js); thorns
+// are already on the shown scale (combat.js)
+const shown = (v) => fmtDmg(shownWeapon(v, heroDmgLevel(G.char)));
+const label = (s, v, trees) => statLabel(s, s === 'flatDmg' ? shown(v) : v, trees);
+
+/** A damaging augment's damage on this hero, on the shown scale: its share of the targeted skill's hit (or of the
+ *  plaque's Attack, for "all skills" and kinds), so a ring reads like a skill ("≈ 9.4K a meteor"). */
+function augDamage(p, a, A) {
+  if (!p || !A.hit) return '';
+  const sk = a.sk && SKILLS[a.sk];
+  let base = 0, on = '';
+  if (sk && (p.char.skills[a.sk] || 0) > 0) { const d = p.skillDamage(sk, Math.max(1, effLevel(p, sk))); base = (d[0] + d[1]) / 2; on = `${sk.name}'s`; }
+  else if (!sk && G.ui.hud && G.ui.hud.sheet) { base = G.ui.hud.sheet.atk; on = 'your Attack'; }
+  if (!(base > 0)) return '';
+  const [k, what] = A.hit(a.pow), L = heroDmgLevel(p.char);
+  return `<div class="tt-augdmg">≈ <b>${fmtDmg(shownDmg(base * k, L))}</b> ${escapeHtml(what)} <span class="dim">(on ${escapeHtml(on)} ${fmtDmg(shownDmg(base, L))} hit)</span></div>`;
+}
 
 export function itemCell(item) {
   const d = el('div', 'itemicon');
@@ -87,7 +101,7 @@ export function itemTooltip(item, opts = {}) {
       const fin = finishOf(item), gfx = gearFxOf(item);
       if (fin || gfx) h += `<div class="dim" style="font-style:italic">${fin ? escapeHtml(fin.name) + ' finish' : ''}${fin && gfx ? ' · ' : ''}${gfx ? 'Aura: ' + escapeHtml(gfx.name) : ''}</div>`;
       if (item.dmg) { const [a, b] = itemDmg(item); h += `<div>Damage: <b>${shown(a)}–${shown(b)}</b>${cmp(opts.compare, item, 'dmg')}</div>`; }
-      if (item.armor) h += `<div>Armor: <b>${itemArmor(item)}</b>${cmp(opts.compare, item, 'armor')}</div>`;
+      if (item.armor) h += `<div>Armor: <b>${fmtInt(itemArmor(item))}</b>${cmp(opts.compare, item, 'armor')}</div>`;
       if (item.upg) h += `<div style="color:#ffd34a">Upgraded +${item.upg}</div>`;
       const req = item.req || 1;
       h += `<div style="color:${p && p.char.level < req ? '#ff5050' : '#a8977c'}">Requires Level ${req}</div>`;
@@ -95,7 +109,7 @@ export function itemTooltip(item, opts = {}) {
       for (const a of item.affixes) h += `<div class="tt-line" style="color:${a.implicit ? '#d8d0c0' : a.perk ? '#d8c078' : '#8fb4ff'}">${escapeHtml(label(a.s, a.v, trees))}</div>`;
       if (item.aug) for (const a of item.aug) {
         const A = AUGMENTS[a.id], col = elem(A.el).glow, has = !a.sk || (p && p.char.skills[a.sk]);
-        h += `<div class="tt-aug" style="border-left:3px solid ${col};padding-left:6px;margin:4px 0"><b style="color:${col}">${A.name}</b> <span class="dim">· ${escapeHtml(augTarget(a))}${has ? '' : ' (not learned)'}</span><div style="color:#e8d8b8;font-size:12px">${escapeHtml(A.desc(a.pow))}</div></div>`;
+        h += `<div class="tt-aug" style="border-left:3px solid ${col};padding-left:6px;margin:4px 0"><b style="color:${col}">${A.name}</b> <span class="dim">· ${escapeHtml(augTarget(a))}${has ? '' : ' (not learned)'}</span><div style="color:#e8d8b8;font-size:12px">${escapeHtml(A.desc(a.pow))}</div>${augDamage(p, a, A)}</div>`;
       }
       if (item.legendary) {
         const L = LEGENDARY[item.legendary];
@@ -122,11 +136,11 @@ function cmp(other, item, kind) {
   if (kind === 'dmg' && other.dmg) {
     const a = itemDmg(item), b = itemDmg(other);
     const d = (a[0] + a[1]) / 2 - (b[0] + b[1]) / 2;
-    return Math.abs(shownDmg(d, heroDmgLevel(G.char))) >= 0.005 ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${shown(d)})</span>` : '';
+    return Math.abs(shownWeapon(d, heroDmgLevel(G.char))) >= 0.05 ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${shown(d)})</span>` : '';
   }
   if (kind === 'armor' && other.armor !== undefined) {
     const d = itemArmor(item) - itemArmor(other);
-    return d ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${d})</span>` : '';
+    return d ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${fmtInt(d)})</span>` : '';
   }
   return '';
 }

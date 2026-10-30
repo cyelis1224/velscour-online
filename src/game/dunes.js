@@ -65,6 +65,17 @@ export function createDuneRun(world, gen, biome, onSuccess) {
   const surfAt = (x, y) => { const i = map.tileIdx(x, y); return map.t[i] ? null : Number.isNaN(dv.lvl[i]) ? null : dv.lvl[i]; };
   const groundT = (x, y) => { const s = surfAt(x, y), h = dv.H2(x, y); return s != null && s > h ? s : h; };
   const tomb = (x) => x >= dv.OXI - 2;
+  /** Does ground in front of the hero (his sprite's width, nearer the camera) rise over 6 px or more of him? */
+  const heroHidden = (p, h0) => {
+    const fy = (p.x + p.y) * HH - h0 * VZ;
+    for (const d of [-0.25, 0, 0.25]) for (let s = 0.25, sMax = (floorHi - h0) / (2 * K) + 1; s < sMax; s += s < 2 ? 0.25 : 0.5) {
+      const sx = p.x + s + d, sy = p.y + s - d;
+      if (sx >= W || sy >= H || sx < 0 || sy < 0 || !cr.inRegion(sx)) break;
+      const g = groundT(sx, sy), py = (sx + sy) * HH - g * VZ;
+      if (g >= h0 + 0.75 && py < fy - 6) return true; // its face, from py down to the floor in front, crosses his sprite
+    }
+    return false;
+  };
 
   const cr = world.cave = {
     dv, v, focus: [0, 0, 0], cut: true, inside: false, zoomK: 1,
@@ -136,6 +147,10 @@ export function createDuneRun(world, gen, biome, onSuccess) {
       cr.inside = tomb(p.x);
       const h = groundT(p.x, p.y);
       cr.focus[0] = p.x; cr.focus[1] = h; cr.focus[2] = p.y;
+      // the cutaway only while ground in front really covers the hero: always on, it punched a dark hole in any tomb wall
+      // standing near him (a player took it for a strange shadow); held 0.4 s so it doesn't flicker at a wall's edge
+      cr.cutT = heroHidden(p, h) ? 0.4 : Math.max(0, (cr.cutT || 0) - dt);
+      cr.cut = cr.cutT > 0;
       const r = dv.reg[map.tileIdx(p.x, p.y)];
       const zk = !cr.inside ? 0.9 : r === DREG.chamber ? 0.86 : 1;
       if (snap || Math.abs(cr.zoomK - zk) > 0.002) {

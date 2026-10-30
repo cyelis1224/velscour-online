@@ -97,7 +97,7 @@ export const UI = {
     }
     if (this.hud) this.hud.refreshStatic();
   },
-  onPanelsChanged() { if (this.hud) this.hud.refreshStatic(); },
+  onPanelsChanged() { document.body.classList.toggle('panel-open', this.panels.size > 0); if (this.hud) this.hud.refreshStatic(); }, // (portrait touch hides its buttons under a panel)
 
   desktopPanels() { return !G.touch && !document.body.classList.contains('touch'); },
   focusPanel(name) {

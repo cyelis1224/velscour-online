@@ -15,7 +15,10 @@ import { sfx } from '../core/audio.js';
 import { addEffect, Telegraph, Ring, Bolt, burst, floatText, smoke } from '../gfx/vfx.js';
 import { explosionFx } from '../gfx/shapes.js';
 import { ART_BY_ID } from '../data/bestiary.js';
-import { makeHeirloom } from '../data/relics.js';
+import { makeHeirloom, HEIRLOOMS } from '../data/relics.js';
+import { rollItem, rarityAt, ABYSSAL, RARITY, itemName } from '../data/items.js';
+import { reliquary } from './reliquary.js';
+import { grantMarks } from './marks.js';
 import { UI } from '../ui/ui.js';
 import { KEYS_RANK, worldRank } from './heresies.js';
 import { endgameUnlocked, endgame, saveEndgame } from './endgame.js';
@@ -27,8 +30,9 @@ export const UNBOUND_KEYS = 3;
 /** The rematch's dials, tuned with tools/tests/unbound.js (auto-play, depth-500 gear: 6.2-13.5 minutes, mean 8.3; the
  *  plain fight 5-6): his life on top of HP_MUL (he sits at the damage cap, so it mostly sizes his seals, shards and
  *  obelisks), his hits instead of DMG_MUL, the clock, the court's life and hits (of a BOSS ROOM boss's) and cast pace
- *  while he fights, the Pact's ward, the Crown's odds after the first win, an Unbound Chains obelisk's life (of his). */
-export const UNBOUND = { hp: 2.4, dmg: 0.85, enrage: 20 * 60, courtHp: 0.8, courtDmg: 0.65, courtGap: 1.6, courtHeal: 0.35, pact: 0.4, pactFor: 120, crown: 0.25, obelisk: 0.035 };
+ *  while he fights, the Pact's ward, the Crown's odds after the first win, an Unbound Chains obelisk's life (of his); the
+ *  win's Abyssal items and Infernal Marks (a rift Guardian gives one item, Abyssal 10-60% of the time, and 1-8 Marks). */
+export const UNBOUND = { hp: 2.4, dmg: 0.85, enrage: 20 * 60, courtHp: 0.8, courtDmg: 0.65, courtGap: 1.6, courtHeal: 0.35, pact: 0.4, pactFor: 120, crown: 0.25, obelisk: 0.035, abyssal: 3, marks: 20 };
 // the throne arena as a raid arena (Raid.inside, startInter's leap); the gate is off the map so its seal blocks nothing
 const ARENA = { x: 6, y: 4, w: 32, h: 27, cx: 22, cy: 17.5, gate: { x: -40, y0: -40, y1: -39 } };
 const POST = [31, 13]; // the east guard post
@@ -164,15 +168,24 @@ export function unboundTick(V, dt) {
     if ((b.outT = (b.outT || 0) + dt) > 1.5) { [b.x, b.y] = w.map.nudge(b.post[0], b.post[1], 1); b.nav = null; b.outT = 0; smoke(b.x, b.y, 0, '#200808', 6, 10); }
   }
 }
-/** His death: the court falls with him, and the spoils on top of his hoard: one Unbound Heirloom and, the first win
- *  always and then one in four, the Crown of the Demon Lord (both open, never sealed). */
+/** His death: the court falls with him, and the spoils on top of his hoard: one Unbound Heirloom (one the Codex lacks
+ *  first, so four wins find all four), the first win always and then one in four the Crown of the Demon Lord (both open,
+ *  never sealed), UNBOUND.abyssal Abyssal items and UNBOUND.marks Infernal Marks. Before the items and Marks a player
+ *  who had killed him ten times asked what the point was: rifts paid better. */
 export function unboundSpoils(V, lvl, drop) {
-  const c = G.char;
+  const c = G.char, p = G.player;
   for (const b of V.court) if (!b.dead) { b.dead = true; b.hp = 0; courtDeath(V, b, false); }
   const open = (it) => { if (it) it.sealed = false; return it; };
   const first = !(c.unbound.wins > 0);
-  drop(open(makeHeirloom(lvl, { unbound: true })));
-  if (first || chance(UNBOUND.crown)) drop(open(makeHeirloom(lvl, { id: 'crown_demon' })));
+  const unseen = HEIRLOOMS.filter((h) => h.unbound && !h.crown && !reliquary().codex['h:' + h.id]);
+  const heir = open(unseen.length ? makeHeirloom(lvl, { id: pick(unseen).id }) : makeHeirloom(lvl, { unbound: true }));
+  drop(heir);
+  const crown = first || chance(UNBOUND.crown);
+  if (crown) drop(open(makeHeirloom(lvl, { id: 'crown_demon' })));
+  const rar = rarityAt(lvl, ABYSSAL);
+  for (let i = 0; i < UNBOUND.abyssal; i++) drop(open(rollItem(lvl, { rarity: rar, mf: p ? p.st.magicFind : 0 })));
+  grantMarks(UNBOUND.marks, 'for Velscour Unbound');
+  UI.log(`<b style="color:#20e0ff">Velscour Unbound's spoils</b>: ${heir ? `<b>${itemName(heir)}</b>, ` : ''}${crown ? '<b>the Crown of the Demon Lord</b>, ' : ''}${UNBOUND.abyssal} <b style="color:${RARITY[rar].color}">${RARITY[rar].name}</b> items, a Heirloom, a Covenant piece, two Sigil Stones and ${UNBOUND.marks} Infernal Marks.`, '#a0f0ff');
   const E = endgame(); E.unboundWins++; saveEndgame();
   const secs = Math.round(V.t);
   c.unbound.best = c.unbound.best ? Math.min(c.unbound.best, secs) : secs;

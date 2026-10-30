@@ -157,7 +157,7 @@ export async function checkForUpdates({ force = false } = {}) {
       // If local server has no /api/version (e.g. running static file server like python -m http.server),
       // fall back to official production API so local players still get version updates and changelogs
       if (!res || !res.ok) {
-        if (baseUrl !== 'https://velscour.dagyr.me') {
+        if (baseUrl !== 'https://velscour.dagyr.me' && (!window.VELSCOUR_TEST_MENU || forceTestUpdate)) {
           try {
             const fallbackRes = await fetch(`https://velscour.dagyr.me/api/version?_t=${Date.now()}`, { cache: 'no-store' });
             if (fallbackRes && fallbackRes.ok) {

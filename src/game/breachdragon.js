@@ -22,7 +22,7 @@ import { makeMonster } from './monster.js';
 import { hit } from './combat.js';
 import { Delayed, Area } from './hazards.js';
 import { GroundItem } from './loot.js';
-import { rollItem, rarityAt, RARITY } from '../data/items.js';
+import { rollItem, rarityAt, RARITY, goldLvl } from '../data/items.js';
 import { ARCH } from '../data/enemies.js';
 import { wyrmVariant, wyrmStats, WYRM_NAMES, breachReward } from '../data/breach.js';
 import { addEffect, Ring, Telegraph, sparkle, spawn, floatText, addLight, Column, elem } from '../gfx/vfx.js';
@@ -276,7 +276,7 @@ export function createWyrm(h) {
     const il = lvl + 2, rar = rarityAt(il, breachReward(Math.max(4, floor), true));
     const p = P(), x = clamp(m.x, 1, W - 2), y = m.y;
     world.addLoot(new GroundItem(x, y, 'item', { item: rollItem(il, { rarity: rar }) }));
-    for (let k = 0; k < 4; k++) world.addLoot(new GroundItem(x + rand(-1, 1), y + rand(-1, 1), 'gold', { amount: Math.round(30 * Math.pow(1.06, il) * rand(0.8, 1.3)) }));
+    for (let k = 0; k < 4; k++) world.addLoot(new GroundItem(x + rand(-1, 1), y + rand(-1, 1), 'gold', { amount: Math.round(30 * Math.pow(1.06, goldLvl(il)) * rand(0.8, 1.3)) }));
     UI.centerMsg('THE WYRM IS SLAIN', `${name} · a ${RARITY[rar].name} from its hoard`, 4);
     UI.log(`<b style="color:${w.variant.glow}">${name}</b> comes apart into light. The Breach Heart can be faced once every shrine is won.`, w.variant.glow);
     addEffect(new Column(x, y, w.variant.glow, 1, 30, 360));

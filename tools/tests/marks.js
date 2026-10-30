@@ -1,11 +1,13 @@
 // Infernal Marks (docs/ENDGAME.md section 4: game/marks.js, ui/marks.js, the shared record in game/endgame.js):
-//  1. XP past the cap: a level-599 hero's spare XP at level 600 becomes Marks; a level-600 paladin kills a whole
-//     depth-1200 level (god mode) through combat.kill -> Player.gainXp: Marks rise one per markXp(), nothing is lost
+//  1. XP past the cap: a level-2999 hero's spare XP at level 3000 (MAX_LEVEL) becomes Marks; a level-3000 paladin kills a
+//     whole depth-6500 level (god mode) through combat.kill -> Player.gainXp: Marks rise one per markXp(), nothing is lost
 //     (every XP point lands in pts or marks.xp), a float text and a log line; a Mark is saved at once, XP alone at most
 //     every 5 s and on autosave, and marks.xp survives a page reload; the HUD XP bar and the sheet's XP line show the
 //     progress to the next Mark at the cap.
 //  2. Spending: free count, +n, more than free, reset, autoSpend spreads, the bonuses on the hero (100 Vitality =
-//     +15.1% maxHp exactly, 500 = +29.1%, +5.0 crit inside the 75 clamp, +25.2 MF, +30.3 s on riftTime()), a damaged
+//     x1.232 maxHp (a multiplier of its own), 500 = x1.81 (no cap: the 454th point still adds +0.12), +3.48 crit inside
+//     the 75 clamp and +28.99 crit damage, +14.5% more drops (st.drops; dropLoot on 300 champions: ~x1.81 the items at
+//     1000 Fortune), +17.4 s on riftTime()), a damaged
 //     record clamped, mergeEndgame's base rules (the cloud side is in cloud.js).
 //  3. Shared: a second hero of another class has the same bonuses; deleting heroes keeps the Marks; the panel (its
 //     buttons by click), the sheet's row and button, the Quest Log line, the skull's "marks"; desktop + phone shots.
@@ -33,10 +35,10 @@ const { openGame, report } = require('./harness');
       const n = xpToNext(MAX_LEVEL - 1) + markXp() * 2.5, g = Math.round(n * (1 + p.st.xpPct / 100)), left = g - xpToNext(MAX_LEVEL - 1);
       p.gainXp(n, true);
       const m = endgame().marks;
-      return { level: c.level, cxp: c.xp, pts: m.pts, xp: m.xp, want: Math.floor(left / markXp()), wantXp: left % markXp(), cost: markXp() };
+      return { cap: MAX_LEVEL, level: c.level, cxp: c.xp, pts: m.pts, xp: m.xp, want: Math.floor(left / markXp()), wantXp: left % markXp(), cost: markXp() };
     });
-    check(spare.level === 600 && spare.cxp === 0 && spare.pts === spare.want && Math.abs(spare.xp - spare.wantXp) < 1,
-      `level 599 -> 600: the last level's spare XP counts (${spare.pts} Marks + ${Math.round(spare.xp)} XP; one Mark = ${spare.cost.toLocaleString()} XP)`);
+    check(spare.level === spare.cap && spare.cxp === 0 && spare.pts === spare.want && Math.abs(spare.xp - spare.wantXp) < 1,
+      `level ${spare.cap - 1} -> ${spare.cap}: the last level's spare XP counts (${spare.pts} Marks + ${Math.round(spare.xp)} XP; one Mark = ${spare.cost.toLocaleString()} XP)`);
 
     const run = await page.evaluate(async () => {
       const { G, game } = window.VELSCOUR, c = G.char, p = G.player;
@@ -47,23 +49,23 @@ const { openGame, report } = require('./harness');
       const { depthLevel } = await import('/src/data/depth.js');
       document.querySelectorAll('.screen').forEach((s) => s.remove()); G.ui.modalCount = 0; G.ui.closeAll();
       G.godMode = true;
-      c.depth = 1200; c.deepest = 1199;
-      game.buildDungeon(1200, BIOME_BY_ID.catacombs);
+      c.depth = 6500; c.deepest = 6499;
+      game.buildDungeon(6500, BIOME_BY_ID.catacombs);
       const w = G.world, cost = markXp(), m = endgame().marks;
-      const pen = Math.max(0.1, 1 - (c.level - depthLevel(1200) - 5) * 0.1), mul = 1 + p.st.xpPct / 100;
+      const pen = Math.max(0.1, 1 - (c.level - depthLevel(6500) - 5) * 0.1), mul = 1 + p.st.xpPct / 100;
       const total = () => m.pts * cost + m.xp;
       m.xp = Math.max(m.xp, cost - 4e6);   // the next Mark a few million XP away: the kills earn it
       const t0 = total(), pts0 = m.pts, raw = localStorage.getItem('velscour_endgame_v1');
       let want = 0, rawXp = 0, n = 0, rose = [];
-      // the rate: a full clear's XP in Marks at depths where the level-600 hero out-levels the monsters, and where he doesn't
+      // the rate: a full clear's XP in Marks at depths where the level-3000 hero out-levels the monsters, and where he doesn't
       const rates = [];
-      for (const d of [1000, 1200, 1240, 1260, 1400]) {
+      for (const d of [6000, 6500, 6560, 6600, 6800]) {
         game.buildDungeon(d, BIOME_BY_ID.catacombs);
         const pd = Math.max(0.1, Math.min(1, 1 - (c.level - depthLevel(d) - 5) * 0.1));
         const sum = G.world.creatures.filter((x) => x.team === 'enemy').reduce((a, x) => a + (x.xp || 0), 0);
         rates.push(`D${d} (mlvl ${depthLevel(d)}, x${pd.toFixed(1)}): ${(sum * pd * mul / cost).toFixed(2)}`);
       }
-      game.buildDungeon(1200, BIOME_BY_ID.catacombs);
+      game.buildDungeon(6500, BIOME_BY_ID.catacombs);
       const w2 = G.world;
       for (const e of w2.creatures.filter((x) => x.team === 'enemy' && !x.dead)) {
         const before = m.pts;
@@ -75,12 +77,12 @@ const { openGame, report } = require('./harness');
       const saved = JSON.parse(localStorage.getItem('velscour_endgame_v1') || '{}');
       const log = document.querySelector('#log').textContent;
       return { n, rawXp, want, got: total() - t0, pts0, pts: m.pts, xp: m.xp, cost, pen, mul, rose: rose.length, savedPts: saved.marks && saved.marks.pts, rawChanged: raw !== localStorage.getItem('velscour_endgame_v1'),
-        log: /\+\d+ Infernal Marks? from the abyss/.test(log), mlvl: depthLevel(1200), at: rates };
+        log: /\+\d+ Infernal Marks? from the abyss/.test(log), mlvl: depthLevel(6500), at: rates };
     });
-    console.log(`  depth 1200 (monster level ${run.mlvl}): ${run.n} kills, ${Math.round(run.rawXp).toLocaleString()} XP before the out-levelling penalty (x${run.pen}, XP find x${run.mul.toFixed(2)}) -> ${Math.round(run.got).toLocaleString()} XP = ${(run.got / run.cost).toFixed(2)} Marks per full-cleared depth`);
-    console.log(`  Marks per full-cleared depth for a level-600 hero: ${run.at.join(', ')}`);
+    console.log(`  depth 6500 (monster level ${run.mlvl}): ${run.n} kills, ${Math.round(run.rawXp).toLocaleString()} XP before the out-levelling penalty (x${run.pen}, XP find x${run.mul.toFixed(2)}) -> ${Math.round(run.got).toLocaleString()} XP = ${(run.got / run.cost).toFixed(2)} Marks per full-cleared depth`);
+    console.log(`  Marks per full-cleared depth for a level-3000 hero: ${run.at.join(', ')}`);
     check(run.got >= run.want - 1 && run.want > 0, `every kill's XP lands in the Marks (${Math.round(run.got).toLocaleString()} XP; the kills' own ${run.want.toLocaleString()}, the rest from what their deaths set loose)`);
-    check(run.pts > run.pts0, `Marks rise from kills at depth 1200: ${run.pts0} -> ${run.pts}`);
+    check(run.pts > run.pts0, `Marks rise from kills at depth 6500: ${run.pts0} -> ${run.pts}`);
     check(run.savedPts === run.pts, 'a Mark is saved at once (localStorage holds the new total)');
     check(run.log, 'the log names the Mark ("+1 Infernal Mark from the abyss")');
     await page.evaluate(async () => { const { gainMarkXp, markXp } = await import('/src/game/marks.js'); const { G } = window.VELSCOUR; G.ui.hud.lu && G.ui.hud.lu.timers.forEach(clearTimeout); document.querySelector('#levelup').classList.add('hidden'); gainMarkXp(markXp()); });
@@ -133,7 +135,7 @@ const { openGame, report } = require('./harness');
       unlockEndgame();
       UI.openPanel('inventory', 'Inventory', renderInventory);
       const t = document.querySelector('[data-panel="inventory"]').textContent;
-      return { xpLine: /Next Infernal Mark [\d,]+ \/ [\d,]+ XP/.test(t), row: /Infernal Marks\d+ \(\d+ free\)/.test(t), btn: [...document.querySelectorAll('[data-panel="inventory"] button')].some((b) => b.textContent === 'Infernal Marks') };
+      return { xpLine: /Next Infernal Mark [\d,.]+[A-Za-z]* \/ [\d,.]+[A-Za-z]* XP/.test(t), row: /Infernal Marks\d+ \(\d+ free\)/.test(t), btn: [...document.querySelectorAll('[data-panel="inventory"] button')].some((b) => b.textContent === 'Infernal Marks') };
     });
     check(sheet.xpLine, 'the sheet\'s XP line shows the next Mark at the cap');
     check(sheet.row && sheet.btn, 'the sheet has the Infernal Marks row and button');
@@ -165,20 +167,25 @@ const { openGame, report } = require('./harness');
       c.level = MAX_LEVEL; for (const k in c.equip) c.equip[k] = null; p.recompute();   // no gear: the life pool is the Marks' alone
       const r = E.endgame(); r.marks.pts = 0; M.resetMarks();
       const o = {};
-      const base = { hp: p.maxHp, crit: p.st.critChance, mf: p.st.magicFind, rift: riftTime() };
+      const base = { hp: p.maxHp, crit: p.st.critChance, critDmg: p.st.critDmg, mf: p.st.magicFind, drops: p.st.drops, rift: riftTime() };
       o.base = base;
       o.grant = M.grantMarks(1000, 'for the test');
       o.free0 = M.marksFree();
       o.spent100 = M.spendMark('life', 100) + M.spendMark('crit', 100) + M.spendMark('mf', 100) + M.spendMark('rift', 100);
-      o.at100 = { life: p.maxHp / base.hp, crit: p.st.critChance - base.crit, mf: p.st.magicFind - base.mf, rift: riftTime() - base.rift, b: M.markBonuses() };
+      o.at100 = { life: p.maxHp / base.hp, crit: p.st.critChance - base.crit, critDmg: p.st.critDmg - base.critDmg, drops: p.st.drops - base.drops, mf: p.st.magicFind - base.mf, rift: riftTime() - base.rift, b: M.markBonuses() };
       o.free1 = M.marksFree();
       o.over = M.spendMark('life', 9999);   // only what is free
       o.free2 = M.marksFree();
       M.resetMarks(); o.afterReset = { free: M.marksFree(), hp: p.maxHp, total: M.marksTotal() };
-      M.spendMark('life', 500); o.at500 = p.maxHp / base.hp; o.b500 = M.bonusAt('life', 500);
+      M.spendMark('life', 500); o.at500 = p.maxHp / base.hp; o.b500 = M.bonusAt('life', 500); o.next453 = M.bonusAt('life', 454) - M.bonusAt('life', 453);
       M.resetMarks();
+      // Fortune: more drops from the same kills (dropLoot on 300 champions, then again with 1000 Marks in Fortune)
+      const { dropLoot } = await import('/src/game/loot.js');
+      const drops = () => { const w = G.world, n0 = w.loot.length; for (let i = 0; i < 300; i++) dropLoot(w, { x: p.x, y: p.y, level: 60, rank: 'champion' }); const got = w.loot.slice(n0).filter((l) => l.kind === 'item').length; w.loot.length = n0; return got; };
+      o.drop0 = drops(); M.spendMark('mf', 1000); o.drop1 = drops(); o.dropPct = p.st.drops; M.resetMarks();
       p.buffs.push({ id: 'test-crit', stats: { crit: 400 }, t: 99, dur: 99 }); p.recompute();
-      const hi = p.st.critChance; M.spendMark('crit', 1000); o.clamp = [hi, p.st.critChance];
+      const hi = p.st.critChance, cd0 = p.st.critDmg, ov0 = p.st.critOver; M.spendMark('crit', 1000); o.clamp = [hi, p.st.critChance];
+      o.critOv = { cd0, cd1: p.st.critDmg, ov0, ov1: p.st.critOver, also: M.alsoAt('crit', 1000), mk: M.bonusAt('crit', 1000) };
       p.buffs = p.buffs.filter((b) => b.id !== 'test-crit'); M.resetMarks();
       E.endgame().marks.pts = 403; o.auto = M.autoSpend(); o.spread = { ...E.endgame().marks.spent };
       o.text = M.marksText();
@@ -204,16 +211,22 @@ const { openGame, report } = require('./harness');
       return o;
     });
     const b = sp.at100;
-    console.log(`  100 points each: life x${b.life.toFixed(4)} (bonus ${b.b.life}%), crit +${b.crit.toFixed(2)}, MF +${b.mf.toFixed(2)}, rift +${b.rift.toFixed(2)} s; 500 Vitality: x${sp.at500.toFixed(4)} (${sp.b500}%)`);
+    console.log(`  100 points each: life x${b.life.toFixed(4)} (bonus ${b.b.life}%), crit +${b.crit.toFixed(2)} / +${b.critDmg.toFixed(2)} damage, drops +${b.drops}%, rift +${b.rift.toFixed(2)} s; 500 Vitality: x${sp.at500.toFixed(4)} (${sp.b500}%)`);
     check(sp.grant === 1000 && sp.free0 === 1000 && sp.spent100 === 400 && sp.free1 === 600, 'grantMarks(1000): 1000 free; 100 into each category leaves 600');
-    check(Math.abs(b.life - 1.1514) < 3 / sp.base.hp && b.b.life.toFixed(1) === '15.1', `100 Vitality: +${((b.life - 1) * 100).toFixed(2)}% on maxHp (${sp.base.hp} -> ${Math.round(sp.base.hp * b.life)})`);
-    check(Math.abs(sp.at500 - 1.2911) < 3 / sp.base.hp && sp.b500.toFixed(1) === '29.1', `500 Vitality: +${((sp.at500 - 1) * 100).toFixed(2)}% life`);
-    check(Math.abs(b.crit - 5.05) < 0.011, `100 Precision: +${b.crit.toFixed(2)} crit chance`);
-    check(Math.abs(b.mf - 25.23) < 0.011, `100 Fortune: +${b.mf.toFixed(2)} magic find`);
-    check(Math.abs(b.rift - 30.28) < 0.011, `100 Haste: +${b.rift.toFixed(2)} s on the rift clock`);
+    check(Math.abs(b.life - 1.232) < 3 / sp.base.hp && b.b.life.toFixed(1) === '23.2', `100 Vitality: +${((b.life - 1) * 100).toFixed(2)}% on maxHp (${sp.base.hp} -> ${Math.round(sp.base.hp * b.life)})`);
+    check(Math.abs(sp.at500 - 1.8117) < 3 / sp.base.hp && sp.b500.toFixed(1) === '81.2', `500 Vitality: +${((sp.at500 - 1) * 100).toFixed(2)}% life`);
+    check(sp.next453 >= 0.1, `the 454th Vitality point still adds +${sp.next453.toFixed(2)}% (it read +0.00 under the old cap)`);
+    check(Math.abs(b.crit - 3.48) < 0.011, `100 Precision: +${b.crit.toFixed(2)} crit chance`);
+    check(Math.abs(b.critDmg - 28.99) < 0.011, `100 Precision: +${b.critDmg.toFixed(2)} critical damage`);
+    check(Math.abs(b.drops - 14.5) < 0.011 && b.mf === 0, `100 Fortune: +${b.drops}% more drops (magic find unchanged: +${b.mf})`);
+    const dr = sp.drop1 / Math.max(1, sp.drop0);
+    check(Math.abs(dr - (1 + sp.dropPct / 100)) < 0.25, `1000 Fortune (+${sp.dropPct}% drops): 300 champions dropped ${sp.drop0} -> ${sp.drop1} items (x${dr.toFixed(2)})`);
+    check(Math.abs(b.rift - 17.40) < 0.011, `100 Haste: +${b.rift.toFixed(2)} s on the rift clock`);
     check(sp.over === 600 && sp.free2 === 0, `spending more than is free spends only the free (${sp.over})`);
     check(sp.afterReset.free === 1000 && sp.afterReset.total === 1000 && sp.afterReset.hp === sp.base.hp, 'Reset gives every point back and the bonuses go');
     check(sp.clamp[0] === 75 && sp.clamp[1] === 75, `crit from Marks stays inside the 75% clamp (${sp.clamp.join(' -> ')})`);
+    const ov = sp.critOv;
+    check(Math.abs(ov.ov1 - ov.ov0 - ov.mk) < 0.01 && Math.abs(ov.cd1 - ov.cd0 - ov.also - 2 * ov.mk) < 0.05, `past the cap the Marks' crit chance (+${ov.mk}%) turns to critical damage: +${(ov.cd1 - ov.cd0).toFixed(1)}% (${ov.also} of their own + 2 x ${ov.mk})`);
     const sv = Object.values(sp.spread);
     check(sp.auto === 403 && Math.max(...sv) - Math.min(...sv) <= 1, `Spend all spreads 403 Marks: ${JSON.stringify(sp.spread)}`);
     console.log(`  sheet text: ${sp.text}`);

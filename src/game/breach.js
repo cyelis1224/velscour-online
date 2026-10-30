@@ -17,7 +17,7 @@ import { makeMonster, monsterBase } from './monster.js';
 import { aoe } from './combat.js';
 import { Delayed } from './hazards.js';
 import { GroundItem, dropChest } from './loot.js';
-import { rollItem, rarityAt, RARITY } from '../data/items.js';
+import { rollItem, rarityAt, RARITY, goldLvl } from '../data/items.js';
 import { breachLevel, breachDepth, breachReward, finalBossIndex, breachArch, BREACH_CARRIERS, BREACH_BOSSES, BREACH_MONSTERS } from '../data/breach.js';
 import { addEffect, Ring, Column, Telegraph, sparkle, smoke, burst, spawn, floatText, addLight, glowSprite } from '../gfx/vfx.js';
 import { drawWard, drawCarrier } from '../gfx/breach.js';
@@ -432,7 +432,7 @@ export function createBreachRun(world, gen, biome, floor, onWin) {
     const r = breachReward(floor, first), il = lvl + 2, rar = rarityAt(il, r);
     const [hx, hy] = heart.C;
     world.addLoot(new GroundItem(hx + 0.8, hy + 1.6, 'item', { item: rollItem(il, { rarity: rar }) }));
-    for (let k = 0; k < 3; k++) world.addLoot(new GroundItem(hx + rand(-1.2, 1.2), hy + 1 + rand(0, 1.2), 'gold', { amount: Math.round(40 * Math.pow(1.06, il) * rand(0.8, 1.3)) }));
+    for (let k = 0; k < 3; k++) world.addLoot(new GroundItem(hx + rand(-1.2, 1.2), hy + 1 + rand(0, 1.2), 'gold', { amount: Math.round(40 * Math.pow(1.06, goldLvl(il)) * rand(0.8, 1.3)) }));
     UI.centerMsg('THE BREACH HEART IS SEALED', `Floor ${floor} conquered${first ? ' for the first time' : ''} · a ${RARITY[rar].name} prize`, 4);
     UI.log(`The Heart of Floor ${floor} gives up a <b style="color:${RARITY[rar].color}">${RARITY[rar].name}</b> treasure.${first ? '' : ' (Its first-clear prize was claimed before.)'}`, RARITY[rar].color);
     onWin(run, first);

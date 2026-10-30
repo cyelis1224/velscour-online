@@ -130,7 +130,8 @@ uniform vec4 uCut; uniform vec2 uCutR;
 bool caveCut(vec3 p) {
   if (uCut.w < 0.5) return false;
   float dz = (p.x + p.z) - (uCut.x + uCut.z);
-  if (dz < 0.35 || p.y < uCut.y + 0.75) return false;
+  // a wall's inner (back) faces go too, at any depth: left standing they filled the hole with a dark slab
+  if ((dz < 0.35 && gl_FrontFacing) || p.y < uCut.y + 0.75) return false;
   vec2 sp = vec2((p.x - p.z) * 32.0, (p.x + p.z) * 16.0 - p.y * 39.19);
   vec2 sh = vec2((uCut.x - uCut.z) * 32.0, (uCut.x + uCut.z) * 16.0 - uCut.y * 39.19 - 30.0);
   float r = length((sp - sh) / uCutR);

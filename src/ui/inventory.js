@@ -2,13 +2,13 @@
 import { G } from '../state.js';
 import { net } from '../net/network.js';
 import { el, fmtInt, fmtDmg, escapeHtml } from '../core/util.js';
-import { shownDmg, heroDmgLevel } from '../data/depth.js';
+import { shownWeapon, heroDmgLevel } from '../data/depth.js';
 import { sfx } from '../core/audio.js';
 import { UI, draggable, droppable } from './ui.js';
 import { itemCell, itemTooltip, rarityClass } from './itemui.js';
 import { SLOTS, SLOT_NAMES, VANITY_SLOTS, shownEquip, itemName, itemColor, GEMS, gemName, itemValue, fitsSlot, slotFor, unsocketCost, makeGem } from '../data/items.js';
 import { CLASSES, ATTRS } from '../data/classes.js';
-import { xpToNext } from '../game/player.js';
+import { xpToNext, CRIT_OVER } from '../game/player.js';
 import { addToBag } from '../game/player.js';
 import { GroundItem } from '../game/loot.js';
 import { classSprite } from '../core/assets.js';
@@ -107,6 +107,7 @@ export function takeOffLook(slot, toIdx) {
 export function socketGem(gemIdx, target) {
   const c = G.char, gem = c.bag[gemIdx], it = getItem(target);
   if (!gem || gem.type !== 'gem' || !it || it.type !== 'gear') return false;
+  if (it.sealed) { UI.log('Break the seal first: nothing goes into a sealed treasure.', '#ffdf8a'); sfx('error'); return false; }
   if (it.gems.length >= it.sockets) { UI.log(it.sockets ? 'No free sockets. Visit the Jeweler to add more.' : 'This item has no sockets. The Jeweler can add some.', '#ff8080'); sfx('error'); return false; }
   const was = glyphOf(it);
   it.gems.push({ gem: gem.gem, tier: gem.tier });
@@ -409,7 +410,7 @@ function detailBox() {
     else if (it.type === 'gear') btn('Equip', () => equipFromBag(sel.idx));
     if (it.type === 'gear' && !it.sealed && VANITY_SLOTS.includes(it.slot)) btn('Wear as look', () => wearLook(sel.idx));
     if (it.type === 'gem') {
-      const targets = [...SLOTS.map((s) => ({ where: 'equip', slot: s })), ...G.char.bag.map((b, i) => ({ where: 'bag', idx: i }))].filter((r) => { const x = getItem(r); return x && x.type === 'gear' && x.gems.length < x.sockets; });
+      const targets = [...SLOTS.map((s) => ({ where: 'equip', slot: s })), ...G.char.bag.map((b, i) => ({ where: 'bag', idx: i }))].filter((r) => { const x = getItem(r); return x && x.type === 'gear' && !x.sealed && x.gems.length < x.sockets; });
       if (targets.length) btn(`Socket (${targets.length} items)`, () => pickSocketTarget(sel.idx, targets));
     }
     if (it.type === 'sheet') sheetButtons(btn, sel, it);
@@ -486,9 +487,9 @@ function statsBlock() {
   }
   const g = el('div', 'stats-grid stats-primary');
   const rows = [
-    ['Life', `${Math.round(p.hp)} / ${p.maxHp}`], ['Mana', `${Math.round(p.mana)} / ${p.maxMana}`],
-    ['Weapon Dmg', `${fmtDmg(shownDmg(st.weapon[0], heroDmgLevel(c)))}–${fmtDmg(shownDmg(st.weapon[1], heroDmgLevel(c)))}`], ['Damage Bonus', `+${Math.round(st.dmgPct + st.primary)}%`],
-    ['Armor', st.armor], ['Crit', `${st.critChance.toFixed(1)}% / +${Math.round(st.critDmg)}%`],
+    ['Life', `${fmtInt(p.hp)} / ${fmtInt(p.maxHp)}`], ['Mana', `${fmtInt(p.mana)} / ${fmtInt(p.maxMana)}`],
+    ['Weapon Base', `${fmtDmg(shownWeapon(st.weapon[0], heroDmgLevel(c)))}–${fmtDmg(shownWeapon(st.weapon[1], heroDmgLevel(c)))}`, "The weapon's own damage before skills, attributes and bonuses, rated so a Common weapon of your depth's level averages 100: the Attack and DPS plaque shows what you deal"], ['Damage Bonus', `+${Math.round(st.dmgPct + st.primary)}%`],
+    ['Armor', fmtInt(st.armor)], ['Crit', `${st.critChance.toFixed(1)}% / +${Math.round(st.critDmg)}%`],
     ['Attack Speed', `+${Math.round(st.atkSpeed)}%`], ['Cast Speed', `+${Math.round(st.castSpeed)}%`],
     ['Move Speed', `+${Math.round(st.moveSpeed)}%`], ['Fire Res', `${Math.min(75, st.res.fire)}%`],
     ['Cold Res', `${Math.min(75, st.res.cold)}%`], ['Lightning Res', `${Math.min(75, st.res.light)}%`],
@@ -496,21 +497,25 @@ function statsBlock() {
     ['Block', `${Math.round(st.block)}%`], ['Life Regen', `${st.lifeRegen.toFixed(1)}/s`],
     ['Magic Find', `+${Math.round(st.magicFind)}%`], ['Gold Find', `+${Math.round(st.goldFind)}%`],
   ];
+  if (st.critOver) rows.push(['Crit past 75%', `+${st.critOver.toFixed(1)}% → +${Math.round(st.critOver * CRIT_OVER)}% crit dmg`]);
+  if (st.thorns > 0) rows.push(['Thorns', fmtInt(st.thorns), 'Attackers take this much damage per blow (gear and buffs, times Fortitude)']);
   if (st.reduce) rows.push(['Damage Reduction', `${Math.round(st.reduce)}%`]);
   if (st.fortitude > 1) rows.push(['Fortitude', `+${Math.round((st.fortitude - 1) * 100)}% Life`]);
+  if (p.marks && p.marks.life) rows.push(['Vitality (Marks)', `+${p.marks.life}% more Life`]);
+  if (st.drops) rows.push(['More Drops (Marks)', `+${st.drops}%`]);
   if (st.extraProj) rows.push(['Extra Projectiles', '+' + Math.floor(st.extraProj)]);
   if (st.skillsAll) rows.push(['All Skills', '+' + Math.floor(st.skillsAll)]);
   if (marksTotal()) rows.push(['Infernal Marks', `${marksTotal()} (${marksFree()} free)`]);
   if (heresyRankOf(c)) rows.push(['Heresy rank', String(heresyRankOf(c))]);
   if (c.keys) rows.push(['Abyssal Keys', `${c.keys}`]);
-  const primary = new Set(['Life', 'Mana', 'Weapon Dmg', 'Armor', 'Crit', 'Attack Speed', 'Cast Speed', 'Move Speed']);
+  const primary = new Set(['Life', 'Mana', 'Weapon Base', 'Weapon Dmg', 'Armor', 'Crit', 'Attack Speed', 'Cast Speed', 'Move Speed']);
   box.appendChild(el('div', 'inv-section-title', 'Combat'));
-  for (const [k, v] of rows.filter(([k]) => primary.has(k))) g.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
+  for (const [k, v, tip] of rows.filter(([k]) => primary.has(k))) g.innerHTML += `<span class="dim"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${k}</span><span class="v"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${v}</span>`;
   box.appendChild(g);
   const more = el('details', 'character-more');
   more.innerHTML = '<summary>All character stats</summary>';
   const extra = el('div', 'stats-grid');
-  for (const [k, v] of rows.filter(([k]) => !primary.has(k))) extra.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
+  for (const [k, v, tip] of rows.filter(([k]) => !primary.has(k))) extra.innerHTML += `<span class="dim"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${k}</span><span class="v"${tip ? ` title="${escapeHtml(tip)}"` : ''}>${v}</span>`;
   more.appendChild(extra);
   box.appendChild(more);
   box.appendChild(el('div', 'character-history', `Kills ${fmtInt(c.kills || 0)} · Deaths ${c.deaths || 0} · Deepest ${c.deepest || 0}`));
@@ -629,6 +634,9 @@ export function renderInventory(body) {
   }
   mid.appendChild(info);
   wrap.appendChild(mid);
+  const sb = statsBlock();
+  sb.style.display = 'none';
+  wrap.appendChild(sb);
   body.appendChild(wrap);
 }
 

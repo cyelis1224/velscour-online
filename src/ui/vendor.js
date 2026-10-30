@@ -14,7 +14,7 @@ import { CLASSES } from '../data/classes.js';
 import { potionIcon } from '../core/assets.js';
 import { VENDORS } from '../world/town.js';
 import { depthLevel } from '../data/depth.js';
-import { sheetItem } from '../data/items.js';
+import { sheetItem, goldLvl } from '../data/items.js';
 import { SHEET_PRICE } from '../data/tabs.js';
 
 const VBY = Object.fromEntries(VENDORS.map((v) => [v.id, v]));
@@ -256,7 +256,8 @@ export const Vendor = {
       b.onclick = () => { c.gold -= cost; fn(); changed(); };
       box.appendChild(b);
     };
-    if (it && it.type === 'gear') {
+    if (it && it.sealed) box.appendChild(el('div', 'dim', 'Break the seal first: no socket, upgrade or enchantment goes onto a sealed treasure.'));
+    else if (it && it.type === 'gear') {
       if (kind === 'upgrade') {
         if ((it.upg || 0) >= 10) box.appendChild(el('div', 'dim', 'This item is fully upgraded (+10).'));
         else btn(`Upgrade to +${(it.upg || 0) + 1}`, upgradeCost(it), true, () => { it.upg = (it.upg || 0) + 1; sfx('thud'); UI.log(`${escapeHtml(itemName(it))} upgraded!`, '#ffd34a'); });
@@ -282,7 +283,7 @@ export const Vendor = {
   gambleBox(body) {
     const c = G.char;
     const lvl = Math.max(c.level, depthLevel(c.depth || 1));
-    const price = Math.round(180 * Math.pow(1.065, lvl));
+    const price = Math.round(180 * Math.pow(1.065, goldLvl(lvl)));
     body.appendChild(el('div', 'dim', 'Buy an unidentified item of your level. Gambled items are far more likely to be Rare or better.'));
     const grid = el('div', 'row');
     grid.style.marginTop = '8px';

@@ -5,6 +5,7 @@ import { camera, screenDirToTile } from '../core/view.js';
 import { dist, angleTo, escapeHtml } from '../core/util.js';
 import { SKILLS, skillRange, needsTarget } from '../data/skills.js';
 import { SLOT_KEYS, RMB } from '../data/bar.js';
+import { Macros } from './macros.js';
 
 function creatureAt(sx, sy) {
   const w = G.world;
@@ -45,11 +46,14 @@ export const controls = {
 
   /** Use the skill on bar slot i (keyboard / touch buttons). */
   useSlot(i, at) {
-    const p = G.player;
-    if (!p || p.dead || G.ui.modal) return;
     const id = G.char.bar[i];
-    const sk = id && SKILLS[id];
-    if (!sk) return;
+    if (id && SKILLS[id]) this.castSkill(SKILLS[id], at);
+  },
+  /** Cast a skill aimed the way the bar's keys aim (the mouse, or on touch the nearest foe); at: a tile to aim at.
+   *  True if it went off (game/macros.js moves on to the next skill). */
+  castSkill(sk, at) {
+    const p = G.player;
+    if (!p || p.dead || G.ui.modal || !sk) return false;
     let tx, ty, target = null;
     if (at) { [tx, ty] = at; target = G.hover && G.hover.team === 'enemy' ? G.hover : null; }
     else if (input.lastPointerType === 'mouse' && !G.touch) {
@@ -63,8 +67,8 @@ export const controls = {
       else { tx = p.x + Math.cos(p.facing) * 4; ty = p.y + Math.sin(p.facing) * 4; }
       if (sk.kind === 'melee' && target && dist(p.x, p.y, target.x, target.y) > 7) target = null;
     }
-    if (sk.kind === 'melee' && target && !at) { p.tryUseSkill(sk, target.x, target.y, target); return; }
-    p.tryUseSkill(sk, tx, ty, null);
+    if (sk.kind === 'melee' && target && !at) return p.tryUseSkill(sk, target.x, target.y, target);
+    return p.tryUseSkill(sk, tx, ty, null);
   },
 
   update(dt) {
@@ -134,7 +138,8 @@ export const controls = {
       }
     }
 
-    // ---- number keys & potions
+    // ---- macros (their keys, the queue, Keep up), then number keys & potions
+    Macros.tick(dt);
     SLOT_KEYS.forEach((k, i) => { if (k && (input.consume(k) || (input.down(k) && p.castLock <= 0))) this.useSlot(i); });
     if (input.consume('KeyZ')) p.usePotion('hp');
     if (input.consume('KeyX')) p.usePotion('mp');

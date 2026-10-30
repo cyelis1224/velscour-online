@@ -64,14 +64,23 @@ export class RNG {
   fn() { return () => this.next(); }
 }
 
+// thousands suffixes for the deep game's numbers (gold piles reach ~1e20 at level 600, armor ~1e57 at 3000); past
+// Dc (1e33) they go to e-notation
+const SUFFIX = ['', 'k', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc'];
+/** n with a thousands suffix: `digits` decimals (fixed), or significant digits when sig (trailing zeros dropped). */
+function suffixed(n, digits, sig) {
+  if (!Number.isFinite(n)) return String(n);
+  let e = Math.max(0, Math.floor(Math.log10(Math.abs(n) || 1) / 3)), v = n / Math.pow(1000, e);
+  let s = sig ? (+v.toPrecision(digits)).toString() : v.toFixed(digits);
+  if (Math.abs(parseFloat(s)) >= 1000 && e + 1 < SUFFIX.length) { e++; v = n / Math.pow(1000, e); s = sig ? (+v.toPrecision(digits)).toString() : v.toFixed(digits); }
+  return e >= SUFFIX.length ? n.toExponential(2).replace('e+', 'e') : s + SUFFIX[e];
+}
 export function fmt(n) {
   n = Math.round(n);
-  if (Math.abs(n) >= 1e12) return (n / 1e12).toFixed(1) + 'T';
-  if (Math.abs(n) >= 1e9) return (n / 1e9).toFixed(1) + 'B';
-  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M';
-  if (Math.abs(n) >= 1e4) return (n / 1e3).toFixed(1) + 'k';
-  return String(n);
+  return Math.abs(n) >= 1e4 ? suffixed(n, 1) : String(n);
 }
+/** A big count in 4 significant digits and a suffix: 386.7Qi, 1.5B (fmtInt uses it from a billion up). */
+export const fmtBig = (n) => suffixed(n, 4, true);
 
 /** A damage figure on the shown scale (shownDmg in data/depth.js): small ones keep a decimal or two. */
 export function fmtDmg(n) {
@@ -82,7 +91,8 @@ export function fmtDmg(n) {
 // en-US digit grouping by hand: toLocaleString goes through ICU, and the HUD and tooltips format numbers every frame
 export function fmtInt(n) {
   const r = Math.round(n);
-  if (!Number.isFinite(r) || Math.abs(r) >= 1e21 || Object.is(r, -0)) return r.toLocaleString('en-US');
+  if (!Number.isFinite(r) || Object.is(r, -0)) return r.toLocaleString('en-US');
+  if (Math.abs(r) >= 1e9) return fmtBig(r); // past nine digits commas stop helping (and past 2^53 the digits are made up)
   const s = String(Math.abs(r)), g = s.length > 3 ? s.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : s;
   return r < 0 ? '-' + g : g;
 }

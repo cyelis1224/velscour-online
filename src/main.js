@@ -17,6 +17,7 @@ import { Reliquary } from './ui/reliquary.js';
 import { Heresies } from './ui/heresies.js';
 import { Rifts } from './ui/rifts.js';
 import { Marks } from './ui/marks.js';
+import { MacrosUI } from './ui/macros.js';
 import { game } from './game/game.js';
 import { dropBakes } from './game/render.js';
 import { controls } from './game/controls.js';
@@ -198,6 +199,7 @@ async function boot() {
   UI.stash = Stash;
   UI.reliquary = Reliquary;
   UI.heresies = Heresies; UI.rifts = Rifts; UI.marks = Marks; // the Endgame's panels (docs/ENDGAME.md)
+  UI.macros = MacrosUI;
   window.addEventListener('error', (e) => reportError(e.error || e.message));
   window.addEventListener('unhandledrejection', (e) => reportError(e.reason));
   let bgHeartbeat = null;

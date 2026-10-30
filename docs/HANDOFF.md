@@ -14,6 +14,139 @@ Contents
 
 ---
 
+## October 30, 2026 — the caverns' cutaway hole; sealed treasures take no sockets (branch `fix/cave-cut-sealed-sockets`)
+
+Discord: "that same shadow issue happens in the waterfall caves too" (the Depth's Edge shaft) and "you can add a socket and
+socket a gem into a sealed treasure".
+- **Caverns** (`src/game/caverns.js`, `src/gfx/cave3d.js`): the tomb fix (below) for the shaft and gallery: `cr.cut` only
+  while rock in front really covers the hero (`heroHidden`, held 0.4 s), and the cut drops the rock's back faces so what
+  lies behind shows instead of a dark slab. `caverns.js 1 noauto` passes (shots of the shaft's foot, middle and top).
+- **Sealed treasures**: `socketGem` refuses them ("Break the seal first"), the Socket picker leaves them out, and the
+  Jeweler's, blacksmith's and enchanter's service box shows a note and no buttons for one (`Vendor.serviceBox`). A seal only
+  hides a pre-rolled item, so gems put in before this fix stay when it is broken. `ui.js` checks gem, socket, upgrade and
+  enchant on a sealed item.
+
+## October 30, 2026 — Velscour Unbound worth winning; ring augments say their damage (branch `fix/unbound-rewards-augment-damage`)
+
+Discord: "what's the point of killing Unbound Velscour? killed him 10 times ... I get better drops from abyssal rift" and
+"I can't tell how good these rings are because they don't tell the damage".
+- **Unbound spoils** (`unboundSpoils` in `src/game/unbound.js`, dials `UNBOUND.abyssal` / `UNBOUND.marks`): on top of the
+  hoard (a Heirloom, a Covenant piece, two Sigil Stones), the Unbound Heirloom and the Crown (first win, then 1 in 4), each
+  win now drops **3 open Abyssal items** (the top rarity; a rift Guardian drops one item, Abyssal 10-60% of the time) and
+  grants **20 Infernal Marks** (a rift clear 1-8). The Unbound Heirloom is one the Codex lacks while any is missing, so four
+  wins find all four (it was random: repeats from the second win). A log line lists the spoils.
+- **Ring augments**: Void Rift and Blood Pact now state their numbers (rift: 30% x power of the hit 3x a second for 2.6 s;
+  bleed: 25% x power of the hit a second for 3 s). Every damaging augment has `hit(pow) = [share, what]` in
+  `src/data/rings.js`, and the tooltip adds "≈ N a meteor (on Fire Bolt's M hit)": the targeted skill's average hit, or the
+  plaque's Attack for "all skills", on the shown scale (`augDamage` in `src/ui/itemui.js`).
+- Tests: `unbound.js noauto nophone` (adds: 3 Abyssal + 20 Marks on the win; four picked-up wins give four different Unbound
+  Heirlooms), rings, ui, data_check.
+
+## October 30, 2026 — thorns that work, weapon figures ~100, no dark hole in tomb walls (branch `fix/thorns-weapon-numbers`)
+
+Discord: "0.00 thorns damage ... all items that had thorns damage are 0.00", "nobody likes the tiny numbers now", and
+"walking close to these walls projects a strange shadow on them" (the Sea of Sand tomb, depth 72).
+- **Thorns were really ~0**, not just shown so: the affix grows linearly with item level, monster life 1.068 a level, so
+  past the first depths a thorn did nothing (and on the damage scale it read 0.00). Now thorns are on the shown scale:
+  `combat.js` lands `thorns x dmgScale(attacker level)`, the Iron Maiden / Thornhold reflect (150% of the blow, itself on
+  the life scale) the same, and so does the thorns curse when the blow was on the hero (`Monster.deal`). `st.thorns` is
+  `(gear + buff x level x 0.03) x fortitude` (buff was x 0.2 against raw life). Measured (`dmgscale.js`, a level-appropriate
+  thorns affix): a normal attacker dies in 37-49 blows at depths 5, 60, 500 and 1500 (a thorns buff ~8-16). The sheet has a
+  Thorns row; item lines show the affix as rolled.
+- **Weapon figures** (an item's Damage and its compare, the sheet's Weapon Base, "+N Weapon Damage") have their own scale,
+  `shownWeapon(raw, level)` (`src/data/depth.js`): a Common weapon of the hero's depth's level averages 100, Rare ~120,
+  Legendary ~155, Mythic ~170-195, at every level (they read 0.03-1 on the hit scale). Hits, the Attack/DPS plaque and skill
+  tooltips stay on the hit scale (`shownDmg`).
+- **The tomb's "shadow"** was the 3D cutaway (`caveCut` in `src/gfx/dunes3d.js`): always on, it discarded wall pixels nearer
+  the camera than the hero inside a 300x240 px ellipse, and the walls' dark inner faces filled the hole. Now `cr.cut` is on
+  only while ground in front really covers the hero (`heroHidden` in `game/dunes.js`, held 0.4 s), which inside the tomb is
+  never (its walls are meshes, not ground, and sprites draw over the 3D anyway), and a cut also drops back faces so the
+  floor behind shows. The caverns (`cave3d.js`) keep their region-gated cut.
+- Tests: `dmgscale.js` adds the thorns/weapon check; dunes (red), flow, ui, `skills.js paladin`, `autoplay.js paladin 3`.
+
+## October 30, 2026 — macros: several skills on one key; "Weapon Base" on the sheet (branch `feat/macros`)
+
+Discord: "when manually playing I need to play like a pianist to use all my buffs, 4567890- every 30 seconds or so".
+- **Macros** (`src/data/macros.js` saved shape, `src/game/macros.js` casting, `src/ui/macros.js` panel): five per hero in
+  `G.char.macros` (`{ name, skills: [ids], key, keep }`, `migrate()` gives old heroes five; up to 8 skills each). Keys
+  R E Y U O by default (also J L N; a key moved to one macro leaves the one that had it). A press queues the list;
+  `Macros.tick` (from `controls.update`, before input is cleared) casts the next whenever `castLock` is over (waiting out
+  a non-beam channel; a queue that hasn't moved in 4 s is dropped), skipping skills on cooldown, short of mana or not
+  learned. Casting goes through `controls.castSkill(sk)`, the bar keys' own aiming (`useSlot` now calls it). Nothing in
+  town or with a panel open. **Keep up**: every 0.25 s, with a foe within 12 tiles and auto-play off, a buff whose effect
+  is gone (or under 1 s) and any skill with a 3 s+ cooldown that is ready joins the queue. Auto-play's `noteInput`
+  counts macro keys as the player taking over.
+- **Panel**: the skill tree's **Macros** button, the pause menu, the skull's "macros". Per macro: name, key, Keep up,
+  Cast, the skills as icons (click to take out), "+ Add a skill" (learned skills, bar key and "buff" shown), Clear, or
+  "Add the bar's buffs" on an empty one. It does not re-render under a name being typed.
+- **Touch**: a purple button per macro with skills (`TouchUI.layoutMacros`): an outer arc beyond the skill ring in
+  landscape, a row over the tray in portrait. In portrait the touch buttons used to sit over every open panel (z-index
+  7): `body.panel-open` (set by `UI.onPanelsChanged`) hides them there.
+- Help lists the keys. **"Weapon Dmg" on the sheet is now "Weapon Base"**, with a tooltip: it is the weapon's own damage
+  before skills, attributes and bonuses (a player read 0.03 as their damage).
+- Test: `tools/tests/macros.js` (save shape and migrate, order, skip on cooldown, panel open, town, Keep up on/off/re-cast
+  one, auto-play on, round trip, the panel by its controls, touch at 844x390 and 390x844: inside, no overlap, a tap casts,
+  the panel fits). hud, mobile, ui, flow, `autoplay.js paladin 3`, `skills.js paladin` pass.
+
+## October 30, 2026 — compact big numbers: 386.7Qi gold, not 21 digits (branch `fix/compact-numbers`)
+
+A player's screenshot showed `386,663,983,316,678,800,000 gold`, weapon damage and armor in 13-15 digits.
+- `src/core/util.js`: `fmtBig(n)` = 4 significant digits and a thousands suffix (k M B T Qa Qi Sx Sp Oc No Dc, then
+  e-notation: `7.60e58`). `fmtInt` keeps exact commas below a billion and uses `fmtBig` from there (past 2^53 the digits
+  were made up anyway); `fmt` (HUD orbs, damage numbers, `fmtDmg`) has the same suffixes with one decimal (was capped at
+  T: `620089.0T`).
+- Raw numbers now go through them: the sheet's Life/Mana/Armor, item armor and its compare, flat affix values from a
+  billion up (`statLabel`), gold pick-up float text and ground labels. Gold, prices and costs already used `fmtInt`.
+- Tests: ui, hud, locks, mobile, flow, dmgscale (paladin D150 once logged 0 hits with four browsers at once; alone it
+  passes), marks (its sheet XP-line regex now takes `2.688B`). A level-3000 probe with 3.87e20 gold: no run of 15+ digits
+  on the inventory screen.
+
+## October 30, 2026 — level cap 3000, the Endless Torment to depth ~6600, uncapped Infernal Marks (branch `fix/level-cap-3000`)
+
+Discord bug reports: (1) "Next point mark on life is worth less than 0.00" (453 Vitality points); (2) "Lvl 600 is the cap and
+I just dropped a weapon that needs lvl 602". The user: fix them, raise max level and depth a lot, quick balance check.
+- **Item level requirement** never passes the cap: `item.req = Math.min(ilvl, MAX_LEVEL)` (`src/data/items.js` rollItem).
+  `MAX_LEVEL` now lives in `src/data/depth.js` (player.js re-exports it) so items.js can read it without a cycle.
+- **Level cap 600 -> 3000.** `xpToNext` past 600 = the level-600 price x `(L/600)^1.6` (a deep depth's XP grows ~level^1.5),
+  so a full-clearing hero stays level with its monsters: 957 at depth 2000 (monster level 933), 1904 at 4000 (1833),
+  3000 at depth ~6600 (3003). Existing heroes at 600 simply level again; Marks from XP start at the new cap.
+- **Depth.** There was no hard depth cap; the practical end was the cap plus monster life outgrowing hero damage (normals
+  ~50 s at depth 1000, hours by 3000). `toughness` (`src/data/depth.js`) no longer holds flat at 1690 past level 258: it
+  eases off to match a pace-keeping hero's damage (~1.061 a level at first, ~1.053 deep; measured by the new
+  `endgame.js ... deep`), and holds again past level 3000, where the wall is (the hero can't level, life x1.068 a level).
+  Monster damage past level 600 follows `(level/600)^2.2` instead of 1.006 a level (hero life grows ~level^2.3).
+  Unchanged below monster level 258 (depth 500): the standard `endgame.js` matches the old numbers.
+- **Abyssal Rifts keep their old difficulty** (their tiers and honour board were tuned on the flat 1690):
+  `world.riftHold` (set by `game.buildRift`) multiplies rift monsters' and Guardians' life by `riftHold(level)` =
+  1690 / toughness (`makeMonster`, `makeRaidBoss`). `rift_balance.js` passes.
+- **Infernal Marks uncapped** (`src/game/marks.js`): `eff(n) = 140 * (sqrt(1 + n/100) - 1)`; the n-th point adds
+  `1/sqrt(1 + n/100)` of the first (`worthNext`), so the 454th Vitality point adds +0.09% (it read +0.00 under
+  `100 * (1 - 0.993^n)`). Per point: life 0.3, crit 0.06 (was 0.1), MF 0.5, Haste 0.3 s (was 0.6; 453 points still
+  give the old ~57 s). The panel's bar shows how far the next point's worth has fallen ("79% of the first").
+- **Marks made worth having** (a second report: "the Infernal Mark bonuses are lackluster, just in my offhand I have way
+  more %life ... I have 4331% magic find and I can get 50% via infernal marks"): Vitality is now its own multiplier on maxHp
+  (+0.4% more x eff: x1.23 at 100 points, x1.81 at 500), Fortune is more drops like the Greed lever (+0.25% x eff on a
+  kill's gear, gems and Sigil chance, `st.drops` in `dropLoot`: +14.5% at 100, +51% at 500, +81% at 1000; key `mf` kept
+  for saves), and Precision adds critical damage (+0.5% x eff) beside its crit chance. The sheet shows "Vitality (Marks)"
+  and "More Drops (Marks)" rows. `marks.js` checks the multiplier and counts drops from 300 champions with and without.
+- **Crit past the cap** (the same player: "critical chance has a hard cap of 75% which makes it a bad choice ... to match one
+  eternal jade you need more than 400 dex points"): crit chance past 75% now becomes critical damage, `CRIT_OVER` = 2% per
+  1% (`Player.recompute`, `st.critOver`; the sheet shows a "Crit past 75%" row), so Jades, Marks and dex are never wasted;
+  dex gives 0.1% crit chance a point (was 0.05). `tuning.js ranger,gunner,bard,boomerang_knight,wizard 40,160,400 8` with
+  0.05 and 0.1: the difference is inside the run-to-run noise (an unchanged wizard ran 1.2-4.1 s at depth 400).
+  `marks.js` checks the overflow (1000 Precision on a capped hero: +19.5% chance -> +39% crit damage on top of their own).
+- **Gold** past level 600 grows from `goldLvl` (`src/data/items.js`: 600 + 40 ln(1 + (L-600)/40); level 3000 counts as ~764)
+  in every gold source and price (piles, item value, upgrade/socket/enchant costs, gambling, Breach gold), or level-3000
+  piles would be 70 digits. Still ~3e19 a pile at 3000; a compact gold format would help (not done).
+- **Balance check** (`endgame.js paladin,wizard,barbarian 4 deep`, full clears, 3 geared heroes per depth): seconds to
+  kill a normal at depth 500/1000/2000/3000/4000/5000/6000/6600 — paladin 3.0/2.7/4.7/6.2/9.5/8.1/5.8/15.7, wizard
+  3.3/4.0/3.8/5.8/6.9/5.4/11.1/14.5, barbarian 1.4/1.5/1.4/4.7/6.7/4.5/6.5/10.3; BOSS ROOM 60-400 s by the same ratio
+  (the model's raw life, before wards); a normal's hit 2-5% of life throughout, BOSS ROOM 2-10%. Past the cap (depth 7500)
+  kill times are ~1e13 s: the wall. A 40%-clear rusher is ~850 levels behind at depth 6600 and must grind.
+- Tests: `marks.js` (updated for 3000 and the new curve; adds a 454th-point check), `endgame.js paladin 4` (unchanged to
+  depth 500), `endgame.js ... deep` (new), `rift_balance.js`, `rifts.js`, `flow.js`, `data_check.mjs`,
+  `balance_model.mjs`; a probe at depth 7000 with a level-3000 hero: no NaN/Infinity, every item asks for at most 3000.
+
 ## October 29, 2026 — vanity looks: wear any helmet/armor for looks, keep your stats (branch `feat/vanity-slots`)
 
 Player request: look the way you want without giving up stats.
@@ -84,7 +217,7 @@ Player request: look the way you want without giving up stats.
 - **PvP (future):** a hero's raw damage against a hero = `shownDmg(raw, arena level)`, then the defender's armor,
   resistances and reduction as `hit` does for monster blows: ~8 s of focused damage to kill a same-level hero.
 - **Looks odd:** weapon damage reads tiny (0.1-1) because base weapon damage is a sliver of a hit next to skill
-  damage, mastery and bonuses; it was always so, the scale just shows it.
+  damage, mastery and bonuses; it was always so, the scale just shows it. (Oct 30: weapon figures now use `shownWeapon`, ~100.)
 - `balance.js` now prints `dps` on the shown scale (Meter).
 
 ## October 29, 2026 — inventory, character, storage and shop UI refresh
@@ -526,8 +659,8 @@ Player request: look the way you want without giving up stats.
     jumps by time; Abyssal rarity (`RARITY[6]`, weight 0, worth 21 item levels) from Guardians; honour board per class.
   - **Velscour Unbound** (`src/game/unbound.js`, Unbound branches of `src/game/velscour.js`, Unbound Heirlooms and the
     Crown of the Demon Lord in `src/data/relics.js`): three Abyssal Keys; two signature raid bosses as his court; the Pact.
-  - **Infernal Marks** (`src/game/marks.js`, `src/ui/marks.js`): XP past level 600, rift clears (ceil(T/10)), Heresy 20;
-    four tapering categories; auto-play spends them.
+  - **Infernal Marks** (`src/game/marks.js`, `src/ui/marks.js`): XP past the level cap (3000 since Oct 30; was 600), rift clears (ceil(T/10)), Heresy 20;
+    four tapering, uncapped categories; auto-play spends them.
 - **Balance iterations** (numbers in ENDGAME.md): Abyssal +2 power levels and a perk (worth 17.2 -> 21); rift quota 0.7 ->
   0.6, density 0.8, Guardian 0.6x; rift Marks tier/4 -> tier/10; Gaze aggro x2.5 -> x2 (frame cost); Unbound court
   1.2x -> 0.8x life, 0.8x -> 0.65x hits, self-healing 35%, each courtier's Pact wanes after 120 s, auto-play turns back to

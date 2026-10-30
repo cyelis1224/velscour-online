@@ -6,6 +6,7 @@ import { skillIcon } from './icons.js';
 import { SKILLS, cooldown, manaCost, rageCost, effLevel } from '../data/skills.js';
 import { SLOT_LABELS, RMB } from '../data/bar.js';
 import { chooser } from './hud.js';
+import { Macros, MACRO_N } from '../game/macros.js';
 
 // Landscape uses the original radial skill cluster; portrait shows all 14 skill
 // slots as a compact bottom tray, with LMB kept as the large attack control.
@@ -57,6 +58,19 @@ export const TouchUI = {
       b.addEventListener('contextmenu', (e) => { e.preventDefault(); chooser(t.bar); });
       root.appendChild(b);
       this.btns.push(t);
+    }
+    // macros with skills (game/macros.js): a small button each, outside the skill ring (by the tray in portrait)
+    this.macroBtns = [];
+    for (let i = 0; i < MACRO_N; i++) {
+      const b = el('div', 'tbtn macro hidden'), cv = document.createElement('canvas'), k = el('div', 'k');
+      cv.width = 48; cv.height = 48;
+      b.append(cv, k);
+      b.dataset.macro = i;
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); b.classList.add('pressed'); Macros.run(i); });
+      const up = () => b.classList.remove('pressed');
+      b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+      root.appendChild(b);
+      this.macroBtns.push({ b, cv, k, last: null });
     }
     const f = this.flipBtn = el('div', 'tbtn flip', '&#8644;<span>1/2</span>');
     f.title = 'More skills';
@@ -115,6 +129,9 @@ export const TouchUI = {
         }
         t.b.classList.toggle('portrait-tile', i > 0);
       });
+      // macros: a row over the tray's left end, up to the attack button
+      const ms = 36, atkLeft = x0 + trayW - mainSize - 8;
+      this.macroSpots = (n) => { const x = x0 + n * (ms + 6); return x + ms > atkLeft ? null : [x, trayTop - ms - 10, ms]; };
     } else {
       Object.assign($('#log').style, { left: '', right: '', top: '', bottom: '', height: '', maxHeight: '' });
       this.btns.forEach((t, i) => {
@@ -133,11 +150,38 @@ export const TouchUI = {
         this.flipBtn.classList.toggle('on', this.page > 0);
         put(this.flipBtn, FLIP[0], FLIP[1], 32 * s);
       }
+      // macros: an outer arc beyond the skill ring, from its left end upwards
+      const ms = 34 * s, r = (R2 + 68) * s;
+      this.macroSpots = (n) => { const a = ((200 + n * 14) * Math.PI) / 180, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; return [x - ms / 2, y - ms / 2, ms]; };
     }
+    this.layoutMacros();
     this.flipBtn?.classList.toggle('hidden', portrait);
     this.refresh();
   },
+  /** Show a button for each macro that holds skills, at the layout's next spot. */
+  layoutMacros() {
+    const ms = (G.char && G.char.macros) || [];
+    let n = 0;
+    this.macroBtns.forEach((t, i) => {
+      const m = ms[i], spot = m && m.skills.length && this.macroSpots ? this.macroSpots(n) : null;
+      t.b.classList.toggle('hidden', !spot);
+      if (!spot) return;
+      n++;
+      const [x, y, size] = spot;
+      Object.assign(t.b.style, { width: size + 'px', height: size + 'px', left: x + 'px', top: y + 'px' });
+      t.k.textContent = 'M' + (i + 1);
+      t.b.title = m.name;
+      const first = SKILLS[m.skills[0]], key = m.skills.join();
+      if (t.last !== key) {
+        t.last = key;
+        const x2 = t.cv.getContext('2d');
+        x2.clearRect(0, 0, 48, 48);
+        if (first) x2.drawImage(skillIcon(first, 48), 0, 0);
+      }
+    });
+  },
   refresh() {
+    if (this.macroBtns) this.layoutMacros();
     for (const t of this.btns) {
       const id = G.char ? G.char.bar[t.bar] : null;
       if (t.last.id === id) continue;

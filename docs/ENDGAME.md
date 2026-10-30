@@ -253,8 +253,9 @@ hero over the cap); three phases alone 5.0-8.0; the Pact on the cap with the cou
 22-minute deadlocks (Valdric and the Organ in phase 3: fixed by the cast pace, the lava rule and leaving the Organ out);
 x1.3 -> x2.4 and the 3.5% obelisks each added 0.3-0.5 minutes; court x1.6 instead of x1.2 only lengthened the tails.
 
-On his death (`unboundSpoils`): the court falls with him (no loot), the usual hoard, plus **one Unbound Heirloom**
-(`makeHeirloom(lvl, { unbound: true })`, one of the four) and, the first win always (`c.unbound.wins === 0` then) and
+On his death (`unboundSpoils`): the court falls with him (no loot), the usual hoard, **3 open Abyssal items**
+(`UNBOUND.abyssal`), **20 Infernal Marks** (`UNBOUND.marks`; both since Oct 30, 2026), plus **one Unbound Heirloom**
+(one the Codex lacks while any is missing, then `makeHeirloom(lvl, { unbound: true })`, one of the four) and, the first win always (`c.unbound.wins === 0` then) and
 then one in four, **the Crown of the Demon Lord**, both open (never sealed); the Codex notes them on pickup.
 `c.unbound = { wins, best (seconds), court }`, `endgame().unboundWins++`.
 
@@ -272,28 +273,34 @@ counts them (41).
 
 ## 4. Infernal Marks (`src/game/marks.js`, `src/ui/marks.js`)
 Account-wide, endless. A Mark is earned by **XP past the level cap** (`Player.gainXp` at `MAX_LEVEL` hands the XP,
-after the out-levelling penalty, to `gainMarkXp(xp)`; one Mark costs `markXp() = xpToNext(MAX_LEVEL)` = 204,707,941;
-the 599 -> 600 level's spare XP counts), by **rift clears** (`riftMarks(tier)`) and at **Heresy rank 20** (one per
+after the out-levelling penalty, to `gainMarkXp(xp)`; one Mark costs `markXp() = xpToNext(MAX_LEVEL)`;
+the 2999 -> 3000 level's spare XP counts; the cap was 600 until October 30, 2026), by **rift clears** (`riftMarks(tier)`) and at **Heresy rank 20** (one per
 depth cleared). A Mark is saved at once (a float text "+1 INFERNAL MARK" over the hero, a ring, a chime and a log
 line); XP alone at most every 5 s and on `game.autosave` (`saveMarkXp`), so nothing is lost to a reload. At the cap
 the HUD's XP bar turns ember red and shows the progress to the next Mark (`capXp(c)`), and so does the character
 sheet's XP line. Four categories, points spent one at a time in the Marks panel (from the
 altar, the character sheet's "Marks" button and the skull's "marks"); "Spend all (balanced)" and a free "Reset".
-Bonuses diminish, so the Endless Torment wall holds: `eff(n) = 100 * (1 - 0.993 ** n)` (50 at 100 points, 75 at 200,
-97 at 500, never 100) and
+Bonuses diminish but never stop: `eff(n) = 140 * (sqrt(1 + n / 100) - 1)` (58 at 100 points, 102 at 200, 203 at 500,
+324 at 1000); the n-th point adds `1 / sqrt(1 + n / 100)` of the first's worth (`worthNext`: half at 300, ~30% at 1000).
+It was `100 * (1 - 0.993 ** n)`, a cap: a player's 454th Vitality point read "+0.00" (October 30, 2026). Then
 ```
-life +0.3% x eff (<= +30% life)    crit +0.1 x eff (<= +10% crit chance)
-mf   +0.5% x eff (<= +50% magic find)   rift +0.6 s x eff (<= +60 s on the rift clock)
+life +0.4% more x eff    crit +0.06 x eff (inside the 75% clamp) and +0.5% critical damage x eff
+mf   +0.25% more drops x eff    rift +0.3 s x eff
 ```
-`markBonuses()` → `{ life, crit, mf, rift }`; `Player.recompute` adds life and mf with the Defiance bonus and crit to
-`critChance` (inside the 75 clamp); `riftTime()` adds rift. Measured (`marks.js`): 100 points = +15.14% maxHp, +5.05
-crit, +25.23 MF, +30.28 s; 500 Vitality = +29.11%. The character sheet shows "Infernal Marks: 37 (12 free)" and an
+Vitality is a multiplier of its own on `maxHp` (after gear's life %, Defiance and Fortitude), and Fortune (key `mf`, kept for
+saved records) is `st.drops`: `dropLoot` multiplies a kill's gear and gems by `1 + drops / 100` (rounded at random) and
+the Sigil chance by it, like the Greed lever. As plain life % and magic find they were lost beside gear's hundreds and
+thousands of percent (a player's report, October 30, 2026).
+`markBonuses()` → `{ life, crit, critDmg, mf, rift }`; `Player.recompute` multiplies maxHp by `1 + life / 100`, adds crit
+to `critChance` (inside the 75 clamp; past it, like all crit chance, 2% critical damage per 1%: `CRIT_OVER`) and critDmg to `critDmg`, and sets `st.drops = mf`; `riftTime()` adds rift. Measured
+(`marks.js`): 100 points = x1.232 maxHp, +3.48 crit and +28.99 crit damage, +14.5% drops, +17.40 s; 500 Vitality =
+x1.81; the 454th Vitality point +0.12%; 1000 Fortune: 300 champions dropped x1.74 the items (+81%). The character sheet shows "Infernal Marks: 37 (12 free)" and an
 "Infernal Marks" button; the Quest Log a line; the panel (`ui/marks.js`, two columns on touch) shows the total, the free
-count, the XP towards the next Mark, and per category its points, bonus, a bar of the cap reached, +1/+5/+25, then
+count, the XP towards the next Mark, and per category its points, bonus, a bar of how far the next point's worth has fallen, +1/+5/+25, then
 "Spend all (balanced)" and "Reset (free)". `grantMarks(n, why)` logs. Unspent Marks sit in `pts - sum(spent)`.
 Cloud: in the account record (above), merged three ways so Marks earned on two devices add up.
-Rate (`marks.js`, a level-600 hero full-clearing a level): 0.04 Marks per depth at depths 1000-1200 (he out-levels the
-monsters: XP x0.1), 0.33 at 1240, 0.5 at 1260 (monster level 600), 0.67 at 1400; Heresy rank 20 adds 1 per depth; a
+Rate (`marks.js`, a level-3000 hero full-clearing a level): 0.04 Marks per depth at depths 6000-6560 (he out-levels the
+monsters: XP x0.1), 0.39 at 6600 (monster level 3003), 0.40 at 6800; Heresy rank 20 adds 1 per depth; a
 rift clear `ceil(tier / 10)` (was tier / 4, 18 a clear at tier 70: rifts dwarfed XP and the Heresies; now 1 a clear to tier 10, 3 at tiers 21-30, where a hero of the tier's level meets the wall).
 
 ## Balance targets (checked by the tests and tools)
@@ -305,7 +312,7 @@ rift clear `ceil(tier / 10)` (was tier / 4, 18 a clear at tier 70: rifts dwarfed
   begins; a full-clear hero takes tier 1 in under 60%; a level-273 hero can't touch tier 40. Ten levels under, the clock
   bites for gear-driven classes (paladin) from tier ~10, not for the wizard. `rifts.js`: auto-play clears tier 1 at
   depth-500 gear in god mode under the limit (27-96% of the clock across runs, the biome's monsters decide most of it).
-- Marks (`endgame.js paladin,wizard 8 marks=0,300,1000,1000L`: the same geared heroes measured at each count): at
+- Marks (measured under the old capped curve and the level-600 cap; `endgame.js paladin,wizard 8 marks=0,300,1000,1000L`: the same geared heroes measured at each count): at
   depth 1200, 300 Marks spent balanced (+12.3% life, +4.1 crit) give life x1.11-1.12 and a BOSS ROOM in x0.95-0.99 of
   the time; 1000 (+24.8%, +8.3) life x1.22-1.25, ROOM x0.91-0.99; 1000 all on Vitality life x1.26-1.30, ROOM x1.00.
   The wall is the kill time (ROOM ~460-560 s at 1200) and it holds. A normal's hit is 3-5% of a capped hero's life

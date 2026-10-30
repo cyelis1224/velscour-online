@@ -124,7 +124,7 @@ export const DMG_TUNE = {
 
 export const ATTRS = {
   str: { name: 'Strength', short: 'STR', desc: '+1% physical damage, +1 armor' },
-  dex: { name: 'Dexterity', short: 'DEX', desc: '+0.3% attack speed, +0.05% crit chance' },
+  dex: { name: 'Dexterity', short: 'DEX', desc: '+0.3% attack speed, +0.1% crit chance (past the 75% cap: +0.2% crit damage)' },
   vit: { name: 'Vitality', short: 'VIT', desc: '+3 life, +0.05 life regen' },
   int: { name: 'Intellect', short: 'INT', desc: '+2 mana, +1% elemental damage' },
 };

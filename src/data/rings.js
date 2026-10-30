@@ -7,19 +7,20 @@ import { CLASS_SKILLS } from './skills.js';
 
 const pc = (v) => `${Math.round(v * 100)}%`;
 
-/** id: { name, el (colour), word (ring name prefix), desc(pow) } */
+/** id: { name, el (colour), word (ring name prefix), desc(pow), hit(pow): [share of the skill's hit, what it is] for the
+ *  tooltip's damage figure (ui/itemui.js) } */
 export const AUGMENTS = {
-  ignite: { name: 'Immolation', el: 'fire', word: 'Smouldering', desc: (p) => `Hits set enemies ablaze for ${pc(1.1 * p)} of the hit as fire over 3s. The skill burns with flame.` },
-  venom: { name: 'Venomous', el: 'poison', word: 'Venomous', desc: (p) => `Hits inflict a stacking poison: ${pc(0.8 * p)} of the hit over 4s. The skill drips venom.` },
-  frost: { name: 'Rime', el: 'cold', word: 'Rimed', desc: (p) => `Hits chill, with a ${pc(Math.min(0.5, 0.14 * p))} chance to freeze solid and ${pc(0.25 * p)} bonus cold damage.` },
-  storm: { name: 'Chain Lightning', el: 'light', word: 'Thundering', desc: (p) => `${pc(Math.min(0.85, 0.32 * p))} chance on hit to arc chain lightning through ${3 + Math.round(p)} enemies for ${pc(0.6 * p)} of the hit.` },
-  tether: { name: 'Storm Tether', el: 'light', word: 'Storm-Bound', desc: (p) => `Lightning tethers you to the skill's projectiles and orbiting weapons, shocking enemies caught in the arcs for ${pc(0.3 * p)} of its damage 4x a second.` },
-  detonate: { name: 'Detonation', el: 'fire', word: 'Volatile', desc: (p) => `${pc(Math.min(0.7, 0.22 * p))} chance on hit to explode for ${pc(0.75 * p)} of the hit around the target.` },
-  smite: { name: 'Divine Smite', el: 'holy', word: 'Hallowed', desc: (p) => `${pc(Math.min(0.6, 0.18 * p))} chance on hit to call down a pillar of holy light for ${pc(1.2 * p)} of the hit.` },
-  meteor: { name: 'Starfall', el: 'fire', word: 'Starfallen', desc: (p) => `${pc(Math.min(0.4, 0.08 * p))} chance on hit to call a meteor onto the target for ${pc(2.2 * p)} of the hit.` },
-  rift: { name: 'Void Rift', el: 'shadow', word: 'Hollow', desc: (p) => `${pc(Math.min(0.4, 0.1 * p))} chance on hit to tear open a void rift that drags enemies in and shreds them.` },
-  blood: { name: 'Blood Pact', el: 'blood', word: 'Sanguine', desc: (p) => `Hits make enemies bleed and heal you for ${(2 * p).toFixed(1)}% of the damage dealt.` },
-  shatter: { name: 'Shrapnel', el: 'phys', word: 'Splintering', desc: (p) => `${pc(Math.min(0.6, 0.2 * p))} chance on hit to burst into ${4 + Math.round(p)} shards for ${pc(0.35 * p)} of the hit each.` },
+  ignite: { name: 'Immolation', el: 'fire', word: 'Smouldering', desc: (p) => `Hits set enemies ablaze for ${pc(1.1 * p)} of the hit as fire over 3s. The skill burns with flame.`, hit: (p) => [1.1 * p, 'burning over 3 s'] },
+  venom: { name: 'Venomous', el: 'poison', word: 'Venomous', desc: (p) => `Hits inflict a stacking poison: ${pc(0.8 * p)} of the hit over 4s. The skill drips venom.`, hit: (p) => [0.8 * p, 'of poison a hit, over 4 s'] },
+  frost: { name: 'Rime', el: 'cold', word: 'Rimed', desc: (p) => `Hits chill, with a ${pc(Math.min(0.5, 0.14 * p))} chance to freeze solid and ${pc(0.25 * p)} bonus cold damage.`, hit: (p) => [0.25 * p, 'bonus cold a hit'] },
+  storm: { name: 'Chain Lightning', el: 'light', word: 'Thundering', desc: (p) => `${pc(Math.min(0.85, 0.32 * p))} chance on hit to arc chain lightning through ${3 + Math.round(p)} enemies for ${pc(0.6 * p)} of the hit.`, hit: (p) => [0.6 * p, 'an arc'] },
+  tether: { name: 'Storm Tether', el: 'light', word: 'Storm-Bound', desc: (p) => `Lightning tethers you to the skill's projectiles and orbiting weapons, shocking enemies caught in the arcs for ${pc(0.3 * p)} of its damage 4x a second.`, hit: (p) => [0.3 * p, 'a shock, 4 a second'] },
+  detonate: { name: 'Detonation', el: 'fire', word: 'Volatile', desc: (p) => `${pc(Math.min(0.7, 0.22 * p))} chance on hit to explode for ${pc(0.75 * p)} of the hit around the target.`, hit: (p) => [0.75 * p, 'an explosion'] },
+  smite: { name: 'Divine Smite', el: 'holy', word: 'Hallowed', desc: (p) => `${pc(Math.min(0.6, 0.18 * p))} chance on hit to call down a pillar of holy light for ${pc(1.2 * p)} of the hit.`, hit: (p) => [1.2 * p, 'a pillar'] },
+  meteor: { name: 'Starfall', el: 'fire', word: 'Starfallen', desc: (p) => `${pc(Math.min(0.4, 0.08 * p))} chance on hit to call a meteor onto the target for ${pc(2.2 * p)} of the hit.`, hit: (p) => [2.2 * p, 'a meteor'] },
+  rift: { name: 'Void Rift', el: 'shadow', word: 'Hollow', desc: (p) => `${pc(Math.min(0.4, 0.1 * p))} chance on hit to tear open a void rift for 2.6s that drags enemies in and shreds those at its heart for ${pc(0.3 * p)} of the hit 3x a second (~${pc(2.7 * p)} in all).`, hit: (p) => [0.3 * p, 'a pulse, 3 a second for 2.6 s'] },
+  blood: { name: 'Blood Pact', el: 'blood', word: 'Sanguine', desc: (p) => `Hits make enemies bleed for ${pc(0.25 * p)} of the hit a second for 3s, and heal you for ${(2 * p).toFixed(1)}% of the damage dealt.`, hit: (p) => [0.25 * p, 'of bleeding a second, 3 s'] },
+  shatter: { name: 'Shrapnel', el: 'phys', word: 'Splintering', desc: (p) => `${pc(Math.min(0.6, 0.2 * p))} chance on hit to burst into ${4 + Math.round(p)} shards for ${pc(0.35 * p)} of the hit each.`, hit: (p) => [0.35 * p, 'a shard'] },
   multiply: { name: 'Multiplicity', el: 'arcane', word: 'Manifold', desc: (p) => `+${multN(p)} projectiles, orbiting weapons, strikes, waves or minions.` },
   colossus: { name: 'Colossus', el: 'arcane', word: 'Colossal', desc: (p) => `+${pc(0.35 * p)} area and size: bigger blasts, wider orbits, larger projectiles.` },
   haste: { name: 'Quickening', el: 'cold', word: 'Quickened', desc: (p) => `${pc(Math.min(0.6, 0.25 * p))} lower mana cost and cooldown.` },

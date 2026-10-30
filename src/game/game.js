@@ -103,6 +103,8 @@ import { grantMarks, saveMarkXp } from './marks.js';
 import { Heresies } from '../ui/heresies.js';
 import { Rifts } from '../ui/rifts.js';
 import { Marks } from '../ui/marks.js';
+import { MacrosUI } from '../ui/macros.js';
+import { Macros } from './macros.js';
 
 const PICK_WAIT = 8; // seconds auto-play gives the player to choose a portal down (portalChoice)
 
@@ -907,6 +909,7 @@ export const game = {
   },
 
   startChar(c, fresh, room = null) {
+    Macros.reset();
     hideScreen();
     if (Auto.on) Auto.toggle(false);
     G.char = c;
@@ -1270,6 +1273,7 @@ export const game = {
             this.enterUnbound(); // the rematch, for three Abyssal Keys (docs/ENDGAME.md)
           } else if (['heresy', 'heresies', 'altar'].includes(message.trim().toLowerCase())) { close(); Heresies.open(); }
           else if (['marks', 'infernal marks'].includes(message.trim().toLowerCase())) { close(); Marks.open(); }
+          else if (['macro', 'macros'].includes(message.trim().toLowerCase())) { close(); MacrosUI.open(); }
           else if (['rift', 'rifts', 'abyssal rift'].includes(message.trim().toLowerCase())) { close(); this.confirmRift(); }
           else if (message.trim().toLowerCase() === 'tower') {
             close();
@@ -2141,6 +2145,7 @@ export const game = {
     const gen = generateDungeon(depth, biome, tileset, seed, { raid: true, small: true, density: RIFT_DENSITY });
     const world = new World('dungeon', { map: gen.map, tileset, biome, depth, props: gen.props, torches: gen.torches, wallHangings: gen.wallHangings, looks: gen.looks, townTiles: null, buildings: [] });
     world.rooms = gen.rooms || [];
+    world.riftHold = true; // rift monsters keep the old Endless Torment life (data/depth.js riftHold)
     world.chests = gen.chests.map((ch) => ({ ...ch, opened: false, reach: 1.3, use() { if (this.opened) return; this.opened = true; sfx('chest'); sfx('gold'); dropChest(world, this, depth); sparkle(this.x, this.y, 20, '#ffd060', 20, 0.5); } }));
     const [sx, sy] = gen.start;
     let tp = gen.townPortal || [sx + 1.6, sy - 0.6];

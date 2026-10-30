@@ -682,6 +682,7 @@ export function helpDialog() {
     <div><kbd>Right click</kbd> right-click skill</div>
     <div><kbd>&#96;</kbd> <kbd>1</kbd>–<kbd>9</kbd> <kbd>0</kbd> <kbd>-</kbd> <kbd>=</kbd> cast skills at the cursor (13 keys + both mouse buttons)</div>
     <div><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> potions</div>
+    <div><kbd>R</kbd> <kbd>E</kbd> <kbd>Y</kbd> <kbd>U</kbd> <kbd>O</kbd> macros: several skills on one key, set up from the skill tree's <b>Macros</b> button (or the menu)</div>
     <div><kbd>I</kbd> inventory · <kbd>K</kbd> skill tree · <kbd>B</kbd> skill book · <kbd>Q</kbd> quest log</div>
     <div><kbd>Tab</kbd>/<kbd>M</kbd> map · <kbd>Esc</kbd> menu · wheel zoom</div>
     <div><kbd>Alt</kbd>+<kbd>P</kbd> or the <b>Auto</b> button: auto-play (the hero fights, loots, shops and delves on autopilot)</div>
@@ -697,6 +698,7 @@ export function helpDialog() {
     <div>Right cluster: skills (hold to repeat, long-press to change; the &#8644; button flips to the second page of skills)</div>
     <div>Tap potions on the bar to drink</div>
     <div>Pinch with two fingers: zoom in and out</div>
+    <div>Macros you set up (skill tree, <b>Macros</b>) get a purple button each by the skills</div>
     <div><b style="color:#ffe2a0">Goal</b></div>
     <div>Enter the portal in town. Find the exit of each depth — it is sealed until its guardian falls.</div>
     <div>Die and you restart a few depths back (the start of the previous five), keeping everything else.</div>
@@ -717,6 +719,7 @@ export function pauseMenu() {
     buttons: [
       { label: 'Resume' },
       { label: 'Settings', fn: settingsDialog },
+      { label: 'Macros', fn: () => G.ui.macros.open() },
       { label: 'How to Play', fn: helpDialog },
       { label: 'Save & Quit', cls: 'red', fn: () => G.game.quitToTitle() },
     ],

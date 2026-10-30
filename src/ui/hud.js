@@ -517,7 +517,7 @@ export const HUD = {
     const xpPct = Math.floor(clamp((xpNow / (need || 1)), 0, 1) * 100);
     const shortText = mk ? `Infernal Mark (${xpPct}%)` : `Level ${c.level} ${clsName}`;
     const fullText = mk
-      ? `Level ${c.level} ${clsName} · ${fmtInt(xpNow)} / ${fmtInt(need)} XP (${xpPct}% to Infernal Mark)`
+      ? `Level ${c.level} ${clsName} · ${fmtInt(xpNow)} / ${fmtInt(need)} XP (${xpPct}% to the next Infernal Mark)`
       : `Level ${c.level} ${clsName} · ${fmtInt(xpNow)} / ${fmtInt(need)} XP (${xpPct}%)`;
     set('xpt', `${shortText}|${fullText}`, () => {
       const elText = $('#xp-text');

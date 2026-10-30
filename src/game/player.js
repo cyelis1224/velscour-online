@@ -1,6 +1,7 @@
+// The hero.
 import { G } from '../state.js';
 import { net } from '../net/network.js';
-import { rand, chance, clamp, angleTo, dist, TAU } from '../core/util.js';
+import { rand, chance, clamp, angleTo, dist, TAU, fmtInt } from '../core/util.js';
 import { sfx, levelUpFanfare } from '../core/audio.js';
 import { camera } from '../core/view.js';
 import { floatText, addEffect, Column, Ring, Sigil, SigilFlames, SkyBolts, sparkle, burst, spawn, elem, bloodSpray, smoke } from '../gfx/vfx.js';
@@ -9,7 +10,7 @@ import { CLASSES, DMG_TUNE, DMG_TUNE_AT } from '../data/classes.js';
 import { SKILLS, CLASS_SKILLS, effLevel, skillBaseDamage, manaCost, rageCost, cooldown, useTime, weaponCoef, grantedSkillsAt, skillRange } from '../data/skills.js';
 import { SLOTS, RING_SLOTS, itemStats, itemDmg, itemArmor, GEMS, shownEquip } from '../data/items.js';
 import { augHits, augmentable } from '../data/rings.js';
-import { depthLevel, fortitude, logCurve } from '../data/depth.js';
+import { depthLevel, fortitude, logCurve, MAX_LEVEL } from '../data/depth.js';
 import { heroBonus } from './defiance.js';
 import { MAX_MASTERY, masteryNeed, masteryMul, masteryTier, TIER_NAMES } from './augments.js';
 import { castSkill, Timer } from './skillrun.js';
@@ -35,15 +36,21 @@ import { endgame, saveEndgame } from './endgame.js';
 // XP for the next level. The (L/30)^1.5 term paces a hero who clears every depth to stay ~10-50 levels above its
 // monsters and reach ~270 by Velscour (depth 500, monster level 258); without it a full-clearing hero hit level 300
 // by depth 160. Past level 240 a level costs L/240 times the level-240 price, so in the Endless Torment (depths past
-// 500) a full-clearing hero keeps pace with its monsters and reaches the cap around depth 1200 (tools/tests/endgame.js).
+// 500) a full-clearing hero keeps pace with its monsters. Past 600 a level costs (L/600)^XP_K times the level-600 price
+// (a deep depth's XP grows ~level^1.5), so the hero stays level with the monsters to the cap (MAX_LEVEL, data/depth.js)
+// around depth 6600 (tools/tests/endgame.js deep).
 const xpCurve = (L) => (60 * L * L + 40 * L) * (1 + Math.pow(L / 30, 1.5));
-export const xpToNext = (L) => Math.round(L <= 240 ? xpCurve(L) : xpCurve(240) * L / 240);
-export const MAX_LEVEL = 600;
+const XP_K = 1.6, XP600 = xpCurve(240) * 600 / 240;
+export const xpToNext = (L) => Math.round(L <= 240 ? xpCurve(L) : L <= 600 ? xpCurve(240) * L / 240 : XP600 * Math.pow(L / 600, XP_K));
+export { MAX_LEVEL };
 /** The class's damage tuning at a hero level (data/classes.js DMG_TUNE). */
 export function classTune(cls, level) {
   const T = DMG_TUNE[cls];
   return T ? logCurve(DMG_TUNE_AT.map((L, i) => [L, T[i]]), level) : 1;
 }
+
+/** Critical damage for each 1% of crit chance past the 75% cap. */
+export const CRIT_OVER = 2;
 
 const ELEM_KEYS = ['fire', 'cold', 'light', 'poison', 'arcane', 'holy', 'shadow', 'blood', 'acid'];
 
@@ -113,9 +120,11 @@ export class Player extends Creature {
     buffDmg += hb.dmg; buffLife += hb.life; buffReduce += hb.reduce; buffMf += hb.mf + (this.codexMf = codexMf()); buffGf += hb.gf; buffXp += hb.xp;
     // the Endgame (docs/ENDGAME.md): Infernal Marks (every hero's) and the Glass Cannon Heresy (this hero's)
     const mk = this.marks = markBonuses(), hh = heresyHero(c);
-    buffLife += mk.life + hh.life; buffDmg += hh.dmg; buffMf += mk.mf;
+    buffLife += hh.life; buffDmg += hh.dmg; // (Marks' life multiplies maxHp below; their Fortune is st.drops, game/loot.js)
     const attr = (k) => c.attrs[k] + (add[k] || 0) + (add.allAttr || 0);
     const str = attr('str'), dex = attr('dex'), vit = attr('vit'), int = attr('int');
+    // crit chance caps at 75%: what lies past it is not wasted, each 1% becomes CRIT_OVER% critical damage
+    const critRaw = 5 + dex * 0.1 + (add.critChance || 0) + buffCrit / 4 + mk.crit, critOver = Math.max(0, critRaw - 75);
     const st = {
       str, dex, vit, int, legendary, procs: rb.procs,
       armor: Math.round((itemArmorSum + (add.armor || 0) + str) * (1 + ((add.armorPct || 0) + buffArmor) / 100)),
@@ -126,17 +135,20 @@ export class Player extends Creature {
         poison: (add.resPoison || 0) + (add.resAll || 0) + buffRes,
         magic: Math.round(((add.resAll || 0) + buffRes) * 0.75),
       },
-      critChance: clamp(5 + dex * 0.05 + (add.critChance || 0) + buffCrit / 4 + mk.crit, 0, 75),
-      critDmg: 50 + (add.critDmg || 0),
+      critChance: clamp(critRaw, 0, 75), critOver,
+      critDmg: 50 + (add.critDmg || 0) + mk.critDmg + critOver * CRIT_OVER,
       atkSpeed: Math.min(150, dex * 0.3 + (add.atkSpeed || 0) + buffAs),
       castSpeed: Math.min(150, int * 0.1 + (add.castSpeed || 0) + buffAs),
       moveSpeed: Math.min(80, (add.moveSpeed || 0) + buffSpeed * 0.6),
       lifeSteal: (add.lifeSteal || 0) + buffLeech / 4,
       manaSteal: add.manaSteal || 0,
       block: Math.min(60, (add.block || 0) + buffBlock / 2),
-      thorns: (add.thorns || 0) + buffThorns * c.level * 0.2,
+      // on the shown scale (combat.js), x Fortitude like life: one affix kills a normal in ~40 reflected blows at any depth,
+      // a thorns buff (Vengeance Aura...) in ~8-16 (it was level x 0.2 against raw life: nothing past the first depths)
+      thorns: ((add.thorns || 0) + buffThorns * c.level * 0.03) * fortitude(c.level),
       goldFind: (add.goldFind || 0) + buffGf,
       magicFind: (add.magicFind || 0) + buffMf,
+      drops: mk.mf,
       xpPct: (add.xpPct || 0) + buffXp,
       reduce: Math.min(60, (add.reduce || 0) + buffReduce),
       fortitude: fortitude(c.level),
@@ -172,7 +184,7 @@ export class Player extends Creature {
     }
     if (weapon) { const fd = add.flatDmg || 0; st.weapon = [st.weapon[0] + fd, st.weapon[1] + fd]; }
     const lifePct = (add.lifePct || 0) + buffLife;
-    this.maxHp = Math.round((C.life + (c.level - 1) * C.lifeLvl + vit * 3 + (add.life || 0)) * (1 + lifePct / 100) * st.fortitude);
+    this.maxHp = Math.round((C.life + (c.level - 1) * C.lifeLvl + vit * 3 + (add.life || 0)) * (1 + lifePct / 100) * st.fortitude * (1 + mk.life / 100));
     this.maxMana = Math.round(C.mana + (c.level - 1) * C.manaLvl + int * 2 + (add.mana || 0));
     st.lifeRegen = heresyAllows('regen', c) ? 0.6 + c.level * 0.12 + vit * 0.05 + (add.lifeRegen || 0) + this.maxHp * st.regenPct / 100 : 0; // Hunger of the Abyss: none
     st.manaRegen = 1.6 + c.level * 0.15 + int * 0.06 + (add.manaRegen || 0);
@@ -343,7 +355,7 @@ export class Player extends Creature {
     switch (g.kind) {
       case 'gold':
         c.gold += g.amount; sfx('gold');
-        floatText(this.x, this.y, 46, `+${g.amount} gold`, '#ffd34a', 12);
+        floatText(this.x, this.y, 46, `+${fmtInt(g.amount)} gold`, '#ffd34a', 12);
         if (G.room && g.lootId) net.sendLootPickup(g.lootId);
         G.ui && G.ui.refresh();
         return true;

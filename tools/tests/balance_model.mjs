@@ -43,7 +43,7 @@ if (MARKS_LIFE) console.log(`Infernal Marks: +${MARKS_LIFE}% life in the life po
 console.log(`class ${cls}: depth -> mlvl | hero hp armor%  hitN hitN%  | dps  ttk(norm) ttk(champ) ttk(boss) | hits to die (norm/champ/boss)`);
 console.log('(rough: DPS here over-counts; the in-browser numbers come from balance.js. Hits to die is the number to watch.)');
 for (const depth of [5, 20, 40, 60, 80, 100, 120, 140, 150, 160, 180, 200, 250, 300, 400, 500, ...(MARKS_LIFE ? [700, 1000, 1200] : [])]) {
-  const L = depthLevel(depth), h = hero(Math.min(600, L + 2), L);
+  const L = depthLevel(depth), h = hero(Math.min(3000, L + 2), L);
   const B = monsterBase(L);
   const mit = 1 - h.arm / (h.arm + armorDiv(L));
   const sL = Math.min(26, 1 + L * 0.3);

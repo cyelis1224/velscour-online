@@ -157,7 +157,7 @@ const gearN = +((process.argv.find((a) => a.startsWith('gear=')) || 'gear=60').s
       const wins0 = endgame().unboundWins;
       const ok = await game.enterUnbound();
       const w = G.world, p = G.player;
-      G.wins0 = wins0;
+      G.wins0 = wins0; G.marks0 = endgame().marks.pts;
       return { ok, keys: c.keys, unbound: w.unbound, practice: w.practice, biome: w.biome.id, depth: w.depth, cdepth: c.depth, boss: w.boss && w.boss.name, inArena: ((p.x - 22) / 16) ** 2 + ((p.y - 17.5) / 13.5) ** 2 < 1, hp: w.boss.maxHp, court: w.velscour.courtTpl.map((b) => b.id), area: document.body.innerText.includes('Velscour Unbound') };
     });
     console.log(JSON.stringify(e2));
@@ -247,7 +247,8 @@ const gearN = +((process.argv.find((a) => a.startsWith('gear=')) || 'gear=60').s
       const rel = w.loot.filter((l) => l.kind === 'item' && l.item.relic).map((l) => l.item);
       const k = w.loot.find((l) => l.kind === 'item' && l.item.rid === 'crown_demon');
       return { dead: w.boss.dead, exit: ex.active, label: ex.label, msg: G.ui.msgEl.textContent, rids: rel.map((i) => i.rid), unbound: rel.filter((i) => HEIRLOOM_BY_ID[i.rid] && HEIRLOOM_BY_ID[i.rid].unbound).map((i) => i.rid), sealed: rel.filter((i) => i.sealed).map((i) => i.rid),
-        hoard: rel.filter((i) => i.relic === 'cov').length + rel.filter((i) => i.relic === 'heir' && !HEIRLOOM_BY_ID[i.rid].unbound).length, wins: c.unbound.wins, best: c.unbound.best, acct: endgame().unboundWins - G.wins0, cleared: Object.keys(c.cleared).length, deepest: c.deepest, crownAt: k ? [k.x, k.y] : null };
+        hoard: rel.filter((i) => i.relic === 'cov').length + rel.filter((i) => i.relic === 'heir' && !HEIRLOOM_BY_ID[i.rid].unbound).length, wins: c.unbound.wins, best: c.unbound.best, acct: endgame().unboundWins - G.wins0, cleared: Object.keys(c.cleared).length, deepest: c.deepest, crownAt: k ? [k.x, k.y] : null,
+        abyssal: w.loot.filter((l) => l.kind === 'item' && l.item.rarity === 6 && !l.item.relic && !l.item.sealed).length, marks: endgame().marks.pts - G.marks0 };
     });
     console.log(JSON.stringify(end));
     check(end.dead && end.exit && end.label === 'Exit — to town' && /UNBOUND HAS FALLEN/.test(end.msg), `he dies: '${end.msg}', the exit reads '${end.label}'`);
@@ -255,6 +256,16 @@ const gearN = +((process.argv.find((a) => a.startsWith('gear=')) || 'gear=60').s
     check(!end.unbound.some((r) => end.sealed.includes(r)), 'the Unbound relics arrive open (never sealed)');
     check(end.wins === 1 && end.acct === 1 && end.best > 0, `the win counts: c.unbound ${end.wins} win, best ${end.best} s; the account's unboundWins +${end.acct}`);
     check(!end.cleared && end.deepest === 509, 'no depth cleared, the deepest untouched');
+    check(end.abyssal >= 3 && end.marks >= 20, `the win pays: ${end.abyssal} open Abyssal items and +${end.marks} Infernal Marks (a rift Guardian: one item, 1-8 Marks)`);
+    const four = await page.evaluate(async () => {   // four wins whose drops are picked up find all four Unbound Heirlooms
+      const { unboundSpoils } = await import('/src/game/unbound.js'), { noteFind, reliquary, saveReliquary } = await import('/src/game/reliquary.js');
+      const { G } = window.VELSCOUR, r = reliquary(), keep = { ...r.codex }, got = [];
+      for (const k of Object.keys(r.codex)) if (/^h:(abyssal_edge|mantle_unbound|seal_of_the_pit|heart_of_the_abyss)$/.test(k)) delete r.codex[k];
+      for (let i = 0; i < 4; i++) unboundSpoils({ court: [], t: 300 }, 300, (it) => { if (it && it.relic === 'heir' && it.rid !== 'crown_demon') { got.push(it.rid); noteFind(it); } });
+      r.codex = keep; saveReliquary();
+      return got;
+    });
+    check(new Set(four).size === 4, `four wins, four different Unbound Heirlooms (${four.join(', ')})`);
     await page.evaluate(() => { const { G, game } = window.VELSCOUR; const k = G.world.loot.find((l) => l.kind === 'item' && l.item.rid === 'crown_demon'); if (k) { G.player.x = k.x - 1.5; G.player.y = k.y + 1.5; } });
     await step(0.3);
     await shot('unbound_drops');

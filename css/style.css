@@ -5054,6 +5054,10 @@ body.touch.portrait #touch-buttons {
   z-index: 7;
 }
 
+body.touch.portrait.panel-open #touch-buttons {
+  display: none;
+}
+
 body.touch.portrait #touch-buttons.portrait-grid .tbtn.portrait-tile {
   border-radius: 9px;
   border-color: rgba(194, 151, 81, .82);
@@ -5177,7 +5181,6 @@ body.touch.portrait .settings-tab-pane {
 body.touch.portrait .help-keys {
   columns: 1;
 }
-
 @media (max-width: 420px) {
   body.touch.portrait #hero-stats {
     padding: 2px 4px;
@@ -6754,3 +6757,24 @@ body.touch .character-card {
 body.touch .shop-price {
   font-size: 8px;
 }
+
+.macros-panel .mc-why { font-size: 12px; margin-bottom: 8px; }
+.mc-row { padding: 6px 8px; margin-bottom: 6px; border: 1px solid #3a2e22; border-left: 3px solid var(--gold-dim); border-radius: 6px; background: rgba(16,10,6,.55); }
+.mc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mc-head .mc-name { flex: 1 1 120px; min-width: 0; width: auto; padding: 3px 6px; font-size: 14px; }
+.mc-key, .mc-add { background: #160e08; color: #e8d8c0; border: 1px solid #5a4630; border-radius: 4px; padding: 3px 4px; font: inherit; font-size: 13px; }
+.mc-keep { display: flex; align-items: center; gap: 4px; font-size: 13px; color: #d8c8a8; cursor: pointer; white-space: nowrap; }
+.mc-skills { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 6px; }
+.mc-chip { position: relative; width: 38px; height: 38px; border: 1px solid var(--gold-dim); border-radius: 5px; background: #0c0805; cursor: pointer; }
+.mc-chip img { width: 100%; height: 100%; border-radius: 4px; display: block; }
+.mc-chip .mc-n { position: absolute; left: 2px; top: 0; font: 700 10px var(--font-body); color: var(--gold); text-shadow: 0 0 2px #000, 0 0 2px #000; }
+.mc-chip .mc-x { position: absolute; right: 1px; top: -3px; font-size: 13px; color: #ff8070; text-shadow: 0 0 2px #000; opacity: 0; }
+.mc-chip:hover .mc-x, body.touch .mc-chip .mc-x { opacity: 1; }
+.mc-chip.gone { opacity: .4; }
+body.touch .mc-chip { width: 42px; height: 42px; }
+body.touch .mc-key, body.touch .mc-add, body.touch .mc-head .mc-name, body.touch .mc-row .btn { min-height: 32px; font-size: 14px; }
+body.touch .mc-keep input { width: 20px; height: 20px; }
+body.touch .macros-panel .mc-why { display: none; }
+.tbtn.macro { border-color: #8a6ad0; background: rgba(16,8,24,.8); }
+.tbtn.macro .k { top: auto; bottom: 1px; font-size: 8px; color: #d8c8ff; }
+.tt-augdmg { font-size: 12px; color: #ffcf7a; margin-top: 1px; }

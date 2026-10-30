@@ -38,6 +38,17 @@ export function createCaveRun(world, gen, biome, onSuccess) {
   const floorLo = map.minLevel / (VZ / 4) - 1.5, floorHi = map.maxLevel / (VZ / 4) + 1;
   const surfAt = (x, y) => { const i = map.tileIdx(x, y); return map.t[i] ? null : Number.isNaN(cv.lvl[i]) ? null : cv.lvl[i]; };
   const groundT = (x, y) => { const s = surfAt(x, y), h = cv.H2(x, y); return s != null && s > h ? s : h; };
+  /** Does rock in front of the hero (his sprite's width, nearer the camera) rise over 6 px or more of him? (game/dunes.js) */
+  const heroHidden = (p, h0) => {
+    const fy = (p.x + p.y) * HH - h0 * VZ;
+    for (const d of [-0.25, 0, 0.25]) for (let s = 0.25, sMax = (floorHi - h0) / (2 * K) + 1; s < sMax; s += s < 2 ? 0.25 : 0.5) {
+      const sx = p.x + s + d, sy = p.y + s - d;
+      if (sx >= W || sy >= H || sx < 0 || sy < 0) break;
+      const g = groundT(sx, sy), py = (sx + sy) * HH - g * VZ;
+      if (g >= h0 + 0.75 && py < fy - 6) return true; // its face, from py down to the floor in front, crosses his sprite
+    }
+    return false;
+  };
 
   const cr = world.cave = {
     cv, v, focus: [0, 0, 0], cut: true, region: -1, zoomK: 1,
@@ -112,7 +123,10 @@ export function createCaveRun(world, gen, biome, onSuccess) {
       const h = groundT(p.x, p.y);
       cr.focus[0] = p.x; cr.focus[1] = h; cr.focus[2] = p.y;
       const r = cv.reg[map.tileIdx(p.x, p.y)] || cr.region;
-      cr.cut = r === REG.shaft || r === REG.gallery;   // only the shaft's ledges stand over walkable ground
+      // only the shaft's ledges stand over walkable ground, and only while one really covers the hero (always on, it left
+      // a dark hole in any ledge near him; held 0.4 s so it doesn't flicker at an edge)
+      cr.cutT = (r === REG.shaft || r === REG.gallery) && heroHidden(p, h) ? 0.4 : Math.max(0, (cr.cutT || 0) - dt);
+      cr.cut = cr.cutT > 0;
       const zk = r === REG.lake || r === REG.plateau ? 0.82 : r === REG.shaft || r === REG.gallery ? 0.88 : 1;
       if (snap || Math.abs(cr.zoomK - zk) > 0.002) {
         cr.zoomK = snap ? zk : cr.zoomK + (zk - cr.zoomK) * Math.min(1, dt * 1.6);

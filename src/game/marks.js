@@ -1,9 +1,12 @@
 // Infernal Marks (docs/ENDGAME.md): the account-wide progression past the level cap. A Mark comes from XP earned at
 // MAX_LEVEL (one per xpToNext(MAX_LEVEL), Player.gainXp), from Abyssal Rift clears (riftMarks) and from Heresy rank 20
 // (one per depth cleared). Each is spent on one of four categories; a category's bonus grows with diminishing returns
-// (eff: 50% of the cap at 100 points, 75% at 200, 97% at 500), so even a thousand Marks leave the Endless Torment's
-// wall standing (+30% life at the very most). The points live in the shared record (game/endgame.js), which the cloud
-// merges three ways (game/cloud.js), so Marks earned on two devices add up.
+// but no cap (eff: the n-th point adds 1/sqrt(1 + n/100) of the first's worth, so the 300th still adds half and the
+// 1000th ~30%). It used to approach a cap (97% of it by 500 points), and a player's 454th Vitality point read +0.00.
+// Vitality multiplies the whole life pool (after gear's life % and Fortitude) and Fortune is more drops (gear, gems and
+// Sigils, like the Greed lever): as plain life % and magic find they were lost beside gear's hundreds and thousands.
+// The points live in the shared record (game/endgame.js), which the cloud merges three ways (game/cloud.js), so Marks
+// earned on two devices add up.
 import { G } from '../state.js';
 import { endgame, saveEndgame, MARK_CATS } from './endgame.js';
 import { xpToNext, MAX_LEVEL } from './player.js';
@@ -11,15 +14,17 @@ import { sfx } from '../core/audio.js';
 import { floatText, addEffect, Ring } from '../gfx/vfx.js';
 
 export const CATS = {
-  life: { name: 'Vitality', per: 0.3, cap: 30, unit: '% life', color: '#ff6a5a', desc: 'More life.' },
-  crit: { name: 'Precision', per: 0.1, cap: 10, unit: '% critical chance', color: '#ffd860', desc: 'Critical strikes land more often.' },
-  mf: { name: 'Fortune', per: 0.5, cap: 50, unit: '% magic find', color: '#b45cff', desc: 'Rarer drops.' },
-  rift: { name: 'Haste', per: 0.6, cap: 60, unit: ' s on the rift clock', color: '#20e0ff', desc: 'More time in Abyssal Rifts.' },
+  life: { name: 'Vitality', per: 0.4, unit: '% more life', color: '#ff6a5a', desc: 'Multiplies your whole life pool, after gear and Fortitude.' },
+  crit: { name: 'Precision', per: 0.06, unit: '% critical chance', also: { k: 'critDmg', per: 0.5, unit: '% critical damage' }, color: '#ffd860', desc: 'Critical strikes land more often and hit harder.' },
+  mf: { name: 'Fortune', per: 0.25, unit: '% more drops', color: '#b45cff', desc: 'More gear, gems and Sigil Stones from every kill, like the Greed lever.' }, // (key 'mf': saved records)
+  rift: { name: 'Haste', per: 0.3, unit: ' s on the rift clock', color: '#20e0ff', desc: 'More time in Abyssal Rifts.' },
 };
 /** One Mark's worth of XP at the cap: the price of the last level (a function: player.js imports this module). */
 export const markXp = () => xpToNext(MAX_LEVEL);
-/** How much of a category's cap n points unlock (0..100, never 100). */
-export const eff = (n) => 100 * (1 - Math.pow(0.993, Math.max(0, n)));
+/** A category's worth of n points, in its per (eff(100) ~58, eff(500) ~203, eff(1000) ~324: no cap). */
+export const eff = (n) => 140 * (Math.sqrt(1 + Math.max(0, n) / 100) - 1);
+/** What the next point adds against the first one (1 at 0 points, 0.5 at 300, ~0.3 at 1000). */
+export const worthNext = (n) => 1 / Math.sqrt(1 + Math.max(0, n) / 100);
 /** A category's bonus for n points. */
 export const bonusAt = (k, n) => Math.round(CATS[k].per * eff(n) * 100) / 100;
 
@@ -27,10 +32,13 @@ export const marksTotal = () => endgame().marks.pts;
 export const marksSpent = () => MARK_CATS.reduce((s, k) => s + endgame().marks.spent[k], 0);
 export const marksFree = () => marksTotal() - marksSpent();
 export const marksIn = (k) => endgame().marks.spent[k] || 0;
-/** The bonuses every hero gets now: { life %, crit %, mf %, rift s }. */
+/** A category's second bonus for n points (Precision's critical damage), or 0. */
+export const alsoAt = (k, n) => (CATS[k].also ? Math.round(CATS[k].also.per * eff(n) * 100) / 100 : 0);
+/** The bonuses every hero gets now: { life % more, crit %, critDmg %, mf = % more drops, rift s }. */
 export function markBonuses() {
   const s = endgame().marks.spent, o = {};
   for (const k of MARK_CATS) o[k] = bonusAt(k, s[k]);
+  o.critDmg = alsoAt('crit', s.crit);
   return o;
 }
 /** Marks for clearing an Abyssal Rift of this tier. */
@@ -107,5 +115,5 @@ export function autoSpend() {
 /** One line for the character sheet. */
 export function marksText() {
   const b = markBonuses();
-  return `${marksTotal()} (${marksFree()} free) · +${b.life}% life · +${b.crit}% crit · +${b.mf}% MF · +${Math.round(b.rift)} s rifts`;
+  return `${marksTotal()} (${marksFree()} free) · +${b.life}% more life · +${b.crit}% crit, +${b.critDmg}% crit damage · +${b.mf}% more drops · +${Math.round(b.rift)} s rifts`;
 }

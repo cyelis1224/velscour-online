@@ -178,7 +178,12 @@ export function renderTree(body) {
   rb.title = 'Refund all spent skill points: 100 gold x level';
   if (c.gold < respecCost(c.level)) rb.style.opacity = '.45';
   rb.onclick = () => { sfx('ui'); respecDialog(); };
-  head.appendChild(rb);
+  const mb = el('button', 'btn small', 'Macros');
+  mb.title = 'Cast several skills with one key (ui/macros.js)';
+  mb.onclick = () => G.ui.macros.open();
+  const btns = el('span', 'row');
+  btns.append(mb, rb);
+  head.appendChild(btns);
   body.appendChild(head);
   const tabs = el('div', 'tabs');
   C.trees.forEach((t, i) => {

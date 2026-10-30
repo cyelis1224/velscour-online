@@ -8,6 +8,8 @@ const { openGame, report } = require('./harness');
   await page.click('text=Heroes');
   await page.click('.class-card[data-id="necromancer"]');
   await page.click('text=Begin');
+  await page.waitForTimeout(200);
+  if (await page.locator('text=Enter World').count()) await page.click('text=Enter World');
   await page.waitForTimeout(1200);
   // Give gold, gear and gems.
   await page.evaluate(async () => {
@@ -65,6 +67,25 @@ const { openGame, report } = require('./harness');
   await page.click('text=/Upgrade to \\+1/');
   await page.waitForTimeout(200);
   await shot('ui5_upgrade');
+  // a sealed treasure takes no socket, gem, upgrade or enchantment until its seal is broken (a player socketed one)
+  const seal = await page.evaluate(async () => {
+    const { G } = window.VELSCOUR, c = G.char;
+    const { rollItem, rollGem } = await import('/src/data/items.js'), { socketGem } = await import('/src/ui/inventory.js');
+    const it = rollItem(20, { slot: 'body', rarity: 3 }); it.sealed = true; it.sockets = 1; it.gems = [];
+    const gi = c.bag.findIndex((b) => !b), si = c.bag.findIndex((b, i) => !b && i !== gi);
+    c.bag[gi] = rollGem(10); c.bag[si] = it; c.gold += 1e6;
+    const ok = socketGem(gi, { where: 'bag', idx: si });
+    const out = {};
+    for (const v of ['socket', 'upgrade', 'enchant']) {
+      G.ui.vendor.open(v); G.ui.selected = { where: 'bag', idx: si }; G.ui.refresh();
+      const box = document.querySelector('.service-box');
+      out[v] = { note: /Break the seal first/.test(box.textContent), buttons: [...box.querySelectorAll('button')].length };
+    }
+    G.ui.closeAll(); c.bag[gi] = null; c.bag[si] = null; G.ui.selected = null;
+    return { ok, gems: it.gems.length, sockets: it.sockets, upg: it.upg || 0, out };
+  });
+  console.log('sealed:', JSON.stringify(seal));
+  if (seal.ok || seal.gems || seal.sockets !== 1 || seal.upg || Object.values(seal.out).some((o) => !o.note || o.buttons)) throw new Error('A sealed treasure took a gem, socket, upgrade or enchantment: ' + JSON.stringify(seal));
   await page.evaluate(() => window.VELSCOUR.G.ui.vendor.open('gamble'));
   await page.click('text=/Weapon/');
   await page.waitForTimeout(200);

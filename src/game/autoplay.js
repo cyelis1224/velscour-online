@@ -11,7 +11,7 @@ import { MEASURE, NOTES, beatsOf } from '../data/notation.js';
 import { bardNoteFor, bardFitGain, bardPerforming } from './bard.js';
 import { SKILLS, CLASS_SKILLS, MAX_SKILL_LEVEL, manaCost, rageCost, cooldown, useTime, skillRange, spearBarrageAreas, buffAmount, curseAmount, skillDuration, effLevel, ricochetCount } from '../data/skills.js';
 import { SUMMONS } from '../data/summons.js';
-import { SLOTS, RING_SLOTS, itemValue, itemName, itemColor, upgradeCost, socketCost, enchantCost, unsocketCost, addAffix, makeGem, RARITY, POTION_PRICE, GEMS, powerLevel } from '../data/items.js';
+import { SLOTS, RING_SLOTS, itemValue, itemName, itemColor, upgradeCost, socketCost, enchantCost, unsocketCost, addAffix, makeGem, RARITY, POTION_PRICE, GEMS, powerLevel, goldLvl } from '../data/items.js';
 import { depthLevel, armorDiv } from '../data/depth.js';
 import { breachLevel } from '../data/breach.js';
 import { riftLevel } from '../data/rifts.js';
@@ -34,6 +34,7 @@ import { heroVisit } from './townlife.js';
 import { homunculusChat, isHomunculus } from './homunculus.js';
 import { effects, Telegraph } from '../gfx/vfx.js';
 import { BAR_SIZE, LMB, RMB, FILL_ORDER, SLOT_KEYS, freeSlot } from '../data/bar.js';
+import { macroKeys } from './macros.js';
 
 const OFFENSIVE = new Set(['melee', 'proj', 'nova', 'aoe', 'beam', 'chain', 'wall', 'zone', 'orbit', 'cyclone', 'whirl', 'leap', 'dash', 'trap', 'rain', 'strike', 'fissure', 'corpse']);
 const CROWD = 2.2; // enemies a typical cast is expected to reach, for planning
@@ -496,7 +497,7 @@ export const Auto = {
   noteInput() {
     if (!this.on) return;
     const k = input.keys;
-    const keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ...SLOT_KEYS.filter(Boolean)];
+    const keys = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ...SLOT_KEYS.filter(Boolean), ...macroKeys()];
     if (input.joy.active || input.worldTouch || keys.some((x) => k.has(x)) || ((input.mouse.left || input.mouse.right) && input.mouse.inside && input.lastPointerType === 'mouse')) this.overrideT = 1.5;
   },
 
@@ -1348,7 +1349,7 @@ export const Auto = {
     this.sinceTown = (this.sinceTown || 0) + 1;
     if (gearOn() && bagFree(c) < BAG_LOW) return true; // hands off the gear: a full bag doesn't stop it (it leaves new gear on the ground)
     if (c.potions.hp < 5 && c.gold > potionPrice('hp', c) * 6 && heresyAllows('potion', c, null)) return true; // (Dry Throat: none to buy)
-    if (this.sinceTown >= 4 && gearOn() && c.gold > 400 * Math.pow(1.06, c.level)) return true;
+    if (this.sinceTown >= 4 && gearOn() && c.gold > 400 * Math.pow(1.06, goldLvl(c.level))) return true;
     return false;
   },
 
@@ -2091,7 +2092,7 @@ export const Auto = {
     steps.push({ vendor: 'socket', label: 'Visiting the jeweler', want: () => c.bag.some((b) => b && b.type === 'gem') || this.equipped().some((it) => it.sockets < it.maxSockets && socketCost(it) <= this.budget(0.3)) || this.gearGain(Vendor.stock.rings), fn: () => this.jeweler() });
     steps.push({ vendor: 'upgrade', chat: true, label: 'Visiting Homunculus the Proud', want: () => this.equipped().some((it) => (it.upg || 0) < 10 && upgradeCost(it) <= this.budget(0.45)), fn: () => this.blacksmith() });
     steps.push({ vendor: 'enchant', label: 'Enchanting gear', want: () => this.equipped().some((it) => it.rarity >= 1 && enchantCost(it, true) <= this.budget(0.2)), fn: () => this.enchanter() });
-    steps.push({ vendor: 'gamble', label: 'Gambling', want: () => c.gold >= Math.round(180 * Math.pow(1.065, Math.max(c.level, depthLevel(c.depth || 1)))) * GAMBLE_GOLD && bagFree(c) >= 3, fn: () => { this.gamble(); this.sellJunk(); } });
+    steps.push({ vendor: 'gamble', label: 'Gambling', want: () => c.gold >= Math.round(180 * Math.pow(1.065, goldLvl(Math.max(c.level, depthLevel(c.depth || 1))))) * GAMBLE_GOLD && bagFree(c) >= 3, fn: () => { this.gamble(); this.sellJunk(); } });
     steps.push({ stash: true, label: 'Stashing gems and gear for later', want: () => c.bag.some((b) => b && forChest(b, c)), fn: () => this.stashExtras() });
     return steps;
   },
@@ -2364,7 +2365,7 @@ export const Auto = {
   gamble() {
     const c = G.char;
     const lvl = Math.max(c.level, depthLevel(c.depth || 1));
-    const price = Math.round(180 * Math.pow(1.065, lvl));
+    const price = Math.round(180 * Math.pow(1.065, goldLvl(lvl)));
     for (let k = 0; k < 2; k++) {
       if (c.gold < price * GAMBLE_GOLD || bagFree(c) < 3) break;
       // gamble for the weakest slot

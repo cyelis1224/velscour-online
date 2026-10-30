@@ -1,6 +1,6 @@
 // Drops on the ground: gold, health/mana orbs, potions, gear and gems.
 import { G } from '../state.js';
-import { rand, chance, randi, TAU, pick, clamp, measureCtx } from '../core/util.js';
+import { rand, chance, randi, TAU, pick, clamp, measureCtx, fmtInt } from '../core/util.js';
 import { isoX, isoY, camera } from '../core/view.js';
 import { sfx } from '../core/audio.js';
 import { spawn, glowSprite, sparkle, floatText, addLight, elem } from '../gfx/vfx.js';
@@ -66,7 +66,7 @@ export class GroundItem {
     this.r = 0.35;
   }
   get label() {
-    if (this.kind === 'gold') return `${this.amount} Gold`;
+    if (this.kind === 'gold') return `${fmtInt(this.amount)} Gold`;
     if (this.kind === 'item') return itemName(this.item);
     if (this.kind === 'potion') return this.item.name;
     if (this.kind === 'key') return 'Abyssal Key';
@@ -242,6 +242,7 @@ export function dropLoot(world, m) {
   const rank = m.rank || 'normal';
   const R = { normal: 1, champion: 3, unique: 5, boss: 10 }[rank];
   const add = (kind, data) => world.addLoot(new GroundItem(m.x + rand(-0.2, 0.2), m.y + rand(-0.2, 0.2), kind, data));
+  const q = 1 + (st.drops || 0) / 100, more = (n) => { const x = n * q; return Math.floor(x) + (chance(x % 1) ? 1 : 0); }; // Fortune Marks (game/marks.js)
   // gold
   if (chance(rank === 'normal' ? 0.45 : 1)) {
     const n = rank === 'boss' ? 5 : 1;
@@ -256,7 +257,7 @@ export function dropLoot(world, m) {
   // potions
   if (chance(0.035 * R)) add('potion', { item: potionItem(pick(['hp', 'hp', 'mp', 'mp', 'rejuv', 'fury'])) });
   // gear
-  const items = rank === 'boss' ? randi(4, 6) + (world.depth % 10 === 0 ? 2 : 0) : rank === 'unique' ? randi(2, 3) : rank === 'champion' ? (chance(0.6) ? randi(1, 2) : 0) : (chance(0.085 * (world.lootMul || 1)) ? 1 : 0); // lootMul: omens (game/happenings.js)
+  const items = more(rank === 'boss' ? randi(4, 6) + (world.depth % 10 === 0 ? 2 : 0) : rank === 'unique' ? randi(2, 3) : rank === 'champion' ? (chance(0.6) ? randi(1, 2) : 0) : (chance(0.085 * (world.lootMul || 1)) ? 1 : 0)); // lootMul: omens (game/happenings.js)
   const bonus = rank === 'boss' ? 1.2 : rank === 'unique' ? 0.6 : rank === 'champion' ? 0.3 : 0;
   const boost = (world.raid || m.isRaid || m.isVelscour ? 3 : 1) * (world.relicMul || 1); // BOSS ROOMs triple the Covenant odds (data/relics.js); Heresies raise them
   for (let i = 0; i < items; i++) {
@@ -264,14 +265,14 @@ export function dropLoot(world, m) {
     add('item', { item: maybeRelic(rollItem(ilvl, { mf: st.magicFind + (world.mfAdd || 0), bonus }), boost) });
   }
   // Sigil Stones: rare from the rank and file, common from guardians (Heresies: world.sigilMul)
-  const sig = { normal: 0.004, champion: 0.03, unique: 0.08, boss: 0.45 }[rank] * (world.lootMul || 1) * (world.sigilMul || 1);
+  const sig = { normal: 0.004, champion: 0.03, unique: 0.08, boss: 0.45 }[rank] * (world.lootMul || 1) * (world.sigilMul || 1) * q;
   if (world.depth && chance(sig)) add('item', { item: rollSigil(world.depth, rank === 'boss' ? 1 : 0) });
   // an Abyssal Key (docs/ENDGAME.md): BOSS ROOM bosses past depth 600 under Heresy rank 10, rift guardians from tier 10
   if (m.isRaid && chance(keyChance(world, m))) add('key', {}); // (keyChance rolls once a boss: a raid boss pays out three dropLoots)
   // rings: a guardian usually drops one
   if ((rank === 'boss' && chance(0.6)) || (rank === 'unique' && chance(0.2))) add('item', { item: rollItem(lvl + 2, { slot: 'ring', mf: st.magicFind + (world.mfAdd || 0), bonus }) });
   // gems
-  const gems = rank === 'boss' ? randi(1, 3) : chance(rank === 'normal' ? 0.025 : 0.25) ? 1 : 0;
+  const gems = more(rank === 'boss' ? randi(1, 3) : chance(rank === 'normal' ? 0.025 : 0.25) ? 1 : 0);
   for (let i = 0; i < gems; i++) add('item', { item: rollGem(lvl + (rank === 'boss' ? 6 : 0)) });
 }
 

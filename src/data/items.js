@@ -1,9 +1,10 @@
 // Items, affixes, gems and legendary powers.
-import { rand, randi, pick, weighted, clamp, chance } from '../core/util.js';
+import { rand, randi, pick, weighted, clamp, chance, fmtInt } from '../core/util.js';
 import { rollAugments, RING_NAMES, AUGMENTS, KIND_NAMES } from './rings.js';
 import { SKILLS } from './skills.js';
 import { SHEET_PRICE } from './tabs.js';
 import { CLASS_FOCUS } from './held.js';
+import { MAX_LEVEL } from './depth.js';
 
 // lv: the rarity's power bonus in item levels. Every number on an item (base damage, armor, affix values, ring
 // powers, legendary powers) comes from its power level = item level + lv. Every rarity rolls the same CORE_LINES
@@ -455,7 +456,7 @@ export function rollItem(ilvl, opts = {}) {
     item.pre = pre ? AFFIX_BY_STAT[pre.s].pre : null;
     item.suf = rarity >= 2 && suf ? AFFIX_BY_STAT[suf.s].suf : (suf && !pre ? AFFIX_BY_STAT[suf.s].suf : null);
   }
-  item.req = ilvl; // a level N item needs a level N hero: each level up opens the next step of gear
+  item.req = Math.min(ilvl, MAX_LEVEL); // a level N item needs a level N hero (never past the cap): each level up opens the next step of gear
   if (opts.unid) item.unid = true;
   return item;
 }
@@ -546,20 +547,23 @@ export function itemArmor(item) { return Math.round((item.armor || 0) * upgMult(
 export function itemValue(item) {
   if (item.type === 'sheet') return SHEET_PRICE;
   if (item.type === 'gem') return GEMS[item.gem].sigil ? Math.round(goldPile(depthLevelOf(item.tier * 24 + 12)) * 8) : Math.round((GEMS[item.gem].special ? 400 : 60) * Math.pow(2.6, item.tier));
-  const base = 12 * Math.pow(1.06, item.ilvl) * [1, 2.5, 6, 15, 40, 100, 250][item.rarity] * (item.relic ? { heir: 2.5, cov: 2 }[item.relic] : RELIC_HOOK.glyph && RELIC_HOOK.glyph(item) ? 60 : 1);
+  const base = 12 * Math.pow(1.06, goldLvl(item.ilvl)) * [1, 2.5, 6, 15, 40, 100, 250][item.rarity] * (item.relic ? { heir: 2.5, cov: 2 }[item.relic] : RELIC_HOOK.glyph && RELIC_HOOK.glyph(item) ? 60 : 1);
   return Math.round(base * (1 + item.affixes.length * 0.15) * (1 + item.sockets * 0.2) * (1 + (item.upg || 0) * 0.3));
 }
 
 /** A gold pile at monster level `lvl`. Prices grow ~1.06x a level (items, upgrades, sockets, gambling), so past level ~85
  *  piles follow the same curve (1.5 x 1.06^level, a Normal item's price) instead of the old straight line, which left
  *  late-game heroes unable to afford anything. goldScale: how much richer than the line (every gold source uses it). */
-export const goldPile = (lvl) => Math.max(3 + lvl * 2.2, 1.5 * Math.pow(1.06, lvl));
+export const goldPile = (lvl) => Math.max(3 + lvl * 2.2, 1.5 * Math.pow(1.06, goldLvl(lvl)));
+/** The level gold and prices grow from (x1.06 a level): past 600 it slows to a log (level 3000 counts as ~764), or
+ *  the deep Endless Torment paid 70-digit piles. Every gold source and price goes through it. */
+export function goldLvl(lvl) { return lvl <= 600 ? lvl : 600 + 40 * Math.log(1 + (lvl - 600) / 40); }
 export const goldScale = (lvl) => goldPile(lvl) / (3 + lvl * 2.2);
 
-export function upgradeCost(item) { return Math.round(60 * Math.pow(1.06, item.ilvl) * Math.pow(1.7, item.upg || 0) * (1 + item.rarity * 0.5)); }
-export function socketCost(item) { return Math.round(150 * Math.pow(1.05, item.ilvl) * Math.pow(2, item.sockets) * (1 + item.rarity * 0.3)); }
-export function enchantCost(item, add) { return Math.round((add ? 400 : 180) * Math.pow(1.055, item.ilvl) * (1 + item.rarity * 0.6)); }
-export function unsocketCost(item) { return Math.round(50 * Math.pow(1.04, item.ilvl)); }
+export function upgradeCost(item) { return Math.round(60 * Math.pow(1.06, goldLvl(item.ilvl)) * Math.pow(1.7, item.upg || 0) * (1 + item.rarity * 0.5)); }
+export function socketCost(item) { return Math.round(150 * Math.pow(1.05, goldLvl(item.ilvl)) * Math.pow(2, item.sockets) * (1 + item.rarity * 0.3)); }
+export function enchantCost(item, add) { return Math.round((add ? 400 : 180) * Math.pow(1.055, goldLvl(item.ilvl)) * (1 + item.rarity * 0.6)); }
+export function unsocketCost(item) { return Math.round(50 * Math.pow(1.04, goldLvl(item.ilvl))); }
 
 export function rerollAffixes(item) {
   const keep = item.affixes.filter((a) => a.implicit);
@@ -587,7 +591,7 @@ export function statLabel(s, v, classTrees) {
   };
   if (special[s]) return special[s];
   if (!a) return `${s}: ${v}`;
-  let t = a.t.replace('{v}', v);
+  let t = a.t.replace('{v}', typeof v === 'number' && Math.abs(v) >= 1e9 ? fmtInt(v) : v); // deep flat affixes: 1.234T, not 13 digits
   if (classTrees) t = t.replace('{tree0}', classTrees[0]).replace('{tree1}', classTrees[1]).replace('{tree2}', classTrees[2]).replace('{tree3}', classTrees[3] || classTrees[0]);
   return t;
 }

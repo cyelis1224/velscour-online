@@ -4,6 +4,7 @@ import { rollItem, HOLLOW } from '../data/items.js';
 import { drawBiome } from '../data/biomes.js';
 import { migrateBar, BAR_SIZE } from '../data/bar.js';
 import { TAB_SLOTS } from '../data/tabs.js';
+import { newMacros, migrateMacros } from '../data/macros.js';
 import { stashRaw, listRaw } from './herobackup.js';
 
 const KEY = 'velscour_saves_v1';
@@ -132,6 +133,7 @@ export function newCharData(classId, name) {
     skills: {}, granted: {}, bar: Array(BAR_SIZE).fill(null),
     equip: { weapon: null, offhand: null, head: null, body: null, hands: null, legs: null, feet: null, ring1: null, ring2: null, ring3: null, ring4: null },
     vanity: { head: null, body: null }, hideHelm: false,
+    macros: newMacros(), // game/macros.js
     mastery: {}, rage: 0, townSeed: (Math.random() * 1e9) | 0,
     bag: Array(60).fill(null),
     stash: Array(300).fill(null),
@@ -177,6 +179,7 @@ export function migrate(c) {
   for (const s of ['ring1', 'ring2', 'ring3', 'ring4']) if (!(s in c.equip)) c.equip[s] = null;
   c.vanity = Object.assign({ head: null, body: null }, c.vanity); // looks only: worn over the real gear, no stats
   c.hideHelm = !!c.hideHelm;
+  c.macros = migrateMacros(c.macros);
   if (c.townSeed === undefined) c.townSeed = (Math.random() * 1e9) | 0;
   if (!Array.isArray(c.biomeBag)) c.biomeBag = [];
   if (!Number.isInteger(c.overworldMisses)) c.overworldMisses = 0;

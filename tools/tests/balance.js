@@ -32,7 +32,7 @@ const stances = (process.env.BAL_STANCE || 'balanced').split(',');
       await game.newChar(cls, 'Balance');
       document.querySelectorAll('.screen').forEach((s) => s.remove()); G.ui.modalCount = 0; G.ui.closeAll();
       const c = G.char, p = G.player, L = depthLevel(D);
-      const lvl = Math.min(600, L + 1);
+      const lvl = Math.min(3000, L + 1);
       c.level = lvl; c.xp = Math.round(xpToNext(lvl) * 0.3);
       c.statPoints += (lvl - 1) * 5; c.skillPoints += (lvl - 1) + Math.max(0, D - 1);
       for (let d = 1; d < D; d++) c.cleared[d] = true;

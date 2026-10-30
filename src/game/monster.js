@@ -12,7 +12,7 @@ import { ARCH, ARCH_MOVES, ELITE_AFFIXES, bossName, uniqueName } from '../data/e
 import { SUMMONS } from '../data/summons.js';
 import { turretMuzzle } from '../gfx/gunner3d.js';
 import { bodyR } from '../world/map.js';
-import { toughness, danger, densityXp } from '../data/depth.js';
+import { toughness, danger, densityXp, riftHold, dmgScale } from '../data/depth.js';
 import { attachSlime, slimeUpdate, courtDef } from './slimecourt.js';
 import { ART_BY_ID, REVIVED, greaterSwap, rollLooks, uniqueSwap } from '../data/bestiary.js';
 
@@ -67,8 +67,9 @@ export function monsterBase(level) {
     // damage keeps its 1.058 a level to level 60, then grows slower (1.04, then 1.006 past 140): hero life and
     // armor only grow with levels and gear, and at 1.058 a normal hit took ~45% of a geared hero's life by depth 160;
     // past 140 hero life grows ~0.6% a level (tools/tests/endgame.js), and 1.016 had normal hits at 35-60% by depth 500;
-    // danger (data/depth.js) softens it where hero life lags, now that fights last long enough for every monster to hit
-    dmg: 1.2 * (4.4 + Math.min(level, 10) * 0.24) * Math.pow(1.058, Math.min(level, 60) - 1) * Math.pow(1.04, clamp(level - 60, 0, 80)) * Math.pow(1.006, Math.max(0, level - 140)) * danger(level),
+    // danger (data/depth.js) softens it where hero life lags, now that fights last long enough for every monster to hit;
+    // past 600 hero life grows like level^2.3 (fortitude x gear), so damage follows (level/600)^2.2, not 1.006 a level
+    dmg: 1.2 * (4.4 + Math.min(level, 10) * 0.24) * Math.pow(1.058, Math.min(level, 60) - 1) * Math.pow(1.04, clamp(level - 60, 0, 80)) * Math.pow(1.006, clamp(level - 140, 0, 460)) * Math.pow(Math.max(1, level / 600), 2.2) * danger(level),
     xp: 4 * Math.pow(level, 1.5) * densityXp(level), // fewer monsters a level than before (data/depth.js density)
   };
 }
@@ -97,7 +98,7 @@ export class Monster extends Creature {
     if (d > 0) {
       if (this.affixes && this.affixes.includes('vampiric')) this.heal(d * 0.3);
       const th = this.curses.thorns;
-      if (th && th.t > 0) hit(th.src, this, d * th.amt / 100, 'phys', { dot: true, crit: false });
+      if (th && th.t > 0) hit(th.src, this, d * th.amt / 100 * (target.isPlayer ? dmgScale(this.level || 1) : 1), 'phys', { dot: true, crit: false }); // a blow on the hero is on the life scale (combat.js thorns)
       if (this.leech && this.owner) leechHeal(this.owner, target, d, this.leech * 0.15);
     }
     return d;
@@ -1310,6 +1311,7 @@ export function lookFor(world, archId, rnd = Math.random) {
 export function makeMonster(world, archId, biome, level, rank = 'normal', x = 0, y = 0, variant = 0, look = undefined, rnd = Math.random) {
   const A = ARCH[archId];
   const B = monsterBase(level);
+  if (world.riftHold) B.hp *= riftHold(level);
   const depth = world.depth || 1;
   if (A.seaOfSand && biome.id === 'sea_of_sand') look = { art:'ss_'+archId, swap:null };
   if (look === undefined) look = lookFor(world, archId);

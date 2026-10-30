@@ -14,7 +14,7 @@ import { augHit } from './augments.js';
 import { classHitFx } from '../gfx/classfx.js';
 import { astroOnKill } from './astronomer.js';
 import { sigKill } from './signature.js';
-import { armorDiv, depthLevel, shownDmg } from '../data/depth.js';
+import { armorDiv, depthLevel, shownDmg, dmgScale } from '../data/depth.js';
 import { relicProc } from './relicprocs.js';
 import { commissionKill } from './commissions.js';
 import { riftKill } from './rifts.js';
@@ -66,9 +66,10 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
       if (tgt.raidTakenMul) dmg *= tgt.raidTakenMul; // raid mechanics (game/raidsigs.js): sunder stacks
       if (src && src.curses && src.curses.weaken && src.curses.weaken.t > 0) dmg *= 1 - src.curses.weaken.amt / 100;
       if (G.godMode) dmg = 0;
-      // thorns
+      // thorns: the affix's value and the reflected hit are on the shown scale (hero life), so they land as that times
+      // the attacker's dmgScale; raw, they grew with levels while monster life grew 1.068 a level (0.00 by depth 600)
       if (src && !src.isPlayer && !o.dot && (st.thorns > 0 || st.legendary.thorns) && !src.dead) {
-        const th = st.thorns + (st.legendary.thorns ? dmg * 1.5 : 0);
+        const th = (st.thorns + (st.legendary.thorns ? dmg * 1.5 : 0)) * dmgScale(Math.max(1, src.level || depthLevel((world && world.depth) || 1)));
         if (th > 0) hit(tgt, src, th, 'phys', { dot: true, silent: false, crit: false, noArc: true });
       }
     } else {

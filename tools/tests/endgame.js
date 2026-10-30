@@ -14,24 +14,27 @@
 //   node tools/tests/endgame.js paladin,wizard 8 marks=0,300,1000   # Infernal Marks (or MARKS=0,300,1000): depths
 //     700 / 1000 / 1200 only, each geared hero measured at every Marks count (spent balanced, "1000L": all on
 //     Vitality); the wall should hold: a normal's hit >= 12% of life, the BOSS ROOM within ~25% of no Marks at 1200
+//   node tools/tests/endgame.js paladin 4 deep      # the Endless Torment to the level cap (3000, depth ~6600) and past it:
+//     XP sampled to depth 7500, depths 500-7500; fights should creep slowly longer to the cap, then the wall
 // Each depth averages 3 geared heroes (one hero's resistances swing from 0 to 75%).
 const { openGame, report } = require('./harness');
 const classes = (process.argv[2] || 'paladin').split(',');
 const rounds = +(process.argv[3] || 8);
 const rushing = process.argv.slice(4).includes('rush');
+const deep = process.argv.slice(4).includes('deep'), MAXD = deep ? 7500 : 1300;
 const mkArg = process.argv.slice(4).find((a) => /^marks=/.test(a)) || (process.env.MARKS ? 'marks=' + process.env.MARKS : '');
 const MARKS = mkArg ? mkArg.slice(6).split(',').map((v) => [parseInt(v, 10) || 0, /L$/i.test(v)]) : [null];
 
 (async () => {
   const { browser, page, errors } = await openGame();
   // 1. XP per depth
-  let xp = await page.evaluate(async () => {
+  let xp = await page.evaluate(async (MAXD) => {
     const { G, game } = window.VELSCOUR;
     const { BIOME_BY_ID } = await import('/src/data/biomes.js');
     await game.newChar('paladin', 'XP');
     document.querySelectorAll('.screen').forEach((s) => s.remove()); G.ui.modalCount = 0; G.ui.closeAll();
     const out = [];
-    for (let d = 1; d <= 1300; d += d === 1 ? 19 : d < 500 ? 20 : 100) { // past 500: the Endless Torment
+    for (let d = 1; d <= MAXD; d += d === 1 ? 19 : d < 500 ? 20 : d < 1300 ? 100 : 500) { // past 500: the Endless Torment
       G.char.depth = d;
       game.buildDungeon(d, d === 500 ? BIOME_BY_ID.throne : BIOME_BY_ID.catacombs);
       const ms = G.world.creatures.filter((m) => m.team === 'enemy');
@@ -39,20 +42,20 @@ const MARKS = mkArg ? mkArg.slice(6).split(',').map((v) => [parseInt(v, 10) || 0
     }
     const { xpToNext, MAX_LEVEL } = await import('/src/game/player.js');
     return { out, cap: MAX_LEVEL, cost: Array.from({ length: MAX_LEVEL + 1 }, (_, L) => xpToNext(Math.max(1, L))) };
-  });
+  }, MAXD);
   const cost = xp.cost, cap = xp.cap; xp = xp.out;
   const xpToNext = (L) => cost[L];
   const dungeonXp = xp.filter(([d]) => d !== 500); // the throne is a short gauntlet: count depth 500 as a dungeon
   const xpAt = (d) => { for (let i = 1; i < dungeonXp.length; i++) if (dungeonXp[i][0] >= d) { const [d0, a] = dungeonXp[i - 1], [d1, b] = dungeonXp[i]; return a * Math.pow(b / a, (d - d0) / (d1 - d0)); } return dungeonXp[dungeonXp.length - 1][1]; };
   const levelAfter = (share) => { // hero level on reaching each depth when `share` of every depth's XP is earned
     const H = [1]; let L = 1, cur = 0;
-    for (let d = 1; d <= 1300; d++) { cur += xpAt(d) * share; while (L < cap && cur >= xpToNext(L)) { cur -= xpToNext(L); L++; } H[d + 1] = L; }
+    for (let d = 1; d <= MAXD; d++) { cur += xpAt(d) * share; while (L < cap && cur >= xpToNext(L)) { cur -= xpToNext(L); L++; } H[d + 1] = L; }
     return H;
   };
   const full = levelAfter(1), rush = levelAfter(0.4);
   console.log('XP per depth (dungeon, all monsters): ' + xp.map(([d, x, n]) => `D${d} ${Math.round(x).toLocaleString()} (${n})`).join(', '));
   // 2-3. Power at sample depths
-  const depths = mkArg ? [700, 1000, 1200] : [10, 40, 80, 120, 160, 200, 250, 300, 350, 400, 450, 495, 500, 700, 1000, 1200];
+  const depths = deep ? [500, 700, 1000, 1200, 2000, 3000, 4000, 5000, 6000, 6600, 7500] : mkArg ? [700, 1000, 1200] : [10, 40, 80, 120, 160, 200, 250, 300, 350, 400, 450, 495, 500, 700, 1000, 1200];
   for (const cls of classes) {
   console.log(`\n${cls}: hero level by full clears / 40% clears, then the ${rushing ? '40%' : 'full'}-clear hero (best of ${rounds * 25} drops, 3 heroes)`);
   console.log(`${mkArg ? ' marks life% crit% |' : ''} depth mlvl | lvl F/R |      dps    life arm% res% blk red | ttk: norm  guard  ROOM  VELS | % life per hit: norm champ guard ROOM VELS (phys/elem)`);
