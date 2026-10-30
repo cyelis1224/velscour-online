@@ -63,9 +63,10 @@ export const Vendor = {
     goldSpan.title = 'Click to drop gold on the floor';
     goldSpan.onclick = () => { sfx('ui'); openDropGoldDialog(); };
     goldRow.appendChild(goldSpan);
-    goldRow.appendChild(el('span', 'dim', '· Sell: right-click an item in your bag or drag it here'));
     body.appendChild(goldRow);
-    droppable(body, (data) => (data.type === 'item' ? this.sell(data) : false), (data) => data.type === 'item');
+    const sellZone = el('div', 'shop-sellzone', 'Drop a backpack item here to sell · Right-click an item to sell it');
+    droppable(sellZone, (data) => (data.type === 'item' ? this.sell(data) : false), (data) => data.type === 'item');
+    body.appendChild(sellZone);
     switch (this.active) {
       case 'weapons': this.shopGrid(body, this.stock.weapons); break;
       case 'armor': this.shopGrid(body, this.stock.armor); break;
@@ -79,11 +80,15 @@ export const Vendor = {
   },
 
   shopGrid(body, list) {
+    body.appendChild(el('div', 'inv-section-title', `Stock <span>${list.filter(Boolean).length} available</span>`));
     const grid = el('div', 'shop-grid');
     list.forEach((it, i) => {
       const d = el('div', 'bslot ' + rarityClass(it));
       if (this.shopSel === i) d.classList.add('sel');
-      if (it) d.appendChild(itemCell(it));
+      if (it) {
+        d.appendChild(itemCell(it));
+        d.appendChild(el('span', 'shop-price', `${fmtInt(itemValue(it))}g`));
+      }
       if (it) {
         draggable(d, {
           key: 'shop:' + i,

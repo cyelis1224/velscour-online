@@ -374,10 +374,10 @@ function pickSocketTarget(gemIdx, targets) {
 
 function statsBlock() {
   const p = G.player, c = G.char, st = p.st, C = CLASSES[c.classId];
-  const box = el('div', 'col');
-  box.style.minWidth = '210px';
+  const box = el('div', 'col character-card');
   const need = xpToNext(c.level), mk = capXp(c);   // at the cap: XP towards the next Infernal Mark
-  box.appendChild(el('div', '', `<b style="font-family:Cinzel;color:#ffe2a0;font-size:16px">${escapeHtml(c.name)}</b><div class="dim">Level ${c.level} ${C.name}</div><div class="dim" style="font-size:12px">${mk ? `Next Infernal Mark ${fmtInt(mk.xp)} / ${fmtInt(mk.need)} XP` : `XP ${fmtInt(c.xp)} / ${fmtInt(need)}`}</div>`));
+  box.appendChild(el('div', 'character-identity', `<span class="inv-eyebrow">Character</span><b>${escapeHtml(c.name)}</b><span>Level ${c.level} ${C.name}</span><small>${mk ? `Next Infernal Mark ${fmtInt(mk.xp)} / ${fmtInt(mk.need)} XP` : `XP ${fmtInt(c.xp)} / ${fmtInt(need)}`}</small>`));
+  box.appendChild(el('div', 'inv-section-title', 'Attributes'));
   const attrs = el('div', '');
   for (const k of ['str', 'dex', 'vit', 'int']) {
     const row = el('div', 'attr-row');
@@ -407,7 +407,7 @@ function statsBlock() {
     rb.onclick = () => { sfx('ui'); attrRespecDialog(); };
     box.appendChild(rb);
   }
-  const g = el('div', 'stats-grid');
+  const g = el('div', 'stats-grid stats-primary');
   const rows = [
     ['Life', `${Math.round(p.hp)} / ${p.maxHp}`], ['Mana', `${Math.round(p.mana)} / ${p.maxMana}`],
     ['Weapon Dmg', `${st.weapon[0]}–${st.weapon[1]}`], ['Damage Bonus', `+${Math.round(st.dmgPct + st.primary)}%`],
@@ -426,9 +426,17 @@ function statsBlock() {
   if (marksTotal()) rows.push(['Infernal Marks', `${marksTotal()} (${marksFree()} free)`]);
   if (heresyRankOf(c)) rows.push(['Heresy rank', String(heresyRankOf(c))]);
   if (c.keys) rows.push(['Abyssal Keys', `${c.keys}`]);
-  for (const [k, v] of rows) g.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
+  const primary = new Set(['Life', 'Mana', 'Weapon Dmg', 'Armor', 'Crit', 'Attack Speed', 'Cast Speed', 'Move Speed']);
+  box.appendChild(el('div', 'inv-section-title', 'Combat'));
+  for (const [k, v] of rows.filter(([k]) => primary.has(k))) g.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
   box.appendChild(g);
-  box.appendChild(el('div', 'dim', `Kills ${fmtInt(c.kills || 0)} · Deaths ${c.deaths || 0} · Deepest ${c.deepest || 0}`));
+  const more = el('details', 'character-more');
+  more.innerHTML = '<summary>All character stats</summary>';
+  const extra = el('div', 'stats-grid');
+  for (const [k, v] of rows.filter(([k]) => !primary.has(k))) extra.innerHTML += `<span class="dim">${k}</span><span class="v">${v}</span>`;
+  more.appendChild(extra);
+  box.appendChild(more);
+  box.appendChild(el('div', 'character-history', `Kills ${fmtInt(c.kills || 0)} · Deaths ${c.deaths || 0} · Deepest ${c.deepest || 0}`));
   if (endgameUnlocked(c)) { const mb = el('button', 'btn small', 'Infernal Marks'); mb.onclick = () => { sfx('ui'); G.ui.marks.open(); }; box.appendChild(mb); }
   return box;
 }
@@ -465,11 +473,25 @@ export function autoAllocate() {
   changed();
 }
 
+let inventoryView = 'gear';
 export function renderInventory(body) {
   const c = G.char;
+  if (!body.dataset.invReady) {
+    if (G.ui.vendor?.active || G.ui.stash?.active || G.ui.reliquary?.active) inventoryView = 'gear';
+    body.dataset.invReady = '1';
+  }
   body.innerHTML = '';
+  const tabs = el('div', 'inv-view-tabs');
+  for (const [view, label] of [['gear', 'Inventory & Gear'], ['character', 'Character Sheet']]) {
+    const button = el('button', 'tab' + (inventoryView === view ? ' active' : ''), label);
+    button.type = 'button';
+    button.onclick = () => { inventoryView = view; sfx('ui'); renderInventory(body); };
+    tabs.appendChild(button);
+  }
+  body.appendChild(tabs);
   const wrap = el('div', 'inv-wrap');
-  const left = el('div', 'col');
+  const left = el('div', 'col inv-equipment');
+  left.appendChild(el('div', 'inv-section-title', 'Equipment'));
   const doll = el('div', 'paperdoll');
   const portrait = el('div', 'portrait');
   const img = new Image();
@@ -480,13 +502,21 @@ export function renderInventory(body) {
   doll.appendChild(portrait);
   for (const s of SLOTS) doll.appendChild(equipSlot(s));
   left.appendChild(doll);
+  if (inventoryView === 'character') {
+    wrap.classList.add('character-view');
+    wrap.appendChild(left);
+    wrap.appendChild(statsBlock());
+    body.appendChild(wrap);
+    return;
+  }
   left.appendChild(detailBox());
   wrap.appendChild(left);
-  const mid = el('div', 'col');
+  const mid = el('div', 'col inv-bag');
+  mid.appendChild(el('div', 'inv-section-title', `Backpack <span>${c.bag.filter(Boolean).length} / ${c.bag.length}</span>`));
   const bag = el('div', 'bag');
   for (let i = 0; i < c.bag.length; i++) bag.appendChild(bagSlot(i));
   mid.appendChild(bag);
-  const info = el('div', 'row');
+  const info = el('div', 'row inv-bag-actions');
   const goldSpan = el('span', 'gold-text gold-clickable', `◉ ${fmtInt(c.gold)} gold`);
   goldSpan.id = 'inv-gold-display';
   goldSpan.title = 'Click to drop gold on the floor';
@@ -519,7 +549,6 @@ export function renderInventory(body) {
   }
   mid.appendChild(info);
   wrap.appendChild(mid);
-  wrap.appendChild(statsBlock());
   body.appendChild(wrap);
 }
 

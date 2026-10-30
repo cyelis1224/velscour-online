@@ -11,6 +11,8 @@ export const UI = {
   renderers: new Map(),
   modalCount: 0,
   selected: null,
+  windowOrder: 30,
+  windowPositions: new Map(),
   get modal() { return this.modalCount > 0; },
 
   init() {
@@ -23,6 +25,7 @@ export const UI = {
     this.msgEl = $('#center-msg');
     this.ghost = $('#drag-ghost');
     initDnD();
+    window.addEventListener('resize', () => this.layoutPanels());
     document.addEventListener('pointermove', (e) => { if (!this.tipEl.classList.contains('hidden') && e.pointerType === 'mouse') this.placeTip(e.clientX, e.clientY); });
   },
 
@@ -39,6 +42,8 @@ export const UI = {
       close.title = 'Close (Esc)';
       close.onclick = () => { sfx('ui'); this.closePanel(name); };
       head.appendChild(close);
+      head.addEventListener('pointerdown', (e) => this.startPanelMove(e, name));
+      root.addEventListener('pointerdown', () => this.focusPanel(name));
       root.appendChild(head);
       const body = el('div', 'panel-body');
       root.appendChild(body);
@@ -47,8 +52,11 @@ export const UI = {
       this.panels.set(name, p);
     }
     p.head.querySelector('h2').textContent = title;
+    p.opts = opts;
     this.renderers.set(name, render);
     render(p.body, p);
+    this.focusPanel(name);
+    this.layoutPanels();
     this.onPanelsChanged();
     return p;
   },
@@ -60,6 +68,7 @@ export const UI = {
     this.renderers.delete(name);
     if (p.opts.onClose) p.opts.onClose();
     if (!this.panels.size) { this.selected = null; this.hideTip(); }
+    this.layoutPanels();
     this.onPanelsChanged();
   },
   closeAll() {
@@ -78,11 +87,83 @@ export const UI = {
   refresh() {
     for (const [name, r] of this.renderers) {
       const p = this.panels.get(name);
-      if (p) { const st = p.body.scrollTop; r(p.body, p); p.body.scrollTop = st; }
+      if (p) {
+        const st = p.body.scrollTop;
+        const expanded = p.body.querySelector('.character-more')?.open;
+        r(p.body, p);
+        p.body.scrollTop = st;
+        if (expanded) p.body.querySelector('.character-more')?.setAttribute('open', '');
+      }
     }
     if (this.hud) this.hud.refreshStatic();
   },
   onPanelsChanged() { if (this.hud) this.hud.refreshStatic(); },
+
+  desktopPanels() { return !G.touch && !document.body.classList.contains('touch'); },
+  focusPanel(name) {
+    const p = this.panels.get(name);
+    if (p && this.desktopPanels()) p.root.style.zIndex = ++this.windowOrder;
+  },
+  panelBounds(p) {
+    const host = this.panelsEl.getBoundingClientRect();
+    return { w: host.width, h: host.height, pw: p.root.offsetWidth, ph: p.root.offsetHeight };
+  },
+  placePanel(name, x, y) {
+    const p = this.panels.get(name);
+    if (!p) return;
+    const { w, h, pw, ph } = this.panelBounds(p);
+    const left = Math.max(0, Math.min(x, Math.max(0, w - pw)));
+    const top = Math.max(0, Math.min(y, Math.max(0, h - Math.min(ph, 48))));
+    p.root.style.left = `${left}px`;
+    p.root.style.top = `${top}px`;
+    this.windowPositions.set(name, { x: left, y: top, moved: true });
+  },
+  layoutPanels() {
+    if (!this.panelsEl || !this.desktopPanels()) return;
+    const host = this.panelsEl.getBoundingClientRect();
+    const inventory = this.panels.get('inventory');
+    const partner = [...this.panels].find(([name]) => ['vendor', 'stash', 'reliquary'].includes(name));
+    const canPair = inventory && partner && host.width >= inventory.root.offsetWidth + partner[1].root.offsetWidth + 22;
+    for (const [name, p] of this.panels) {
+      const saved = this.windowPositions.get(name);
+      if (saved?.moved && !(canPair && (name === 'inventory' || name === partner[0]))) {
+        this.placePanel(name, saved.x, saved.y);
+        continue;
+      }
+      const pw = p.root.offsetWidth, ph = p.root.offsetHeight;
+      let x = Math.max(0, (host.width - pw) / 2);
+      if (canPair) {
+        const total = inventory.root.offsetWidth + partner[1].root.offsetWidth + 12;
+        const start = (host.width - total) / 2;
+        if (name === 'inventory') x = start + partner[1].root.offsetWidth + 12;
+        else if (name === partner[0]) x = start;
+      }
+      p.root.style.left = `${Math.round(x)}px`;
+      p.root.style.top = `${Math.max(0, Math.min(10, host.height - ph))}px`;
+    }
+  },
+  startPanelMove(e, name) {
+    if (!this.desktopPanels() || e.button !== 0 || e.target.closest('button, input, select')) return;
+    const p = this.panels.get(name);
+    if (!p) return;
+    e.preventDefault();
+    this.focusPanel(name);
+    const host = this.panelsEl.getBoundingClientRect();
+    const r = p.root.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    p.head.setPointerCapture(e.pointerId);
+    p.root.classList.add('moving');
+    const move = (ev) => this.placePanel(name, ev.clientX - host.left - dx, ev.clientY - host.top - dy);
+    const end = () => {
+      p.root.classList.remove('moving');
+      p.head.removeEventListener('pointermove', move);
+      p.head.removeEventListener('pointerup', end);
+      p.head.removeEventListener('pointercancel', end);
+    };
+    p.head.addEventListener('pointermove', move);
+    p.head.addEventListener('pointerup', end);
+    p.head.addEventListener('pointercancel', end);
+  },
 
   log(html, color, skipChat = false) {
     if (!skipChat && G.gameChat) {

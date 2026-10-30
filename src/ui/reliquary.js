@@ -8,7 +8,7 @@ import { itemCell, itemTooltip, rarityClass } from './itemui.js';
 import { changed, renderInventory } from './inventory.js';
 import { addToBag } from '../game/player.js';
 import { reliquary, saveReliquary, openTabs, codexProgress, codexEntries, MILESTONES, VAULT_TABS, codexTitle, noteFind } from '../game/reliquary.js';
-import { RELIC_COLORS, SIGILS, SLOT_NAMES, makeGem } from '../data/items.js';
+import { RELIC_COLORS, SIGILS, SLOT_NAMES, makeGem, itemName } from '../data/items.js';
 import { COVENANT_BY_ID, makeHeirloom, makeCovenant, GLYPHWORDS } from '../data/relics.js';
 import { itemIconURL } from './icons.js';
 
@@ -29,6 +29,8 @@ function entryIcon(e) {
 export const Reliquary = {
   active: false,
   tab: 0,
+  selected: null,
+  query: '',
   open() {
     UI.closeAll();
     this.active = true;
@@ -56,6 +58,7 @@ export const Reliquary = {
     if (!it) return false;
     if (!addToBag(c, it)) { UI.log('Inventory full.', '#ff8080'); sfx('error'); return false; }
     r.tabs[tab][idx] = null;
+    if (this.tab === tab && this.selected === idx) this.selected = null;
     saveReliquary(); sfx('pickup'); changed();
     return true;
   },
@@ -67,7 +70,7 @@ export const Reliquary = {
       const codex = i === VAULT_TABS, locked = !codex && i >= n;
       const b = el('button', 'tab' + (this.tab === i ? ' active' : '') + (locked ? ' locked' : ''), codex ? 'Codex' : `${locked ? '🔒 ' : ''}Vault ${ROMAN[i]}`);
       b.title = locked ? UNLOCK[i] : '';
-      b.onclick = () => { this.tab = i; sfx('ui'); UI.selected = null; this.render(body); };
+      b.onclick = () => { this.tab = i; this.selected = null; this.query = ''; sfx('ui'); UI.selected = null; this.render(body); };
       tabs.appendChild(b);
     }
     body.appendChild(tabs);
@@ -75,16 +78,40 @@ export const Reliquary = {
     if (this.tab >= n) { body.appendChild(el('div', 'dim rel-locked', `Vault ${ROMAN[this.tab]} is sealed. ${UNLOCK[this.tab]}.`)); return; }
     const t = r.tabs[this.tab];
     body.appendChild(el('div', 'dim rel-note', `Shared by all your heroes · Vault ${ROMAN[this.tab]}: ${t.filter(Boolean).length} / ${t.length} · Right-click to move items between the Reliquary and your bag`));
+    const search = el('input', 'storage-search rel-search');
+    search.type = 'search'; search.placeholder = 'Search this vault'; search.value = this.query;
+    body.appendChild(search);
+    const transfer = el('div', 'storage-dropzone', 'Drop a backpack item here to store it · Tap a stored item to inspect it');
+    droppable(transfer, (data) => data.type === 'item' && data.where === 'bag' ? this.store(data.idx) : false, (data) => data.type === 'item' && data.where === 'bag');
+    body.appendChild(transfer);
     const grid = el('div', 'bag rel-grid');
     t.forEach((it, i) => {
       const d = el('div', 'bslot ' + rarityClass(it));
+      if (this.selected === i) d.classList.add('sel');
+      d.dataset.name = it ? itemName(it).toLowerCase() : '';
       if (it) d.appendChild(itemCell(it));
-      draggable(d, { key: 'vault:' + i, data: () => (t[i] ? { type: 'vault', idx: i, tab: this.tab } : null), icon: () => d.querySelector('img') && d.querySelector('img').src, onRight: () => this.take(i), onDouble: () => this.take(i) });
+      draggable(d, { key: 'vault:' + i, data: () => (t[i] ? { type: 'vault', idx: i, tab: this.tab } : null), icon: () => d.querySelector('img') && d.querySelector('img').src, onClick: () => { if (t[i]) { this.selected = i; this.render(body); } }, onRight: () => this.take(i), onDouble: () => this.take(i) });
       droppable(d, (data) => (data.type === 'item' && data.where === 'bag' ? this.store(data.idx) : false), (data) => data.type === 'item' && data.where === 'bag');
       if (it) UI.tip(d, () => itemTooltip(t[i], { hint: 'Right-click to take' }));
       grid.appendChild(d);
     });
     body.appendChild(grid);
+    const selected = t[this.selected];
+    let detail;
+    if (selected) {
+      detail = el('div', 'storage-detail', itemTooltip(selected));
+      const take = el('button', 'btn small', 'Take to backpack');
+      take.onclick = () => this.take(this.selected);
+      detail.appendChild(take);
+      body.appendChild(detail);
+    }
+    const applyFilter = () => {
+      for (const cell of grid.children) cell.hidden = !!this.query && !cell.dataset.name.includes(this.query);
+      grid.classList.toggle('filtered', !!this.query);
+      if (detail) detail.hidden = !!this.query && !itemName(selected).toLowerCase().includes(this.query);
+    };
+    search.oninput = () => { this.query = search.value.trim().toLowerCase(); applyFilter(); };
+    applyFilter();
   },
   renderCodex(body, prog) {
     const r = reliquary();

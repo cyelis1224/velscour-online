@@ -6,6 +6,7 @@ import { UI, draggable, droppable } from './ui.js';
 import { itemCell, itemTooltip, rarityClass } from './itemui.js';
 import { changed, renderInventory } from './inventory.js';
 import { addToBag } from '../game/player.js';
+import { itemName } from '../data/items.js';
 
 export const STASH_SIZE = 300;
 
@@ -35,6 +36,9 @@ export function sortStash(c, by = 'type') {
 
 export const Stash = {
   active: false,
+  filter: 'all',
+  query: '',
+  selected: null,
   open() {
     UI.closeAll();
     this.active = true;
@@ -58,6 +62,7 @@ export const Stash = {
     if (!it) return false;
     if (!addToBag(c, it)) { UI.log('Inventory full.', '#ff8080'); sfx('error'); return false; }
     c.stash[idx] = null;
+    if (this.selected === idx) this.selected = null;
     sfx('pickup'); changed();
     return true;
   },
@@ -66,22 +71,56 @@ export const Stash = {
     if (!c.stash) c.stash = Array(STASH_SIZE).fill(null);
     body.innerHTML = '';
     const used = c.stash.filter(Boolean).length;
-    const head = el('div', 'row', `<span class="dim" style="font-size:12px">${fmtInt(used)} / ${STASH_SIZE} slots used · Right-click to move items between the chest and your bag</span>`);
+    const head = el('div', 'row storage-toolbar', `<strong>${fmtInt(used)} / ${STASH_SIZE}</strong><span class="dim">slots used</span>`);
     for (const [by, label] of [['type', 'Sort by type'], ['rarity', 'Sort by rarity']]) {
       const b = el('button', 'btn small', label);
-      b.onclick = () => { sortStash(c, by); sfx('ui'); UI.selected = null; changed(); };
+      b.onclick = () => { sortStash(c, by); this.selected = null; sfx('ui'); UI.selected = null; changed(); };
       head.appendChild(b);
     }
     body.appendChild(head);
+    const tools = el('div', 'storage-filters');
+    const kind = el('select', 'storage-select', '<option value="all">All items</option><option value="gear">Gear</option><option value="gem">Gems</option>');
+    kind.value = this.filter;
+    const search = el('input', 'storage-search');
+    search.type = 'search'; search.placeholder = 'Search stored items'; search.value = this.query;
+    tools.append(kind, search);
+    body.appendChild(tools);
+    const transfer = el('div', 'storage-dropzone', 'Drop a backpack item here to store it · Right-click a stored item to take it');
+    droppable(transfer, (data) => data.type === 'item' && data.where === 'bag' ? this.store(data.idx) : false, (data) => data.type === 'item' && data.where === 'bag');
+    body.appendChild(transfer);
     const grid = el('div', 'bag stash-grid');
     c.stash.forEach((it, i) => {
       const d = el('div', 'bslot ' + rarityClass(it));
+      if (this.selected === i) d.classList.add('sel');
       if (it) d.appendChild(itemCell(it));
-      draggable(d, { key: 'stash:' + i, data: () => (c.stash[i] ? { type: 'stash', idx: i } : null), icon: () => d.querySelector('img') && d.querySelector('img').src, onRight: () => this.take(i), onDouble: () => this.take(i) });
+      d.dataset.kind = it?.type || 'empty';
+      d.dataset.name = it ? itemName(it).toLowerCase() : '';
+      draggable(d, { key: 'stash:' + i, data: () => (c.stash[i] ? { type: 'stash', idx: i } : null), icon: () => d.querySelector('img') && d.querySelector('img').src, onClick: () => { if (c.stash[i]) { this.selected = i; this.render(body); } }, onRight: () => this.take(i), onDouble: () => this.take(i) });
       droppable(d, (data) => (data.type === 'item' && data.where === 'bag' ? this.store(data.idx) : false), (data) => data.type === 'item' && data.where === 'bag');
       if (it) UI.tip(d, () => itemTooltip(c.stash[i], { hint: 'Right-click to take' }));
       grid.appendChild(d);
     });
     body.appendChild(grid);
+    const selected = c.stash[this.selected];
+    let detail;
+    if (selected) {
+      detail = el('div', 'storage-detail', itemTooltip(selected));
+      const take = el('button', 'btn small', 'Take to backpack');
+      take.onclick = () => this.take(this.selected);
+      detail.appendChild(take);
+      body.appendChild(detail);
+    }
+    const applyFilter = () => {
+      const filtered = this.filter !== 'all' || !!this.query;
+      for (const cell of grid.children) {
+        const match = cell.dataset.kind !== 'empty' && (this.filter === 'all' || cell.dataset.kind === this.filter) && cell.dataset.name.includes(this.query);
+        cell.hidden = filtered && !match;
+      }
+      grid.classList.toggle('filtered', filtered);
+      if (detail) detail.hidden = filtered && ((this.filter !== 'all' && selected.type !== this.filter) || !itemName(selected).toLowerCase().includes(this.query));
+    };
+    kind.onchange = () => { this.filter = kind.value; applyFilter(); };
+    search.oninput = () => { this.query = search.value.trim().toLowerCase(); applyFilter(); };
+    applyFilter();
   },
 };

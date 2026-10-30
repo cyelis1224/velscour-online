@@ -14,6 +14,16 @@ Contents
 
 ---
 
+## October 29, 2026 — inventory, character, storage and shop UI refresh
+- Desktop panels in `src/ui/ui.js` can be moved by their title bar, focused independently and kept in bounds on resize.
+  Shop, chest and Reliquary panels open beside the inventory; touch layouts keep their fixed panel flow.
+- The inventory now has Inventory & Gear and Character Sheet tabs. The bag, paper doll and selected item have clearer
+  contrast and hierarchy; the character sheet groups attributes, key combat values and an expandable full stat list.
+- The storage chest filters by item type or name, and the Reliquary vault searches by name. Both show a selected item
+  and a visible Take to backpack action for touch. Shops show prices on stock and a dedicated sell drop zone.
+- Verified with `tools/tests/ui_facelift.js` in Chromium at 1440×900, 1068×658 and 844×390 touch, including panel
+  movement, paired window placement, chest transfers and touch selection; `tools/tests/stash.js` also passes.
+
 ## October 30, 2026 — the lowered drawbridge floated short of the pier (every castle)
 - **Request:** the bridge on the Cinderhold castle map is broken (a player's screenshot: the lowered drawbridge hangs
   up by the gate with a gap over the moat before the stone pier); fix it, then check the other bridges.
