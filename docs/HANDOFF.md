@@ -14,6 +14,19 @@ Contents
 
 ---
 
+## October 30, 2026 — the lowered drawbridge floated short of the pier (every castle)
+- **Request:** the bridge on the Cinderhold castle map is broken (a player's screenshot: the lowered drawbridge hangs
+  up by the gate with a gap over the moat before the stone pier); fix it, then check the other bridges.
+- **Cause:** the drawbridge prop's `z` cancels the height of the tile under its anchor (`mover` in
+  `src/world/castleworld.js`), which is sunk moat while the bridge is up. When it comes down, `castle3dTick` raises its
+  tiles to the ground (`hgt = 0`) but the prop kept its lift, so the last frame drew a moat's depth too high. Every
+  castle had it (Cinderhold's dark moat just shows it best). Fixed in `src/game/castle3d.js`: the deck's `z` goes to 0
+  with its tiles.
+- **Other bridges checked, no bugs:** the main crossing, the postern bridge and the river bridge of all 11 castles,
+  30 seeds each (deck reached from the entry, both ends on land, no water past either end), walked both ways with
+  `map.move` in a live game with the bridge down; lowered-drawbridge shots of all 11 look right.
+- **Verified:** `castle3d.js --castle=all`, `flow.js`.
+
 ## October 29, 2026 — optimization and pathing sweep of every map, for phones (branch `perf/mobile-map-sweep`)
 - **Request:** an optimization sweep and pathing check of all maps, especially the newest modes, optimized for mobile in
   particular; make sure it looks great and runs great on all platforms.

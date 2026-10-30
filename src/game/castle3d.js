@@ -23,6 +23,9 @@ export function castle3dTick(world, dt) {
         // the deck's tiles come up out of the sunken moat to the ground and open: the terrain's caches start again
         for (const i of D.tiles) { map.block[i] = 0; if (map.hgt) map.hgt[i] = 0; }
         map._terr = null; map._stepMask = null; world.floorChunks?.map?.clear(); world.flowTimer = 0;
+        // the deck's frames hang from the anchor's ground point, and its z cancelled the sunken tile under it
+        // (world/castleworld.js); that tile is ground now, so the lift goes too or the deck floats short of the pier
+        for (const o of world.props) if (o.c3move?.kind === 'drawbridge') o.z = 0;
       }
     }
   }
