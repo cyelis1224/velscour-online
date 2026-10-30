@@ -29,6 +29,14 @@ import { ScoreFx, scoreWorld, cadenceFx, flyNote, noteParticles, noteBurst, draw
 import { hit, aoe } from './combat.js';
 import { Projectile } from './hazards.js';
 import { GroundItem } from './loot.js';
+import { net } from '../net/network.js';
+
+export function bardVolumeScale(p) {
+  if (!p || !p.isRemotePlayer) return 1.0;
+  if (!G.player) return 0.5;
+  const d = Math.hypot(p.x - G.player.x, p.y - G.player.y);
+  return Math.max(0.15, Math.min(0.85, 1.0 - (d - 6) / 26));
+}
 
 class Wait {
   constructor(t, fn) { this.t = t; this.fn = fn; }
@@ -56,7 +64,11 @@ function remember(song) {
 }
 
 export function bardScore(p) {
-  if (!p.score) { p.score = { notes: [], beats: 0, key: 'treble', harmony: 0, harmonyT: 0, idle: 0, flash: 0, discord: 0, cadences: 0, discords: 0, mel: -1, keyId: null, cands: [], recentA: [], recentB: [], play: null, pending: null, song: null }; nextBar(p.score, p); }
+  if (!p.score) {
+    p.score = { p, notes: [], beats: 0, key: 'treble', harmony: 0, harmonyT: 0, idle: 0, flash: 0, discord: 0, cadences: 0, discords: 0, mel: -1, keyId: null, cands: [], recentA: [], recentB: [], play: null, pending: null, song: null };
+    nextBar(p.score, p);
+  }
+  p.score.p = p;
   return p.score;
 }
 const pcOfKey = (k) => k.pc + (k.minor ? 3 : 0);   // a minor key's relative major
@@ -100,6 +112,9 @@ export function bardRetune(p, restart = false) {
   if (!sc) return;
   if (restart) sc.fresh = true; // the chosen Tab starts from its first note
   if (!sc.notes.length && !sc.pending) nextBar(sc, p);
+  if (p === G.player && G.room && net?.connected) {
+    net.sendBardTabs(p.char?.tabs, p.char?.tabAt);
+  }
 }
 /** What the Bard is playing from his Tabs: { name, slot, at, of } or null. */
 export function bardNowPlaying(p) {
@@ -172,12 +187,14 @@ const playing = (sc) => !!sc.play && !sc.play.done && sc.play.w.hazards.includes
 function sing(sc, note) {
   if (!note.heads.length || playing(sc)) return;
   stopVoices(sc.wv || [], 0.05);
+  const p = sc.p;
+  const vScale = bardVolumeScale(p);
   const M = sc.song || bardMelody(sc), spb = 60 / M.tempo, t = audioNow(), N = NOTES[note.g], each = (N.beats / (N.heads || 1)) * spb, tag = { kind: 'write', bar: sc.bar };
   const art = artFor(note.reg, (note.sound || N.beats * TPB) / TPB), dbl = REGISTERS[note.reg] && REGISTERS[note.reg].double;
   sc.wv = note.heads.flatMap((h) => {
-    const at = t + (h.at - note.at) * spb, v = [playNote('harpsichord', h.midi, { at, dur: Math.max(0.12, each), vel: 0.62, art, tag })];
-    if (dbl && h.midi >= 67) v.push(playNote('harpsichord', h.midi - 12, { at, dur: Math.max(0.12, each), vel: 0.32, art, tag }));
-    for (const m of h.ch || []) v.push(playNote('harpsichord', m, { at, dur: Math.max(0.12, each), vel: 0.3, art, tag }));
+    const at = t + (h.at - note.at) * spb, v = [playNote('harpsichord', h.midi, { at, dur: Math.max(0.12, each), vel: 0.62 * vScale, art, tag })];
+    if (dbl && h.midi >= 67) v.push(playNote('harpsichord', h.midi - 12, { at, dur: Math.max(0.12, each), vel: 0.32 * vScale, art, tag }));
+    for (const m of h.ch || []) v.push(playNote('harpsichord', m, { at, dur: Math.max(0.12, each), vel: 0.3 * vScale, art, tag }));
     return v;
   });
   if (sc.song) return;   // a sheet's chords are its own
@@ -185,7 +202,7 @@ function sing(sc, note) {
   if (ch !== sc.wch) { // the bass of a new chord
     sc.wch = ch;
     const lo = sc.key === 'bass' ? 36 : 40, pc = chordPcs(M.key, ch)[0], bass = lo + ((pc - lo) % 12 + 12) % 12;
-    sc.wv.push(playNote('harpsichord', bass, { at: t, dur: Math.min(1.2, 2 * spb), vel: 0.4, art: 'normal_held', tag }));
+    sc.wv.push(playNote('harpsichord', bass, { at: t, dur: Math.min(1.2, 2 * spb), vel: 0.4 * vScale, art: 'normal_held', tag }));
   }
 }
 
@@ -210,9 +227,10 @@ export function bardCompose(p, sk, L) {
     if (sc.key !== N.clef) { sc.key = N.clef; floatText(p.x, p.y, 92, N.clef === 'bass' ? 'Bass Clef' : 'Treble Clef', TIERS[tier].staff, 11); if (sc.notes.length && !sc.song) realize(bardMelody(sc), sc.notes, sc.key); }
     sc.flash = Math.max(sc.flash, 0.5);
     if (instReady() && !playing(sc) && !sc.pending) { // a rolled tonic chord in the clef's octave
+      const vScale = bardVolumeScale(p);
       const M = sc.song || bardMelody(sc), base = N.clef === 'bass' ? 48 : 60, t = audioNow();
       stopVoices(sc.wv || [], 0.05);
-      sc.wv = (sc.song ? [0, 4, 7].map((x) => (M.key.pc + x) % 12) : chordPcs(M.key, M.B.chords[3])).map((pc, i) => playNote('harpsichord', base + pc, { at: t + i * 0.045, dur: 0.6, vel: 0.5, art: 'normal_held', tag: { kind: 'clef', bar: sc.bar } }));
+      sc.wv = (sc.song ? [0, 4, 7].map((x) => (M.key.pc + x) % 12) : chordPcs(M.key, M.B.chords[3])).map((pc, i) => playNote('harpsichord', base + pc, { at: t + i * 0.045, dur: 0.6, vel: 0.5 * vScale, art: 'normal_held', tag: { kind: 'clef', bar: sc.bar } }));
     }
     return;
   }
@@ -238,8 +256,8 @@ function discord(p, sc) {
   if (G.bardStats) G.bardStats.dis++;
   floatText(p.x, p.y, 92, 'Discord', '#ff6060', 12);
   stopVoices(sc.wv || [], 0.05);
-  if (instReady() && !playing(sc)) { const t = audioNow(), tag = { kind: 'discord', bar: sc.bar }; [48, 49, 54, 55, 61].forEach((m, i) => playNote('harpsichord', m, { at: t + i * 0.012, dur: 0.45, vel: 0.6, art: 'marcato_short', tag })); }
-  else if (!instReady()) sfx('error', 0.5);
+  if (instReady() && !playing(sc)) { const vScale = bardVolumeScale(p); const t = audioNow(), tag = { kind: 'discord', bar: sc.bar }; [48, 49, 54, 55, 61].forEach((m, i) => playNote('harpsichord', m, { at: t + i * 0.012, dur: 0.45, vel: 0.6 * vScale, art: 'marcato_short', tag })); }
+  else if (!instReady() && !p.isRemotePlayer) sfx('error', 0.5);
 }
 
 /**
@@ -273,9 +291,15 @@ class Performance {
   /** Schedule the audio on the Web Audio clock (exact timing) and the gameplay on game time. */
   score(at) {
     const { p, w, notes } = this;
-    const seq = playSequence(this.F ? arrangement(this.M, notes, this.F, { clef: this.clef, land: this.land }) : songArrangement(notes, this.clef, this.land, this.landEv), { at: Math.max(at, audioNow() + 0.05), bpm: this.M.tempo, tag: { kind: 'perf', bar: this.bar } });
+    const vScale = bardVolumeScale(p);
+    const rawArr = this.F ? arrangement(this.M, notes, this.F, { clef: this.clef, land: this.land }) : songArrangement(notes, this.clef, this.land, this.landEv);
+    const arr = vScale === 1.0 ? rawArr : rawArr.map(ev => ({
+      ...ev,
+      vel: (ev.vel != null ? ev.vel : 0.8) * vScale,
+    }));
+    const seq = playSequence(arr, { at: Math.max(at, audioNow() + 0.05), bpm: this.M.tempo, tag: { kind: 'perf', bar: this.bar } });
     this.voices = seq.voices; this.start = seq.start;
-    if (!instReady()) sfx('note', 1);
+    if (!instReady() && !p.isRemotePlayer) sfx('note', 1);
     // gameplay
     if (this.clef === 'bass') {
       this.at(this.land, () => {
@@ -286,8 +310,13 @@ class Performance {
           flyNote({ x0: p.x, y0: p.y, z0: 30, x1: p.x + Math.cos(a) * r, y1: p.y + Math.sin(a) * r, z1: 6, dur: 0.32, glyph: i % 2 ? 'bass' : notes[i % notes.length].g, tier, burst: 2, s: 1.1 });
         }
         for (let i = 0; i < 3; i++) addEffect(new Ring(p.x, p.y, 0.1, r * (0.6 + i * 0.25), 0.35 + i * 0.12, TIERS[tier].glow, 4));
-        aoe(w, p, p.x, p.y, r, total, lastN.el, { sk: lastN.sk, knock: 1.4, stun: true, bardT: tier });
-        camera.shake(7);
+        if (!p.isRemotePlayer) {
+          aoe(w, p, p.x, p.y, r, total, lastN.el, { sk: lastN.sk, knock: 1.4, stun: true, bardT: tier });
+          camera.shake(7);
+        } else {
+          const d = G.player ? Math.hypot(p.x - G.player.x, p.y - G.player.y) : 99;
+          if (d < 10) camera.shake(Math.max(1, 4 * (1 - d / 10)));
+        }
       });
     } else {
       const shots = notes.slice(0, 16), over = notes.length > 16 ? notes.length / 16 : 1;
@@ -297,7 +326,8 @@ class Performance {
         if (!w.map.isFloor(x, y)) { x = p.x; y = p.y; }
         const foes = w.hostiles(p.team, p.x, p.y, 9).sort((a, b) => dist(p.x, p.y, a.x, a.y) - dist(p.x, p.y, b.x, b.y));
         const t = foes.length ? foes[i % foes.length] : null;
-        const ang = t && !t.dead ? angleTo(x, y, t.x, t.y) : rand(TAU), d = n.dmg * 0.5 * this.mul * this.H * over;
+        const ang = t && !t.dead ? angleTo(x, y, t.x, t.y) : rand(TAU);
+        const d = p.isRemotePlayer ? 0 : n.dmg * 0.5 * this.mul * this.H * over;
         w.addHazard(new Projectile({ world: w, src: p, x, y, z, ang, speed: 10, range: 9, fx: 'n_' + n.g, el: n.el, dmg: [d * 0.9, d * 1.1], o: { sk: n.sk, bardT: n.tier }, home: 1.6, tier: n.tier, light: true, cadence: true }));
       }));
       this.at(this.land, () => { if (!p.dead && p.world === w) cadenceFx(p, this.tier, notes.map((n) => n.g)); });
@@ -348,10 +378,13 @@ function perform(p, sc, q, at) {
 }
 
 let instAsked = false;
+export function ensureInstrumentsLoaded() {
+  if (!instAsked && audioCtx()) { instAsked = true; loadInstruments(); }
+}
 /** Per-frame upkeep (called by Player.update): Harmony decay, a forgotten tune, a waiting song, the staff over the head. */
 export function bardUpdate(p, dt) {
   const sc = bardScore(p);
-  if (!instAsked && audioCtx()) { instAsked = true; loadInstruments(); }
+  ensureInstrumentsLoaded();
   if (!p._scoreFx || !effects.includes(p._scoreFx)) addEffect(p._scoreFx = new ScoreFx(p));
   sc.flash = Math.max(0, sc.flash - dt * 2); sc.discord = Math.max(0, sc.discord - dt * 2.5);
   if (sc.harmony && (sc.harmonyT -= dt) <= 0) sc.harmony = 0;
@@ -428,6 +461,10 @@ export function bardProjUpdate(pr, dt) {
 /** On-hit extras of a note projectile (d = the hit it just dealt). */
 export function bardProjHit(pr, c, d) {
   const m = pr.bm, w = pr.world, src = pr.src;
+  if (src?.isRemotePlayer) {
+    if (chance(G.touch ? 0.3 : 0.6)) noteBurst(c.x, c.y, pr.z, pr.tier, 2, [pr.note]);
+    return;
+  }
   if (m.trip) for (let i = 1; i <= 2; i++) later(w, i * 0.09, () => { if (!c.dead) { hit(src, c, d * 0.5, pr.el, { ...pr.o }); noteBurst(c.x, c.y, 30, pr.tier, 1, [pr.note]); } });
   if (m.hush && src && src.isPlayer) src.mana = Math.min(src.maxMana, src.mana + src.maxMana * 0.012);
   if (m.gold && chance(0.3)) w.addLoot(new GroundItem(c.x, c.y, 'gold', { amount: Math.round((2 + c.level * 2) * (1 + ((src && src.st && src.st.goldFind) || 0) / 100)) }));

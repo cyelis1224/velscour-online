@@ -398,7 +398,9 @@ export class Player extends Creature {
   }
 
   // ------------------------------------------------------------------ skills
-  canUse(sk) {
+  canUse(skOrId) {
+    const sk = typeof skOrId === 'string' ? SKILLS[skOrId] : skOrId;
+    if (!sk) return 'unlearned';
     const L = this.skillLevel(sk);
     if (!L) return 'unlearned';
     if ((this.cooldowns[sk.id] || 0) > 0) return 'cooldown';
@@ -407,7 +409,8 @@ export class Player extends Creature {
     return null;
   }
 
-  tryUseSkill(sk, tx, ty, target = null) {
+  tryUseSkill(skOrId, tx, ty, target = null) {
+    const sk = typeof skOrId === 'string' ? SKILLS[skOrId] : skOrId;
     if (this.dead || !sk) return false;
     if (sk.classId === 'barbarian' && ((sk.kind === 'whirl' && this.rage < 10) || this.rage < rageCost(sk))) {
       if ((this.noRageT || 0) <= 0) { floatText(this.x, this.y, 60, 'Need Rage', '#ff9933', 12); this.noRageT = 0.8; }
@@ -451,8 +454,18 @@ export class Player extends Creature {
     this.lastEl = sk.el;
     if (sk.id === 'barbarian.0.0') this.bashCastSerial++;
     const ok = castSkill(this, sk, L, tx, ty);
-    if (ok === false) { this.mana += cost; this.cooldowns[sk.id] = 0; return false; }
-    if (G.room) net.sendSkillCast(sk.id, tx, ty, target?.id || null, L);
+    let extra = null;
+    if (this.classId === 'bard') {
+      const sc = this.score;
+      extra = {
+        mel: sc?.mel ?? -1,
+        keyId: sc?.keyId ?? null,
+        tabAt: this.char?.tabAt ?? 0,
+        bar: sc?.bar ?? 1,
+        songI: sc?.song ? sc.song.i : null,
+      };
+    }
+    if (G.room) net.sendSkillCast(sk.id, tx, ty, target?.id || null, L, extra);
     if (rageCost(sk)) { this.rage -= rageCost(sk); this.char.rage = this.rage; }
     // Attacks build Rage; no passive regeneration. Hits award most of the resource.
     if (this.classId === 'barbarian' && sk.attack) this.gainRage(sk.id === 'barbarian.0.0' ? 3 : sk.kind === 'whirl' ? 0 : 0.7);

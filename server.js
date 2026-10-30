@@ -1122,6 +1122,7 @@ wss.on('connection', (ws) => {
               level: p.level,
               title: p.title,
               gear: p.gear,
+              bardTabs: p.bardTabs || null,
             })),
           },
         }));
@@ -1163,6 +1164,7 @@ wss.on('connection', (ws) => {
 
         clientData.room = roomName;
         clientData.disconnected = false;
+        if (msg.bardTabs) clientData.bardTabs = msg.bardTabs;
         room.players.push(clientData);
 
         // Notify room members
@@ -1175,6 +1177,7 @@ wss.on('connection', (ws) => {
             level: clientData.level,
             title: clientData.title,
             gear: clientData.gear,
+            bardTabs: clientData.bardTabs || null,
           },
         }, ws);
 
@@ -1198,6 +1201,7 @@ wss.on('connection', (ws) => {
               level: p.level,
               title: p.title,
               gear: p.gear,
+              bardTabs: p.bardTabs || null,
             })),
           },
         }));
@@ -1260,6 +1264,17 @@ wss.on('connection', (ws) => {
 
       case 'game_skill_cast': {
         if (!clientData.room) break;
+        msg.playerId = clientData.id;
+        broadcastToRoom(clientData.room, msg, ws);
+        break;
+      }
+
+      case 'game_bard_tabs': {
+        if (!clientData.room) break;
+        clientData.bardTabs = {
+          tabs: Array.isArray(msg.tabs) ? msg.tabs : [],
+          tabAt: Number(msg.tabAt) || 0,
+        };
         msg.playerId = clientData.id;
         broadcastToRoom(clientData.room, msg, ws);
         break;

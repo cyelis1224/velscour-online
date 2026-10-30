@@ -156,3 +156,20 @@ export function songNext(song) {
   if (++song.i >= song.ev.length) { song.i = 0; song.loops++; }
   return e;
 }
+
+/** Sanitize an array of Bard sheet tabs for lightweight network serialization. */
+export function sanitizeBardTabs(tabs, tabAt = 0) {
+  if (!tabs || !Array.isArray(tabs)) return { tabs: [], tabAt: 0 };
+  const sanitized = tabs.map((t) => {
+    if (!t || !t.text) return null;
+    return {
+      uid: t.uid || ('tab_' + Math.random().toString(36).slice(2, 8)),
+      title: String(t.title || 'Untitled Song').slice(0, 60),
+      text: String(t.text).slice(0, SHEET_MAX),
+      bpm: typeof t.bpm === 'number' ? t.bpm : null,
+      inked: !!t.inked,
+    };
+  });
+  return { tabs: sanitized, tabAt: Number(tabAt) || 0 };
+}
+

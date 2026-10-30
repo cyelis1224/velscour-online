@@ -66,10 +66,12 @@ export function grantedSkillsAt(cls, level) {
 
 /** Effective level of a skill for a player: invested + item bonuses. */
 export function effLevel(player, sk) {
-  const base = player.char.skills[sk.id] || 0;
+  const skObj = typeof sk === 'string' ? SKILLS[sk] : sk;
+  const id = skObj?.id || (typeof sk === 'string' ? sk : null);
+  const base = (player.char && player.char.skills && id && player.char.skills[id]) || 0;
   if (!base) return 0;
   const st = player.st || {};
-  return base + Math.floor((st.skillsAll || 0) + (st['skillTree' + sk.tree] || 0));
+  return base + Math.floor((st.skillsAll || 0) + (skObj ? (st['skillTree' + skObj.tree] || 0) : 0));
 }
 
 /** Raw (pre player-multiplier) damage per hit for a skill at level L. */

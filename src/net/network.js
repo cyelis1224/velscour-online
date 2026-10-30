@@ -1,6 +1,6 @@
-// Client networking controller for VELSCOUR Online
 import { G } from '../state.js';
 import { getClientVersion } from '../ui/updater.js';
+import { sanitizeBardTabs } from '../data/tabs.js';
 
 class NetworkManager {
   constructor() {
@@ -388,6 +388,10 @@ function serializeGearItem(item, slot) {
         this.emit('game_skill_cast', msg);
         break;
 
+      case 'game_bard_tabs':
+        this.emit('game_bard_tabs', msg);
+        break;
+
       case 'game_monster_hit':
         this.emit('game_monster_hit', msg);
         break;
@@ -724,15 +728,27 @@ function serializeGearItem(item, slot) {
     });
   }
 
-  sendSkillCast(skillId, x, y, targetId = null, level = 1) {
+  sendSkillCast(skillId, x, y, targetId = null, level = 1, extra = null) {
     if (!this.currentRoom) return;
-    this.send({
+    const payload = {
       type: 'game_skill_cast',
       skillId,
       x,
       y,
       targetId,
       level,
+    };
+    if (extra) payload.extra = extra;
+    this.send(payload);
+  }
+
+  sendBardTabs(tabs, tabAt = 0) {
+    if (!this.currentRoom) return;
+    const sanitized = sanitizeBardTabs(tabs, tabAt);
+    this.send({
+      type: 'game_bard_tabs',
+      tabs: sanitized.tabs,
+      tabAt: sanitized.tabAt,
     });
   }
 

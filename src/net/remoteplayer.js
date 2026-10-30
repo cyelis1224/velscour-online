@@ -13,6 +13,7 @@ import { castSkill } from '../game/skillrun.js';
 import { castArtFx } from '../gfx/artfx.js';
 import { SKILLS } from '../data/skills.js';
 import { angleTo } from '../core/util.js';
+import { bardScore, bardCompose, bardUpdate, bardRetune, ensureInstrumentsLoaded } from '../game/bard.js';
 
 export class RemotePlayer extends Creature {
   constructor(info) {
@@ -59,7 +60,13 @@ export class RemotePlayer extends Creature {
       level: this.level,
       rage: 100,
       skills: {},
+      tabs: [],
+      tabAt: 0,
     };
+
+    if (info.bardTabs) {
+      this.setBardTabs(info.bardTabs.tabs, info.bardTabs.tabAt);
+    }
 
     if (this.gear) {
       this.updateGear(this.gear);
@@ -68,6 +75,33 @@ export class RemotePlayer extends Creature {
 
   skillDamage(sk, L = 1) {
     return [0, 0];
+  }
+  skillLevel(sk) {
+    const id = typeof sk === 'string' ? sk : sk?.id;
+    return (this.char?.skills && id && this.char.skills[id]) || 1;
+  }
+  heal(amt, silent = false) {
+    this.hp = Math.min(this.maxHp, this.hp + (amt || 0));
+  }
+  setBardTabs(tabs, tabAt = 0) {
+    if (!this.char) this.char = {};
+    this.char.tabs = (tabs || []).map(t => t ? ({
+      uid: t.uid || ('tab_' + Math.random().toString(36).slice(2, 8)),
+      type: 'sheet',
+      title: t.title || 'Untitled Song',
+      text: t.text || '',
+      bpm: typeof t.bpm === 'number' ? t.bpm : null,
+      inked: true,
+    }) : null);
+    this.char.tabAt = tabAt || 0;
+    ensureInstrumentsLoaded();
+    if (this.score) {
+      this.score.fresh = true;
+      if (!this.score.notes.length && !this.score.pending) {
+        this.score.song = null;
+        bardRetune(this, true);
+      }
+    }
   }
   mastery(sk) {
     return 1;
@@ -129,6 +163,12 @@ export class RemotePlayer extends Creature {
     }
     if (state.classId && state.classId !== this.classId) {
       this.destroySig();
+      if (this._scoreFx) {
+        const idx = effects.indexOf(this._scoreFx);
+        if (idx !== -1) effects.splice(idx, 1);
+        this._scoreFx = null;
+      }
+      this.score = null;
       this.classId = state.classId;
       this.cls = CLASSES[this.classId] || CLASSES.paladin;
       this.sig = null;
@@ -146,6 +186,14 @@ export class RemotePlayer extends Creature {
     this.animT = (this.animT || 0) + dt;
     this.spawnT = (this.spawnT || 0) + dt;
     if (this.flash > 0) this.flash = Math.max(0, this.flash - dt * 4);
+
+    if (this.classId === 'bard' && this.world && this.world.kind !== 'town') {
+      try {
+        bardUpdate(this, dt);
+      } catch (e) {
+        console.warn('RemotePlayer bardUpdate error:', e);
+      }
+    }
 
     if (this.chatTimer > 0) {
       this.chatTimer -= dt;
@@ -283,7 +331,7 @@ export class RemotePlayer extends Creature {
     ctx.restore();
   }
 
-  onCastSkill(skillId, tx, ty, targetId = null, level = 1) {
+  onCastSkill(skillId, tx, ty, targetId = null, level = 1, extra = null) {
     const sk = SKILLS[skillId];
     if (tx !== undefined && ty !== undefined) {
       this.aim = [tx, ty];
@@ -316,6 +364,22 @@ export class RemotePlayer extends Creature {
           M.cast(this, this.sig.s, sk, level || 1, tx, ty);
         }
       } catch (e) {}
+    }
+
+    // Bard notation & audio composition replication
+    if (this.classId === 'bard') {
+      try {
+        const sc = bardScore(this);
+        if (extra) {
+          if (extra.tabAt != null && this.char) this.char.tabAt = extra.tabAt;
+          if (extra.keyId && !sc.song) sc.keyId = extra.keyId;
+          if (extra.mel != null && extra.mel >= 0 && !sc.song) sc.mel = extra.mel;
+          if (extra.songI != null && sc.song) sc.song.i = extra.songI;
+        }
+        bardCompose(this, sk, level || 1);
+      } catch (e) {
+        console.warn('RemotePlayer bardCompose error:', e);
+      }
     }
 
     // Execute skill hazard/visual replication
@@ -386,6 +450,14 @@ export class RemotePlayer extends Creature {
     this.dead = true;
     this.destroySummons();
     this.destroySig();
+    if (this._scoreFx) {
+      const idx = effects.indexOf(this._scoreFx);
+      if (idx !== -1) effects.splice(idx, 1);
+      this._scoreFx = null;
+    }
+    if (this.score && this.score.play) {
+      this.score.play.flush && this.score.play.flush();
+    }
     const w = this.world || G.world;
     if (w && w.creatures) {
       const idx = w.creatures.indexOf(this);

@@ -247,6 +247,9 @@ function attachNetListeners() {
       G.remotePlayers.set(p.id, rp);
       UI.log(`<b style="color:#7ab8ff">${escapeHtml(p.name)}</b> (Lv ${p.level} ${CLASSES[p.classId]?.name || ''}) joined the room.`, '#ffd860');
       sfx('portal');
+      if (G.player && G.player.classId === 'bard' && G.char?.tabs) {
+        net.sendBardTabs(G.char.tabs, G.char.tabAt);
+      }
     }
   });
 
@@ -372,7 +375,15 @@ function attachNetListeners() {
     if (!G.world || data.playerId === net.myId) return;
     const rp = G.remotePlayers?.get(data.playerId);
     if (rp && rp.world === G.world && G.world.creatures.includes(rp)) {
-      rp.onCastSkill(data.skillId, data.x, data.y, data.targetId, data.level);
+      rp.onCastSkill(data.skillId, data.x, data.y, data.targetId, data.level, data.extra);
+    }
+  });
+
+  net.on('game_bard_tabs', (data) => {
+    if (data.playerId === net.myId) return;
+    const rp = G.remotePlayers?.get(data.playerId);
+    if (rp) {
+      rp.setBardTabs(data.tabs, data.tabAt);
     }
   });
 
@@ -856,6 +867,10 @@ export const game = {
     }
 
     this.startChar(c, false, room);
+
+    if (c.classId === 'bard' && c.tabs) {
+      net.sendBardTabs(c.tabs, c.tabAt);
+    }
 
     // Spawn other players already in the room
     if (room.players && G.world) {

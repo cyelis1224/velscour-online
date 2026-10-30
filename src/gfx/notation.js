@@ -382,7 +382,7 @@ export function scoreWorld(p, at) {
 }
 export class ScoreFx {
   constructor(p) { this.p = p; this.layer = 'top'; this.t = 0; }
-  update(dt) { this.t += dt; return !this.p.dead && this.p.score && this.p.world && G.player === this.p; }
+  update(dt) { this.t += dt; return !this.p.dead && this.p.score && this.p.world; }
   draw(ctx) {
     const p = this.p, sc = p.score;
     if (!sc || (p.world && p.world.kind === 'town') || G.settings.bardScore === false) return;

@@ -57,8 +57,13 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     await p2.waitForTimeout(500);
 
     // Enter lobby
-    await p1.click('button:has-text("Continue")');
-    await p2.click('button:has-text("Continue")');
+    for (const p of [p1, p2]) {
+      await p.click('button:has-text("Continue")');
+      const enterBtn = p.locator('button:has-text("Enter Lobby")');
+      if (await enterBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await enterBtn.click();
+      }
+    }
 
     await p1.waitForSelector('#d2-lobby');
     await p2.waitForSelector('#d2-lobby');

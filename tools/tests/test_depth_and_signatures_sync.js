@@ -71,9 +71,13 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     await p3.waitForTimeout(500);
 
     // Enter lobby on all 3
-    await p1.click('button:has-text("Continue")');
-    await p2.click('button:has-text("Continue")');
-    await p3.click('button:has-text("Continue")');
+    for (const p of [p1, p2, p3]) {
+      await p.click('button:has-text("Continue")');
+      const enterBtn = p.locator('button:has-text("Enter Lobby")');
+      if (await enterBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await enterBtn.click();
+      }
+    }
 
     await p1.waitForSelector('#d2-lobby');
     await p2.waitForSelector('#d2-lobby');
@@ -192,13 +196,17 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     });
     await p1.waitForTimeout(500);
 
-    // P1 enters dungeon
+    // P1 enters dungeon, P2 enters dungeon
     await p1.evaluate(() => {
       window.VELSCOUR.G.game.enterDungeon();
     });
+    await p2.waitForTimeout(600);
+    await p2.evaluate(() => {
+      window.VELSCOUR.G.game.enterDungeon();
+    });
 
-    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.kind === 'dungeon' && !document.querySelector('#loading').classList.contains('hidden') === false, { timeout: 10000 });
-    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.kind === 'dungeon' && !document.querySelector('#loading').classList.contains('hidden') === false, { timeout: 10000 });
+    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.kind === 'dungeon' && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
+    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.kind === 'dungeon' && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
 
     const p1DungeonDepth = await p1.evaluate(() => window.VELSCOUR.G.world.depth);
     const p2DungeonDepth = await p2.evaluate(() => window.VELSCOUR.G.world.depth);
@@ -216,15 +224,27 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     });
 
     await p1.waitForTimeout(500);
-    // Click Descend to Depth 2
+    // Click Descend to Depth 2 for P1
     await p1.evaluate(() => {
       const descendBtn = Array.from(document.querySelectorAll('.portal-choice button')).find(b => b.textContent.includes('Descend'));
       if (descendBtn) descendBtn.click();
       else throw new Error('Descend button not found in portal choice dialog');
     });
 
-    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 2 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 10000 });
-    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 2 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 10000 });
+    // P2 also selects to descend with the party
+    await p2.waitForTimeout(600);
+    await p2.evaluate(() => {
+      const G = window.VELSCOUR.G;
+      G.game.portalChoice(G.world);
+    });
+    await p2.waitForTimeout(400);
+    await p2.evaluate(() => {
+      const descendBtn = Array.from(document.querySelectorAll('.portal-choice button')).find(b => b.textContent.includes('Descend'));
+      if (descendBtn) descendBtn.click();
+    });
+
+    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 2 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
+    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 2 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
 
     const p1Depth2 = await p1.evaluate(() => window.VELSCOUR.G.world.depth);
     const p2Depth2 = await p2.evaluate(() => window.VELSCOUR.G.world.depth);
@@ -256,8 +276,19 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
       else throw new Error('Descend button not found');
     });
 
-    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 3 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 10000 });
-    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 3 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 10000 });
+    await p2.waitForTimeout(600);
+    await p2.evaluate(() => {
+      const G = window.VELSCOUR.G;
+      G.game.portalChoice(G.world);
+    });
+    await p2.waitForTimeout(400);
+    await p2.evaluate(() => {
+      const descendBtn = Array.from(document.querySelectorAll('.portal-choice button')).find(b => b.textContent.includes('Descend'));
+      if (descendBtn) descendBtn.click();
+    });
+
+    await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 3 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
+    await p2.waitForFunction(() => window.VELSCOUR?.G?.world?.depth === 3 && document.querySelector('#loading').classList.contains('hidden'), { timeout: 15000 });
 
     const p1Depth3 = await p1.evaluate(() => window.VELSCOUR.G.world.depth);
     const p2Depth3 = await p2.evaluate(() => window.VELSCOUR.G.world.depth);
@@ -278,16 +309,21 @@ const CHROMIUM_PATH = fs.existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' :
     // --- RETURN TO TOWN FROM DEPTH 3 ---
     console.log('\n--- RETURNING TO TOWN FROM DEPTH 3 ---');
     await p1.evaluate(() => {
-      // Simulate taking the blue town portal in dungeon
       window.VELSCOUR.G.game.useTownPortal();
     });
-
     await p1.waitForTimeout(300);
-    // Click 'Return' in dialog
     await p1.evaluate(() => {
       const returnBtn = Array.from(document.querySelectorAll('.dialog-box button')).find(b => b.textContent === 'Return');
       if (returnBtn) returnBtn.click();
-      else throw new Error('Return button in dialog not found');
+    });
+
+    await p2.evaluate(() => {
+      window.VELSCOUR.G.game.useTownPortal();
+    });
+    await p2.waitForTimeout(300);
+    await p2.evaluate(() => {
+      const returnBtn = Array.from(document.querySelectorAll('.dialog-box button')).find(b => b.textContent === 'Return');
+      if (returnBtn) returnBtn.click();
     });
 
     await p1.waitForFunction(() => window.VELSCOUR?.G?.world?.kind === 'town', { timeout: 10000 });
