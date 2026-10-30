@@ -7,6 +7,7 @@ import { heroCanvas, excitable } from './heroanim.js';
 import { savedGearPreview } from '../core/gearart.js';
 import { CLASSES } from '../data/classes.js';
 import { BIOMES } from '../data/biomes.js';
+import { shownEquip } from '../data/items.js';
 import { net } from '../net/network.js';
 
 let lobbyEl = null;
@@ -504,14 +505,26 @@ export function openLobby(char, onBack) {
       const anim = heroCanvas(p.classId, 'd2-player-canvas');
       canvasWrap.appendChild(anim.canvas);
 
-      // Load gear look if equipped
-      const rawBody = (isMe && char.equip?.body) || p.gear?.body;
-      const rawHead = (isMe && char.equip?.head) || p.gear?.head;
-      const body = typeof rawBody === 'string' ? { slot: 'body', type: 'gear', base: rawBody, rarity: 0, ilvl: 1 } : rawBody;
-      const head = typeof rawHead === 'string' ? { slot: 'head', type: 'gear', base: rawHead, rarity: 0, ilvl: 1 } : rawHead;
+      // Load vanity looks over actual gear for hero preview (including weapon and offhand)
+      const myLook = isMe ? shownEquip(char) : null;
+      const rawBody = (isMe ? myLook?.body : p.gear?.body);
+      const rawHead = (isMe ? myLook?.head : p.gear?.head);
+      const rawWeapon = (isMe ? myLook?.weapon : p.gear?.weapon);
+      const rawOffhand = (isMe ? myLook?.offhand : p.gear?.offhand);
 
-      if (body || head) {
-        savedGearPreview(p.classId, body, head).then(art => {
+      const toItem = (it, slot) => {
+        if (!it) return null;
+        if (typeof it === 'string') return { slot, type: 'gear', base: it, rarity: 0, ilvl: 1 };
+        return it;
+      };
+
+      const body = toItem(rawBody, 'body');
+      const head = toItem(rawHead, 'head');
+      const weapon = toItem(rawWeapon, 'weapon');
+      const offhand = toItem(rawOffhand, 'offhand');
+
+      if (body || head || weapon || offhand) {
+        savedGearPreview(p.classId, body, head, weapon, offhand).then(art => {
           if (art && anim.canvas.isConnected) anim.setArt(art);
         }).catch(() => {});
       }

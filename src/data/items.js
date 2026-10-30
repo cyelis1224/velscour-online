@@ -52,6 +52,9 @@ export const tierOf = (ilvl) => clamp(Math.floor((ilvl - 1) / 10), 0, 9);
 
 export const RING_SLOTS = ['ring1', 'ring2', 'ring3', 'ring4'];
 export const SLOTS = ['weapon', 'offhand', 'head', 'body', 'hands', 'legs', 'feet', ...RING_SLOTS];
+export const VANITY_SLOTS = ['head', 'body']; // looks only (G.char.vanity): worn over the real gear's look, no stats
+/** The gear the hero shows: his real gear with the vanity looks over head and body (c.hideHelm: no helmet at all). */
+export const shownEquip = (c) => { const v = c.vanity, e = c.equip; return v && (v.body || v.head) || c.hideHelm ? { ...e, body: v?.body || e.body, head: c.hideHelm ? null : v?.head || e.head } : e; };
 export const SLOT_NAMES = { weapon: 'Weapon', offhand: 'Off-hand', head: 'Head', body: 'Body', hands: 'Hands', legs: 'Legs', feet: 'Feet', ring: 'Ring', ring1: 'Ring', ring2: 'Ring', ring3: 'Ring', ring4: 'Ring' };
 /** Can item it go in equipment slot `slot`? (A ring fits any of the four ring slots.) */
 export const fitsSlot = (it, slot, classId = null) => !!it && it.type === 'gear' && (it.slot === slot || (it.slot === 'ring' && RING_SLOTS.includes(slot)) || (classId === 'barbarian' && slot === 'offhand' && it.slot === 'weapon'));

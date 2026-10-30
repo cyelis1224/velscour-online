@@ -14,6 +14,19 @@ Contents
 
 ---
 
+## October 29, 2026 — vanity looks: wear any helmet/armor for looks, keep your stats (branch `feat/vanity-slots`)
+
+Player request: look the way you want without giving up stats.
+- **Appearance row** under the paper doll (`src/ui/inventory.js` `vanityRow`): two dashed slots, *Look: Head* and
+  *Look: Body*, plus a *Hide helmet* toggle. Drag a head/body piece onto its slot, or select it and press *Wear as look*;
+  right-click / double-click / drag to the bag takes it off. No level gate (it is only a look); unidentified and sealed
+  pieces are refused. Looks give no stats: they live in `G.char.vanity = { head, body }`, outside `c.equip`, so every
+  stat loop over `SLOTS` ignores them, and vendors, the chest, Sell all and auto-play never see them.
+- **What is drawn**: `shownEquip(c)` (`src/data/items.js`) is the real equip with the looks over head/body and no helmet
+  when `c.hideHelm`. It feeds the hero sprite (`Player.artFrame`), the armor's aura (`gearFx`), the held-gear fists and
+  sparkles (`src/gfx/heldart.js`), the inventory portrait and the hero-select preview (`src/ui/screens.js`).
+- Save: `migrate()` adds `vanity` / `hideHelm` to old heroes. Test: `node tools/tests/vanity.js [mobile]`.
+
 ## October 30, 2026 — Bard Music Sheets: paste tablature, lock it, the Bard plays it from five Tabs (branch `feat/bard-music-sheets`)
 
 - **Ask** (a player on Discord, then the user): a piece of paper the player can write a song on by pasting tablature, sold

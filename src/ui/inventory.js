@@ -6,7 +6,7 @@ import { shownDmg, heroDmgLevel } from '../data/depth.js';
 import { sfx } from '../core/audio.js';
 import { UI, draggable, droppable } from './ui.js';
 import { itemCell, itemTooltip, rarityClass } from './itemui.js';
-import { SLOTS, SLOT_NAMES, itemName, itemColor, GEMS, gemName, itemValue, fitsSlot, slotFor, unsocketCost, makeGem } from '../data/items.js';
+import { SLOTS, SLOT_NAMES, VANITY_SLOTS, shownEquip, itemName, itemColor, GEMS, gemName, itemValue, fitsSlot, slotFor, unsocketCost, makeGem } from '../data/items.js';
 import { CLASSES, ATTRS } from '../data/classes.js';
 import { xpToNext } from '../game/player.js';
 import { addToBag } from '../game/player.js';
@@ -30,6 +30,7 @@ export function getItem(ref) {
   if (!ref) return null;
   if (ref.where === 'bag') return c.bag[ref.idx];
   if (ref.where === 'equip') return c.equip[ref.slot];
+  if (ref.where === 'vanity') return (c.vanity || {})[ref.slot];
   if (ref.where === 'tab') return (c.tabs || [])[ref.idx];
   return null;
 }
@@ -67,6 +68,38 @@ export function unequip(slot, toIdx) {
   }
   c.bag[i] = it;
   c.equip[slot] = null;
+  UI.selected = { where: 'bag', idx: i };
+  changed();
+  return true;
+}
+/** Wear a head or body piece from the bag as a look only: the hero shows it over his real gear, which keeps the stats. */
+export function wearLook(idx) {
+  const c = G.char, it = c.bag[idx];
+  if (!it || it.type !== 'gear' || !VANITY_SLOTS.includes(it.slot)) { sfx('error'); return false; }
+  if (it.unid) { UI.log('Identify it first (buy it from the Gambler).', '#ff8080'); return false; }
+  if (it.sealed) { UI.log('Break the seal first.', '#ffdf8a'); return false; }
+  c.vanity = c.vanity || { head: null, body: null };
+  const old = c.vanity[it.slot];
+  c.vanity[it.slot] = it;
+  c.bag[idx] = old || null;
+  sfx('pickup');
+  UI.log(`<b style="color:${itemColor(it)}">${escapeHtml(itemName(it))}</b> is now your ${it.slot === 'head' ? 'helmet' : 'armor'}'s look. Your worn gear keeps the stats.`, '#d8c8ff');
+  UI.selected = { where: 'vanity', slot: it.slot };
+  changed();
+  return true;
+}
+export function takeOffLook(slot, toIdx) {
+  const c = G.char, it = c.vanity && c.vanity[slot];
+  if (!it) return false;
+  const other = toIdx !== undefined ? c.bag[toIdx] : null;
+  if (other) { // dropped on a bag item: swap when it is a look for this slot, else the first free cell
+    if (other.type === 'gear' && other.slot === slot && !other.unid && !other.sealed) { c.bag[toIdx] = it; c.vanity[slot] = other; changed(); return true; }
+    toIdx = undefined;
+  }
+  const i = toIdx ?? c.bag.findIndex((b) => !b);
+  if (i < 0) { UI.log('Inventory full.', '#ff8080'); sfx('error'); return false; }
+  c.bag[i] = it;
+  c.vanity[slot] = null;
   UI.selected = { where: 'bag', idx: i };
   changed();
   return true;
@@ -262,6 +295,7 @@ function handleDropOnBag(idx, data) {
     return true;
   }
   if (data.where === 'equip') return unequip(data.slot, idx);
+  if (data.where === 'vanity') return takeOffLook(data.slot, idx);
   if (data.where === 'tab') return unloadTab(data.idx, idx);
   return false;
 }
@@ -327,18 +361,53 @@ function equipSlot(slot) {
   return d;
 }
 
+const LOOK_NAMES = { head: 'Look: Head', body: 'Look: Body' };
+function vanitySlot(slot) {
+  const c = G.char, it = c.vanity && c.vanity[slot];
+  const d = el('div', 'eslot vslot ' + rarityClass(it));
+  const sel = UI.selected;
+  if (sel && sel.where === 'vanity' && sel.slot === slot) d.classList.add('sel');
+  if (it) d.appendChild(itemCell(it)); else d.appendChild(el('span', 'lbl', LOOK_NAMES[slot]));
+  if (slot === 'head' && c.hideHelm) d.classList.add('hidden-look');
+  draggable(d, {
+    key: 'vanity:' + slot,
+    data: () => (c.vanity && c.vanity[slot] ? { type: 'item', where: 'vanity', slot } : null),
+    icon: () => d.querySelector('img') && d.querySelector('img').src,
+    onClick: () => { UI.selected = c.vanity && c.vanity[slot] ? { where: 'vanity', slot } : null; sfx('ui'); UI.refresh(); },
+    onDouble: () => takeOffLook(slot),
+    onRight: () => takeOffLook(slot),
+  });
+  const fits = (b) => b && b.type === 'gear' && b.slot === slot;
+  droppable(d, (data) => (data.type === 'item' && data.where === 'bag' && fits(c.bag[data.idx]) ? wearLook(data.idx) : (sfx('error'), false)), (data) => data.type === 'item' && data.where === 'bag' && fits(G.char.bag[data.idx]));
+  const what = slot === 'head' ? 'helmet' : 'armor';
+  UI.tip(d, () => (c.vanity && c.vanity[slot] ? itemTooltip(c.vanity[slot], { hint: 'A look only: no stats. Right-click to take it off' }) : `<b>${LOOK_NAMES[slot]}</b><div class="dim">Drop any ${slot === 'head' ? 'helmet' : 'body armor'} here to look like it. Your worn ${what} keeps giving the stats.</div>`));
+  return d;
+}
+/** The Appearance row under the paper doll: the two look slots and the helmet toggle. */
+function vanityRow() {
+  const c = G.char, row = el('div', 'vanity-row');
+  row.appendChild(el('div', 'vanity-title', 'Appearance<span class="dim">looks only, no stats</span>'));
+  for (const s of VANITY_SLOTS) row.appendChild(vanitySlot(s));
+  const hide = el('button', 'btn small', c.hideHelm ? 'Show helmet' : 'Hide helmet');
+  hide.title = 'Show or hide the helmet on your hero (its stats still count)';
+  hide.onclick = () => { c.hideHelm = !c.hideHelm; sfx('ui'); changed(); };
+  row.appendChild(hide);
+  return row;
+}
+
 function detailBox() {
   const box = el('div', 'item-detail');
   const sel = UI.selected;
   const it = getItem(sel);
   if (!it) { box.innerHTML = '<div class="dim">Tap or click an item to inspect it. Drag items to equip, move, socket gems or sell. Drag out of the window to drop.</div>'; return box; }
-  box.innerHTML = itemTooltip(it, { compare: sel.where === 'bag' && it.slot ? G.char.equip[slotFor(G.char.equip, it)] : null });
+  box.innerHTML = (sel.where === 'vanity' ? '<div style="color:#d8c8ff;font-size:12px">Worn as a look: its stats don\'t count.</div>' : '') + itemTooltip(it, { compare: sel.where === 'bag' && it.slot ? G.char.equip[slotFor(G.char.equip, it)] : null });
   const row = el('div', 'row');
   row.style.marginTop = '8px';
   const btn = (label, fn, cls = 'small') => { const b = el('button', 'btn ' + cls, label); b.onclick = () => { sfx('ui'); fn(); }; row.appendChild(b); };
   if (sel.where === 'bag') {
     if (it.sealed) btn('Break the Seal', () => openSeal(sel.idx), 'small red');
     else if (it.type === 'gear') btn('Equip', () => equipFromBag(sel.idx));
+    if (it.type === 'gear' && !it.sealed && VANITY_SLOTS.includes(it.slot)) btn('Wear as look', () => wearLook(sel.idx));
     if (it.type === 'gem') {
       const targets = [...SLOTS.map((s) => ({ where: 'equip', slot: s })), ...G.char.bag.map((b, i) => ({ where: 'bag', idx: i }))].filter((r) => { const x = getItem(r); return x && x.type === 'gear' && x.gems.length < x.sockets; });
       if (targets.length) btn(`Socket (${targets.length} items)`, () => pickSocketTarget(sel.idx, targets));
@@ -347,6 +416,7 @@ function detailBox() {
     if (G.ui.vendor && G.ui.vendor.active && !it.sealed) btn(`Sell (${fmtInt(Math.max(1, Math.floor(itemValue(it) / 4)))}g)`, () => G.ui.vendor.sell(sel));
     btn('Drop', () => dropFromBag(sel.idx), 'small red');
   } else if (sel.where === 'tab') sheetButtons(btn, sel, it);
+  else if (sel.where === 'vanity') btn('Take off look', () => takeOffLook(sel.slot));
   else {
     btn('Unequip', () => unequip(sel.slot));
   }
@@ -502,13 +572,15 @@ export function renderInventory(body) {
   const doll = el('div', 'paperdoll');
   const portrait = el('div', 'portrait');
   const img = new Image();
-  const held = heldPortraitArgs(heroLook(c.classId, c.equip.body, c.equip.head), c.classId, c.equip); // with his weapon and off-hand
-  img.src = (heroPortrait(c.classId, c.equip.body, c.equip.head, 130, 260, ...held) || classSprite(c.classId, 260)).toDataURL();
+  const eq = shownEquip(c); // the vanity looks over the real gear
+  const held = heldPortraitArgs(heroLook(c.classId, eq.body, eq.head), c.classId, eq); // with his weapon and off-hand
+  img.src = (heroPortrait(c.classId, eq.body, eq.head, 130, 260, ...held) || classSprite(c.classId, 260)).toDataURL();
   portrait.appendChild(img);
   portrait.style.gridColumn = 3; portrait.style.gridRow = '3 / span 2';
   doll.appendChild(portrait);
   for (const s of SLOTS) doll.appendChild(equipSlot(s));
   left.appendChild(doll);
+  left.appendChild(vanityRow());
   if (c.classId === 'bard') left.appendChild(tabRow());
   if (inventoryView === 'character') {
     wrap.classList.add('character-view');

@@ -3025,6 +3025,40 @@ body.touch .reliquary-panel .codex-cell {
   cursor: pointer;
   padding: 0;
 }
+
+.vanity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: radial-gradient(#1e1428, #0b0710);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+.vanity-title {
+  display: flex;
+  flex-direction: column;
+  font-family: Cinzel, serif;
+  font-size: 12px;
+  color: #d8c8ff;
+  margin-right: auto;
+}
+
+.vanity-title .dim {
+  font-size: 9px;
+}
+
+.vslot {
+  width: 64px;
+  height: 64px;
+  border-style: dashed;
+  border-color: #5a4a78;
+}
+
+.vslot.hidden-look {
+  opacity: .4;
+}
 /* the Bard's Tabs (loaded Music Sheets) and the sheet editor (ui/sheets.js) */
 .tab-row { margin-top: 6px; padding: 4px 6px 6px; background: rgba(20,12,6,.6); border: 1px solid var(--line); border-radius: 4px; font-size: 12px; max-width: 290px; }
 .tab-row-lbl { margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -5023,6 +5057,11 @@ body.touch .panel {
 body.touch .paperdoll {
   grid-template-columns: repeat(4, 52px);
   grid-template-rows: repeat(4, 52px);
+}
+
+body.touch .vslot {
+  width: 52px;
+  height: 52px;
 }
 
 body.touch .tab-slots {

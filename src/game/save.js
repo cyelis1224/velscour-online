@@ -131,6 +131,7 @@ export function newCharData(classId, name) {
     attrs: { ...C.base }, statPoints: 0, skillPoints: 1,
     skills: {}, granted: {}, bar: Array(BAR_SIZE).fill(null),
     equip: { weapon: null, offhand: null, head: null, body: null, hands: null, legs: null, feet: null, ring1: null, ring2: null, ring3: null, ring4: null },
+    vanity: { head: null, body: null }, hideHelm: false,
     mastery: {}, rage: 0, townSeed: (Math.random() * 1e9) | 0,
     bag: Array(60).fill(null),
     stash: Array(300).fill(null),
@@ -174,6 +175,8 @@ export function migrate(c) {
   // was kept has seen the weathers' scenes.
   if (!c.skySeen) c.skySeen = c.lastSkyVariant ? Object.fromEntries(['intro', 'mid', 'parley', 'hooks', 'victory'].map((n) => [`base:${n}`, 1])) : {};
   for (const s of ['ring1', 'ring2', 'ring3', 'ring4']) if (!(s in c.equip)) c.equip[s] = null;
+  c.vanity = Object.assign({ head: null, body: null }, c.vanity); // looks only: worn over the real gear, no stats
+  c.hideHelm = !!c.hideHelm;
   if (c.townSeed === undefined) c.townSeed = (Math.random() * 1e9) | 0;
   if (!Array.isArray(c.biomeBag)) c.biomeBag = [];
   if (!Number.isInteger(c.overworldMisses)) c.overworldMisses = 0;

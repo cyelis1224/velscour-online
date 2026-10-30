@@ -132,9 +132,11 @@ export function heldModel3DReady(item, cls) {
   return !!(set && look && file(set, HELD_START[item.rarity | 0] + look[0]));
 }
 
+let snap = null; // the last render, copied out of the GL canvas: an image the caller's outline (o.rim) can stamp
 /**
  * Draw an equipped weapon's model with its guard at (x, y) (current ctx units), the blade `len` long to its point along
- * screen angle a, turned `spin` round its length and tipped `tilt` toward the viewer. Returns the effect points in ctx
+ * screen angle a, turned `spin` round its length and tipped `tilt` toward the viewer. o.rim(img, sx, sy, sw, sh, dx, dy,
+ * dw, dh) draws an outline under it (img is redrawn every call: the callee must not keep its old rims). Returns the effect points in ctx
  * units ({ pts: { guard, tip, head, line, orbit, slots }, k: units per model unit, face: 0..1 how square-on }) or null
  * when the model can't draw yet (no WebGL, loading, no model for this piece).
  */
@@ -154,7 +156,13 @@ export function drawHeldModel3D(ctx, item, cls, x, y, a, len, o = {}) {
   gl.setViewport(0, 0, w, w); gl.setScissor(0, 0, w, w); gl.setScissorTest(true);
   gl.clear(); gl.render(scene, cam); gl.setScissorTest(false);
   scene.remove(L.pivot);
-  ctx.drawImage(canvas, 0, canvas.height - w, w, w, x - half, y - half, half * 2, half * 2);
+  if (o.rim) {
+    if (!snap || snap.width < w) { snap = document.createElement('canvas'); snap.width = snap.height = Math.min(MAXC, 1 << Math.ceil(Math.log2(w))); }
+    const sx = snap.getContext('2d');
+    sx.clearRect(0, 0, w, w); sx.drawImage(canvas, 0, canvas.height - w, w, w, 0, 0, w, w);
+    o.rim(snap, 0, 0, w, w, x - half, y - half, half * 2, half * 2);
+    ctx.drawImage(snap, 0, 0, w, w, x - half, y - half, half * 2, half * 2);
+  } else ctx.drawImage(canvas, 0, canvas.height - w, w, w, x - half, y - half, half * 2, half * 2);
   // the effect points, in ctx units
   const v = new T.Vector3(), at = (m) => { m.getWorldPosition(v); return [x + v.x, y - v.y]; }, pts = { slots: [] };
   let l0 = null, l1 = null;

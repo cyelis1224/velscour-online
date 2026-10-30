@@ -27,6 +27,7 @@ import { heldFree, drawHeldFree } from '../../gfx/heldart.js';
 import { drawHeldModel3D, heldModel3DReady } from '../../gfx/heldmodel3d.js';
 import { drawHeldFx, fxColor } from '../../gfx/heldfx.js';
 import { gearMeta } from '../../core/gearart.js';
+import { dropRims } from '../creature.js';
 
 const RUNES = 6;
 const RC = { frost: '#7ad0ff', unholy: '#70e050', blood: '#ff2a30' };
@@ -79,7 +80,9 @@ function equipped(ctx, p, x, y, a, len, runes, t, spin, tilt) {
   const el = f?.element || 'cold', col = runes.length ? RC[runes[runes.length - 1]] : hex(fxColor(el)), ga = ctx.globalAlpha;
   glow(ctx, col, x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5, len * 0.6, (0.18 + runes.length * 0.06 + (f?.rarity || 0) * 0.02) * ga);
   ctx.globalAlpha = ga;
-  const v = m3 ? drawHeldModel3D(ctx, it, p.classId, x, y, a, len, { spin, tilt }) : drawHeldFree(ctx, f, x, y, a, len, spin);
+  // the hero's own outline round it (pale gold, and its see-through ring over walls and spells)
+  const rim = p.drawRim && ((img, ...r) => { if (m3) dropRims(img); p.drawRim(ctx, img, ...r); });
+  const v = m3 ? drawHeldModel3D(ctx, it, p.classId, x, y, a, len, { spin, tilt, rim }) : drawHeldFree(ctx, f, x, y, a, len, spin, rim);
   if (!v) return false;
   const s = m3 ? v.k : v.k * 2; // screen px per held-sprite px (the whole sprite is baked at 2 px per unit)
   if (v.pts.line) runeMarks(ctx, v.pts.line, runes, v.face, s, ga);

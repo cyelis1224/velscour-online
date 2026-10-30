@@ -84,6 +84,13 @@ function ringCanvas(img, sx, sy, sw, sh, col, o) {
   return c;
 }
 
+/** Forget the rims and rings baked from img (an image redrawn in place, such as a live 3D render). */
+export function dropRims(img) {
+  const id = rimIds.get(img);
+  if (!id) return;
+  for (const k of rims.keys()) if (k.startsWith(id + ':')) rims.delete(k);
+}
+
 /** A new level starts the rim cache over (rims are cheap GPU bakes; the last level's would just sit there). */
 export function clearRims() { rims.clear(); }
 

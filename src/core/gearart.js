@@ -392,13 +392,37 @@ export function trimCanvas(c) {
 // immediately after composing its body/helm. Existing saved item looks are reused.
 const savedPreviews = new Map();
 let previewQueue = Promise.resolve();
-export function savedGearPreview(cls, body, head) {
-  const signature = cls + '|' + JSON.stringify([body && [body.look, body.ilvl, body.rarity],
-    head && [head.look, head.ilvl, head.rarity]]);
+export function savedGearPreview(cls, body, head, weapon = null, offhand = null) {
+  if (body && typeof body === 'object' && ('body' in body || 'head' in body || 'weapon' in body)) {
+    const eq = body;
+    body = eq.body;
+    head = eq.head;
+    weapon = eq.weapon;
+    offhand = eq.offhand;
+  }
+  const signature = cls + '|' + JSON.stringify([
+    body && [body.look, body.ilvl, body.rarity, body.base],
+    head && [head.look, head.ilvl, head.rarity, head.base],
+    weapon && [weapon.base, weapon.rarity, weapon.ilvl, weapon.look],
+    offhand && [offhand.base, offhand.rarity, offhand.ilvl, offhand.look]
+  ]);
   if (savedPreviews.has(signature)) return savedPreviews.get(signature);
   const work = previewQueue.then(async () => {
     const src = await loadClassGear(cls);
-    return trimCanvas(heroLook(cls, body, head, src, new Map()));
+    const base = heroLook(cls, body, head, src, new Map());
+    if (!base) return null;
+    let finalArt = base;
+    if (weapon || offhand) {
+      try {
+        const { heldHero, loadHeld } = await import('../gfx/heldart.js');
+        await loadHeld(cls, { equip: { weapon, offhand, body } });
+        const held = heldHero(base, cls, { weapon, offhand, body, _preview: true });
+        if (held && held.img) finalArt = held.img;
+      } catch (e) {
+        console.warn('Held gear preview unavailable for', cls, e);
+      }
+    }
+    return trimCanvas(finalArt);
   });
   previewQueue = work.catch(() => {});
   const result = work.catch(e => {
@@ -407,6 +431,6 @@ export function savedGearPreview(cls, body, head) {
     return null;
   });
   savedPreviews.set(signature, result);
-  if (savedPreviews.size > 18) savedPreviews.delete(savedPreviews.keys().next().value);
+  if (savedPreviews.size > 24) savedPreviews.delete(savedPreviews.keys().next().value);
   return result;
 }

@@ -12,7 +12,7 @@ import { loadGearArt } from '../core/gearart.js';
 import { loadHeld } from '../gfx/heldart.js';
 import { preloadBarFx } from '../gfx/artfx.js';
 import { SKILLS } from '../data/skills.js';
-import { setClassItems, setRingContext, SEAL_GAP } from '../data/items.js';
+import { setClassItems, setRingContext, SEAL_GAP, shownEquip } from '../data/items.js';
 import { BREACH_BIOME, BREACH_WALLS } from '../data/biomes.js';
 import { BIOMES, BETA_BIOMES, BIOME_BY_ID, TOWN_BIOME, drawBiome, biomeChoices, takeBiome, mixPartner, recordBiomeVisit } from '../data/biomes.js';
 import { CLASSES } from '../data/classes.js';
@@ -2386,8 +2386,9 @@ export const game = {
               }
             }
           }
-          const equipHead = G.char?.equip?.head;
-          const equipBody = G.char?.equip?.body;
+          const shown = shownEquip(G.char);
+          const equipHead = shown?.head;
+          const equipBody = shown?.body;
           const gearKey = (equipHead ? equipHead.base + (equipHead.look ? equipHead.look.join(',') : '') : '') + '|' +
                           (equipBody ? equipBody.base + (equipBody.look ? equipBody.look.join(',') : '') : '');
           const gearChanged = (!this._lastSentGearKey || this._lastSentGearKey !== gearKey || (this._gearHeartbeatT = (this._gearHeartbeatT || 0) + 0.05) > 3.0);

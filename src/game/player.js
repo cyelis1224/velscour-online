@@ -7,7 +7,7 @@ import { floatText, addEffect, Column, Ring, Sigil, SigilFlames, SkyBolts, spark
 import { Creature } from './creature.js';
 import { CLASSES, DMG_TUNE, DMG_TUNE_AT } from '../data/classes.js';
 import { SKILLS, CLASS_SKILLS, effLevel, skillBaseDamage, manaCost, rageCost, cooldown, useTime, weaponCoef, grantedSkillsAt, skillRange } from '../data/skills.js';
-import { SLOTS, RING_SLOTS, itemStats, itemDmg, itemArmor, GEMS } from '../data/items.js';
+import { SLOTS, RING_SLOTS, itemStats, itemDmg, itemArmor, GEMS, shownEquip } from '../data/items.js';
 import { augHits, augmentable } from '../data/rings.js';
 import { depthLevel, fortitude, logCurve } from '../data/depth.js';
 import { heroBonus } from './defiance.js';
@@ -514,7 +514,7 @@ export class Player extends Creature {
    * has no gear art, and the old class sprite stands in). A single frame, drawn with the usual bob.
    */
   artFrame() {
-    const eq = this.char.equip, base = heroLook(this.classId, eq.body, eq.head);
+    const eq = shownEquip(this.char), base = heroLook(this.classId, eq.body, eq.head); // the vanity looks over the real gear
     if (!base) return null;
     // the weapon and off-hand in his fists (src/gfx/heldart.js), unless the settings turn held gear off
     const held = G.settings.heldGear !== false ? heldHero(base, this.classId, eq) : null, img = held ? held.img : base;
@@ -525,7 +525,7 @@ export class Player extends Creature {
 
   /** The body armor's effect and its colour (null below Rare, and for most Rares). */
   gearFx() {
-    const b = this.char.equip.body, fx = b && gearFxOf(b);
+    const b = shownEquip(this.char).body, fx = b && gearFxOf(b);
     return fx ? { fx, col: fxColor(fx, finishOf(b), b.rarity) } : null;
   }
   /** Called by Creature.drawArt around the hero image: 'back' before it, 'front' after. */

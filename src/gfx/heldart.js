@@ -9,7 +9,7 @@ import { G } from '../state.js';
 import { makeCanvas, hexToRgb, randi, chance, pick, clamp } from '../core/util.js';
 import { HELD_PER, HELD_START, heldSetOf, heldElement } from '../data/held.js';
 import { PALETTES } from '../data/gear.js';
-import { GEMS, RARITY } from '../data/items.js';
+import { GEMS, RARITY, shownEquip } from '../data/items.js';
 import { paletteLuts, itemLook, finishOf, gearMeta } from '../core/gearart.js';
 import { fxColor, drawHeldFx, drawGearSparkle } from './heldfx.js';
 import { addLight } from './vfx.js';
@@ -154,15 +154,17 @@ export function heldFree(item, cls) {
 
 /**
  * Draw a whole piece (heldFree) with its guard at (x, y), `len` from the guard to the point along screen angle a. A flat
- * sprite: `spin` round its length narrows it edge-on and shows its mirror image from behind. Returns its effect points
+ * sprite: `spin` round its length narrows it edge-on and shows its mirror image from behind. rim(img, sx, sy, sw, sh,
+ * dx, dy, dw, dh), if given, draws an outline under it in the same transform. Returns its effect points
  * in ctx units { pts: { guard, tip, head, line, orbit, slots }, k: units per sprite px, face: 0..1 how square-on }.
  */
-export function drawHeldFree(ctx, f, x, y, a, len, spin = 0) {
+export function drawHeldFree(ctx, f, x, y, a, len, spin = 0, rim = null) {
   const P = f.pts, g = P.guard, k = len / Math.max(1, g[1] - (P.tip ? P.tip[1] : 0)), c = Math.cos(spin);
   const sx = (c < 0 ? -1 : 1) * Math.max(0.1, Math.abs(c)) * k, r = a + Math.PI / 2, cr = Math.cos(r), sr = Math.sin(r);
   ctx.save();
   ctx.translate(x, y); ctx.rotate(r); ctx.scale(sx, k);
   ctx.imageSmoothingEnabled = k < 1;
+  if (rim) rim(f.img, 0, 0, f.img.width, f.img.height, -g[0], -g[1], f.img.width, f.img.height);
   ctx.drawImage(f.img, -g[0], -g[1]);
   ctx.restore();
   const at = (p) => { const u = (p[0] - g[0]) * sx, v = (p[1] - g[1]) * k; return [x + cr * u - sr * v, y + sr * u + cr * v]; };
@@ -185,7 +187,7 @@ function heldPieces(cls, equip) {
     if (!it || it.type !== 'gear' || !heldSetOf(it.base, slot, cls)) continue;
     const pc = pieceOf(it, slot, cls);
     if (!pc) return null;
-    if (slot === 'weapon' && swordFlies(cls, pc)) continue; // the Death Knight's sword flies at his side or rests on his back
+    if (slot === 'weapon' && swordFlies(cls, pc) && !equip._preview) continue; // the Death Knight's sword flies at his side or rests on his back
     if (out.some((o) => o.hand === pc.hand)) continue; // both pieces want the same hand: the main hand wins
     const f = F[pc.hand], pt = (p) => p && [f[0] + p[0], f[1] + p[1], p[2]];
     const P = pc.d.pts;
@@ -273,7 +275,7 @@ export function drawHeldLayer(ctx, p, held, base, where) {
   }
   if (!fx) return;
   if (top >= 4) addLight(p.x, p.y, 1.4 + (top - 4) * 0.8, 0.3);
-  const eq = p.char?.equip;
+  const eq = p.char?.equip && shownEquip(p.char);
   if (base && eq && ((eq.body?.rarity | 0) >= 2 || (eq.head?.rarity | 0) >= 2)) {
     drawGearSparkle(ctx, sparkleSpots(base, p.classId), { body: eq.body && { rarity: eq.body.rarity, col: gearCol(eq.body) }, head: eq.head && { rarity: eq.head.rarity, col: gearCol(eq.head) } }, t, map, s, { size: 1.3 });
   }

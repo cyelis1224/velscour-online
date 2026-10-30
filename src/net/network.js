@@ -1,6 +1,7 @@
 import { G } from '../state.js';
 import { getClientVersion } from '../ui/updater.js';
 import { sanitizeBardTabs } from '../data/tabs.js';
+import { shownEquip } from '../data/items.js';
 
 class NetworkManager {
   constructor() {
@@ -165,11 +166,15 @@ function serializeGearItem(item, slot) {
         reconnectId: this.myId,
         reconnectRoom: activeRoom || null,
         clientVersion: getClientVersion(),
-        gear: {
-          head: serializeGearItem(this.charData.equip?.head, 'head'),
-          body: serializeGearItem(this.charData.equip?.body, 'body'),
-          weapon: serializeGearItem(this.charData.equip?.weapon, 'weapon'),
-        },
+        gear: (() => {
+          const eq = shownEquip(this.charData);
+          return {
+            head: serializeGearItem(eq.head, 'head'),
+            body: serializeGearItem(eq.body, 'body'),
+            weapon: serializeGearItem(eq.weapon, 'weapon'),
+            offhand: serializeGearItem(eq.offhand, 'offhand'),
+          };
+        })(),
       });
       this.emit('connected', { url, isReconnect });
     };
@@ -511,11 +516,17 @@ function serializeGearItem(item, slot) {
       { id: 'b_8', name: 'Duke Teapot', classId: 'death_knight', level: 71, title: 'Duke' },
     ];
 
+    const myEq = shownEquip(this.charData);
     const myPlayer = {
       id: this.myId,
       name: this.charData?.name || 'Hero',
       classId: this.charData?.classId || 'paladin',
       level: this.charData?.level || 1,
+      gear: {
+        head: serializeGearItem(myEq.head, 'head'),
+        body: serializeGearItem(myEq.body, 'body'),
+        weapon: serializeGearItem(myEq.weapon, 'weapon'),
+      },
       title: (this.charData?.level || 1) >= 50 ? 'Matriarch' : 'Hero',
     };
 

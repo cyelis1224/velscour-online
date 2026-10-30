@@ -49,6 +49,7 @@ node defense/tests/maps.mjs                        # Defense's 300 stage maps: e
 node defense/tests/perf.js [stages] [orient]       # Defense battle frame cost on a slowed iPhone-sized screen + CPU profile hot spots
 node tools/tests/deathgift.js [classes]            # "DEATH IS THE ONLY WAY OUT, MY KIND SIR." to Velscour: level 350, Mythic +10 gear, depth 500; the hero is barred from the Honour Board
 node tools/tests/stash.js                          # town storage chest: 300 slots, store/take, auto-play stashing
+node tools/tests/vanity.js [mobile]               # vanity looks: head/body worn for looks only (no stats), Hide helmet, save round trip
 node tools/tests/savesafe.js                       # unreadable saves never written over: set aside before the first save (localStorage or IndexedDB), downloadable, refused + warned when no room
 node tools/tests/cloud.js [nosdk]                  # cloud saves (Google sign-in + Firestore): 4 devices on a fake Firebase (push, pull, conflicts, tombstones, offline, backups + restore, lost/corrupt/damaged saves change nothing) + real SDK smoke
 node tools/tests/autoshop.js [classes] [rounds]     # auto-play wears everything it buys (none sold back), loot filter, keepers, chest sort
