@@ -869,8 +869,7 @@ body.portrait #d2-lobby .d2-chat-area {
   align-items: center;
   justify-content: safe center;
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
-  background: radial-gradient(circle at 50% 20%, rgba(35, 22, 14, 0.75) 0%, rgba(10, 6, 4, 0.95) 70%, #060403 100%),
-              url('../assets/ui/noise.png') repeat, #080504;
+  background: radial-gradient(circle at 50% 20%, rgba(35, 22, 14, 0.75) 0%, rgba(10, 6, 4, 0.95) 70%, #060403 100%), #080504;
   overflow-y: auto;
   box-sizing: border-box;
 }

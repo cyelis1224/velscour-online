@@ -177,6 +177,7 @@ async function boot() {
   if (G.touch) { document.body.classList.add('touch'); G.settings.autoLoot = true; }
   G.input = input;
   G.controls = controls;
+  G.game = game;
   const onRotate = () => {
     resize();
     if (HUD.layoutMobile) HUD.layoutMobile();

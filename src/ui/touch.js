@@ -72,6 +72,7 @@ export const TouchUI = {
     this.refresh();
   },
   layout() {
+    if (!this.btns || !this.btns.length) return;
     const W = innerWidth, H = innerHeight;
     const portrait = H > W;
     const s = Math.max(0.72, Math.min(1.15, Math.min(W, H) / 400));
