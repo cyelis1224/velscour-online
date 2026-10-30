@@ -24,6 +24,7 @@ import { freeSlot } from '../data/bar.js';
 import { bardCompose, bardUpdate, harmonyMul } from './bard.js';
 import { ASTRONOMER, astroAfterCast, astroUpdate } from './astronomer.js';
 import { sigCast, sigHit, sigUpdate } from './signature.js';
+import { bladeOnBack } from './sigs/deathknight.js';
 import { relicBonuses } from '../data/relics.js';
 import { relicProc } from './relicprocs.js';
 import { noteFind, codexMf } from './reliquary.js';
@@ -519,6 +520,7 @@ export class Player extends Creature {
     const g = this.gearFx();
     if (g) drawGearFx(ctx, this, g.fx, g.col, layer, art);
     if (layer === 'front' && this.heldArt && G.settings.heldGear !== false) drawHeldLayer(ctx, this, this.heldArt.held, this.heldArt.base, art);
+    if (layer === 'back' && this.classId === 'death_knight') bladeOnBack(ctx, this, art, this.heldArt?.base); // his flying sword at rest
   }
 
   // ------------------------------------------------------------------ death

@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Paths resolve from the repo root, so the game's modules and assets load as they do in play. -->
+<base href="../">
+<title>Death Knight Sword</title>
+<!-- One Death Knight greatsword two ways, side by side, moving as his flying sword does (src/game/sigs/deathknight.js):
+     left the whole 2D sprite (G.settings.dkBlade 'sprite', the default), right its three.js model ('model').
+     Mythic +10 by default: every socket a gem, a full enchant (its element lights the glow), lit runes.
+     ?d=0..49 (the design) &f=<finish> &el=<element> &runes=0..6 &anim=hover|turn|twirl|swing|back -->
+<style>
+  :root { --bg: #141217; --panel: #1d1a22; --line: #3a332c; --text: #e8dfcf; --dim: #a39a8c; --gold: #f0c870; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 12px/1.4 ui-monospace, Consolas, monospace; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 14px; margin: 0; color: var(--gold); }
+  label { color: var(--dim); display: flex; gap: 6px; align-items: center; }
+  select, button { background: #2b241c; color: var(--gold); border: 1px solid #5a4a30; padding: 4px 8px; font: inherit; cursor: pointer; }
+  button.on { background: #5a4a30; color: #fff4d8; }
+  main { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; }
+  .pane { background: var(--panel); border: 1px solid var(--line); }
+  .pane h2 { font-size: 13px; margin: 0; padding: 8px 10px; color: var(--gold); border-bottom: 1px solid var(--line); }
+  .pane h2 small { color: var(--dim); font-weight: normal; }
+  canvas { display: block; width: 480px; height: 600px; max-width: calc(100vw - 30px); }
+  #info { padding: 0 14px 14px; color: var(--dim); }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <h1>Death Knight Sword: 2D vs 3D</h1>
+  <label>Sword <select id="design"></select></label>
+  <label>Finish <select id="finish"></select></label>
+  <label>Enchant <select id="el"></select></label>
+  <label>Runes <select id="runes"></select></label>
+  <span id="anims"></span>
+</header>
+<main>
+  <div class="pane"><h2>2D sprite <small>(default in game)</small></h2><canvas id="c2"></canvas></div>
+  <div class="pane"><h2>3D model <small>(three.js, live)</small></h2><canvas id="c3"></canvas></div>
+</main>
+<div id="info"></div>
+<script type="module">
+import './src/game/signature.js'; // first: the signature registry, then the Death Knight's module (as the game loads them)
+import { G } from './src/state.js';
+import { HELD_PER, HELD_START } from './src/data/held.js';
+import { PALETTES } from './src/data/gear.js';
+import { GEMS } from './src/data/items.js';
+import { loadHeld, heldFree } from './src/gfx/heldart.js';
+import { heldModel3DReady } from './src/gfx/heldmodel3d.js';
+import { sword } from './src/game/sigs/deathknight.js';
+
+const Q = new URLSearchParams(location.search), $ = (id) => document.getElementById(id), TAU = Math.PI * 2;
+const ELEMENTS = ['cold', 'shadow', 'blood', 'fire', 'poison', 'light', 'holy', 'arcane', 'acid'];
+const RUNES = ['frost', 'frost', 'unholy', 'blood', 'blood', 'frost'];
+const GEMSET = ['ruby', 'sapphire', 'topaz', 'emerald', 'amethyst', 'diamond'].filter((g) => GEMS[g]);
+const ANIMS = { hover: 'Hovering', twirl: 'Taking runes', turn: 'Turntable', back: 'To his back and off', swing: 'Obliteration' };
+let anim = ANIMS[Q.get('anim')] ? Q.get('anim') : 'hover';
+
+// the controls
+const names = [];
+HELD_PER.forEach((n, R) => { for (let j = 0; j < n; j++) names.push(R); });
+const RN = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic'];
+$('design').innerHTML = names.map((R, i) => `<option value="${i}">${String(i).padStart(2, '0')} ${RN[R]}</option>`).join('');
+$('design').value = String(Math.min(49, +(Q.get('d') ?? 46)));
+$('finish').innerHTML = PALETTES.map((p, i) => `<option value="${i}">${p.name} (tier ${p.tier})</option>`).join('');
+$('finish').value = String(Q.get('f') ?? PALETTES.findIndex((p) => p.tier === 5 && p.ramps));
+$('el').innerHTML = ELEMENTS.map((e) => `<option>${e}</option>`).join('');
+$('el').value = Q.get('el') || 'cold';
+$('runes').innerHTML = [0, 1, 2, 3, 4, 5, 6].map((n) => `<option>${n}</option>`).join('');
+$('runes').value = Q.get('runes') ?? '3';
+$('anims').innerHTML = Object.entries(ANIMS).map(([k, n]) => `<button data-a="${k}">${n}</button>`).join(' ');
+const mark = () => document.querySelectorAll('[data-a]').forEach((b) => b.classList.toggle('on', b.dataset.a === anim));
+document.querySelectorAll('[data-a]').forEach((b) => (b.onclick = () => { anim = b.dataset.a; t0 = performance.now(); mark(); }));
+mark();
+
+/** The sword as the controls say: Mythic +10 style, every socket a gem, the enchant's element as its strongest affix. */
+function makeSword() {
+  const i = +$('design').value, R = names[i];
+  return {
+    type: 'gear', slot: 'weapon', base: 'sword', rarity: R, ilvl: 351, upg: 10, legendary: R >= 4 ? 'crit' : null,
+    look: [i - HELD_START[R], +$('finish').value, -1, 2], sockets: 6, gems: GEMSET.map((gem) => ({ gem, tier: 9 })),
+    affixes: [{ s: $('el').value + 'Pct', v: 60 }, { s: 'dmgPct', v: 40 }, { s: 'critChance', v: 8 }, { s: 'skillsAll', v: 2 }, { s: 'lifeSteal', v: 3 }],
+  };
+}
+const hero = { classId: 'death_knight', level: 350, char: { level: 350, equip: {} } };
+let item = null, ready = false;
+async function pick() {
+  item = makeSword(); hero.char.equip.weapon = item; ready = false;
+  await loadHeld('death_knight', hero.char);
+  for (let k = 0; k < 200 && !(heldFree(item, 'death_knight') && heldModel3DReady(item, 'death_knight')); k++) await new Promise((r) => setTimeout(r, 50));
+  ready = true;
+  const f = heldFree(item, 'death_knight');
+  $('info').textContent = f ? `${f.name}: ${RN[item.rarity]} +10, ${item.gems.length} gems, ${$('el').value} enchant. Both panes draw the same design from the same bake (tools/weapons3d_greatswords.js).` : 'loading...';
+}
+for (const id of ['design', 'finish', 'el']) $(id).onchange = pick;
+
+// the panes
+const panes = [['c2', 'sprite'], ['c3', 'model']].map(([id, mode]) => {
+  const c = $(id), dpr = Math.min(2, devicePixelRatio || 1);
+  c.width = 480 * dpr; c.height = 600 * dpr;
+  return { c, g: c.getContext('2d'), mode, dpr };
+});
+function backdrop(g) {
+  const r = g.createRadialGradient(240, 420, 20, 240, 360, 420);
+  r.addColorStop(0, '#3a3440'); r.addColorStop(0.6, '#24202a'); r.addColorStop(1, '#16141a');
+  g.fillStyle = r; g.fillRect(0, 0, 480, 600);
+  g.fillStyle = 'rgba(0,0,0,0.35)'; g.beginPath(); g.ellipse(240, 560, 90, 20, 0, 0, TAU); g.fill();
+}
+/** Where the sword is at time t (s): { x, y, a, len, spin, tilt, runes } in the pane's 480 x 600 frame. */
+function pose(t) {
+  const n = +$('runes').value, runes = RUNES.slice(0, n);
+  const hover = { x: 240, y: 110 + Math.sin(t * 2) * 6, a: Math.PI / 2 + 0.12 + Math.sin(t * 1.3) * 0.06, len: 330, spin: Math.sin(t * 0.7) * 0.75, tilt: 0.18, runes };
+  if (anim === 'turn') return { ...hover, a: Math.PI / 2, spin: t * 1.2, tilt: 0.15 };
+  if (anim === 'twirl') { // a rune every 1.4 s, a full twirl as it lands; six and it empties
+    const k = Math.floor(t / 1.4) % 7, u = Math.min(1, (t % 1.4) / 0.5);
+    return { ...hover, runes: RUNES.slice(0, k), spin: hover.spin + TAU * (1 - (1 - u) ** 3) };
+  }
+  if (anim === 'back') { // out to the side, then over to rest across his back, and off it again
+    const c = t % 6, e0 = c < 2 ? 0 : c < 2.6 ? (c - 2) / 0.6 : c < 4.5 ? 1 : c < 5.1 ? 1 - (c - 4.5) / 0.6 : 0, e = e0 * e0 * (3 - 2 * e0);
+    const B = { x: 150, y: 150, a: 0.92, len: 300, spin: 0.35, tilt: -0.12 }, d = ((B.a - hover.a + Math.PI * 3) % TAU) - Math.PI;
+    return { x: hover.x + (B.x - hover.x) * e, y: hover.y + (B.y - hover.y) * e - Math.sin(e * Math.PI) * 60, a: hover.a + d * e, len: hover.len + (B.len - hover.len) * e,
+      spin: hover.spin + (B.spin - hover.spin) * e + e * TAU, tilt: hover.tilt + (B.tilt - hover.tilt) * e, runes };
+  }
+  if (anim === 'swing') { // raised overhead, brought down through the target, rolling on (deathknight.js Obliteration)
+    const c = t % 2.2, k = Math.min(1, c / 0.6), sa = 0.35, hit = c >= 0.6, a = !hit ? -Math.PI / 2 - 0.6 + (sa + Math.PI / 2 + 0.6) * k * k : sa;
+    return { x: 120 + Math.cos(a) * 20, y: 330 + Math.sin(a) * 20, a, len: 300, spin: !hit ? (1 - k) * 1.3 : -(c - 0.6) * 0.9, tilt: !hit ? -0.55 * (1 - k) : 0.12, runes: RUNES };
+  }
+  return hover;
+}
+let t0 = performance.now();
+function frame(now) {
+  const t = (now - t0) / 1000;
+  G.time = t;
+  for (const P of panes) {
+    const g = P.g;
+    g.setTransform(P.dpr, 0, 0, P.dpr, 0, 0);
+    backdrop(g);
+    if (ready) {
+      G.settings.dkBlade = P.mode;
+      const q = pose(t);
+      sword(g, hero, q.x, q.y, q.a, q.len, q.runes, t, 1, q.spin, q.tilt);
+      // the game's own size beside it
+      g.fillStyle = '#a39a8c'; g.font = '11px monospace'; g.fillText('in-game size', 392, 432);
+      sword(g, hero, 420, 450, Math.PI / 2 + 0.12 + Math.sin(t * 1.3) * 0.06, 42, q.runes, t, 1, Math.sin(t * 0.7) * 0.75, 0.18);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+pick().then(() => requestAnimationFrame(frame));
+window.DKBLADE = { pick, get ready() { return ready; }, setAnim: (a) => { anim = a; t0 = performance.now(); mark(); } };
+</script>
+</body>
+</html>

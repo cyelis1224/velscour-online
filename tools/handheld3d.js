@@ -30,7 +30,7 @@ export const SS = 4; // render px per art px before the box filter
 const images = {};
 async function loadTextures() {
   const loader = new THREE.TextureLoader();
-  await Promise.all(Object.entries(FILES).map(async ([id, f]) => { images[id] = await loader.loadAsync(TEX + f + '.png'); }));
+  await Promise.all(Object.entries(FILES).map(async ([id, f]) => { images[id] = await loader.loadAsync(TEX + f + '.png'); images[id].userData.src = TEX + f + '.png'; })); // src: modelJSON links the file
 }
 /** A material on texture `id`: one tile per `tile` units, or `rep` repeats for uv 0..1 (cylinders, spheres). */
 export function mat(id, { tile = 30, rep = null, metal = 0.6, rough = 0.5, color = 0xffffff, emissive = 0, ei = 1, env = 0.8, flat = false } = {}) {
@@ -578,6 +578,39 @@ export function bakeIcon(g, A, { size = 48, diagonal = false, turn = [0.25, 0.5]
   renderer.setSize(W * SS, H * SS, false);
   scene.remove(outer); dispose(outer);
   return { art, mask };
+}
+
+/**
+ * A haft piece whole and upright (no fist, the head up), turned a little to show its face, k px per unit: the full
+ * piece for the game to draw on its own (the Death Knight's flying sword). Returns { art, mask, marks } with the
+ * markers in its px. Leaves g alive (the caller disposes it).
+ */
+export function bakeFree(g, A, { k = 2, turn = [0.12, 0.42] } = {}) {
+  const { renderer, scene, card, fist } = rig();
+  light(A); card.visible = false; fist.visible = false;
+  const inner = new THREE.Group(); inner.rotation.set(turn[0], turn[1], 0); inner.add(g);
+  scene.add(inner); inner.updateMatrixWorld(true);
+  const b = new THREE.Box3().setFromObject(inner), x0 = b.min.x - 1, y1 = b.max.y + 1;
+  const w = Math.ceil((b.max.x + 1 - x0) * k), h = Math.ceil((y1 - b.min.y + 1) * k);
+  const cam = new THREE.OrthographicCamera(x0, x0 + w / k, y1, y1 - h / k, -2000, 2000);
+  cam.position.set(0, 0, 1000);
+  const marks = [], v = new THREE.Vector3();
+  inner.traverse((o) => { if (o.userData?.kind) { o.getWorldPosition(v); marks.push({ kind: o.userData.kind, x: (v.x - x0) * k, y: (y1 - v.y) * k, r: (o.userData.r || 0) * k }); } });
+  renderer.setSize(w * SS, h * SS, false);
+  renderer.render(scene, cam);
+  const art = toArt(renderer.domElement, {}, w, h);
+  const mask = regionPass(inner, () => { renderer.render(scene, cam); return regionArt(renderer.domElement, art, w, h); });
+  renderer.setSize(W * SS, H * SS, false);
+  scene.remove(inner); inner.remove(g);
+  return { art, mask, marks };
+}
+/** A built piece as a three.js JSON object (THREE.ObjectLoader), its textures linked to their files, not inlined. */
+export function modelJSON(g) {
+  g.updateMatrixWorld(true); // parts placed by position only: their matrices are what the JSON keeps
+  const j = g.toJSON(), src = {};
+  for (const t of j.textures || []) if (t.userData?.src) src[t.image] = t.userData.src;
+  for (const im of j.images || []) if (src[im.uuid]) im.url = src[im.uuid];
+  return j;
 }
 
 let ready = null;

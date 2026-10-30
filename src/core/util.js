@@ -73,6 +73,12 @@ export function fmt(n) {
   return String(n);
 }
 
+/** A damage figure on the shown scale (shownDmg in data/depth.js): small ones keep a decimal or two. */
+export function fmtDmg(n) {
+  const a = Math.abs(n);
+  return a >= 10 ? fmt(n) : a >= 1 ? n.toFixed(1).replace(/\.0$/, '') : n.toFixed(2);
+}
+
 // en-US digit grouping by hand: toLocaleString goes through ICU, and the HUD and tooltips format numbers every frame
 export function fmtInt(n) {
   const r = Math.round(n);

@@ -1,6 +1,7 @@
 // In-game HUD built on top of the provided skill-bar art.
 import { G } from '../state.js';
-import { el, fmt, fmtInt, escapeHtml, clamp, drawFiltered } from '../core/util.js';
+import { el, fmt, fmtInt, fmtDmg, escapeHtml, clamp, drawFiltered } from '../core/util.js';
+import { shownDmg, heroDmgLevel } from '../data/depth.js';
 import { sfx } from '../core/audio.js';
 import { A, potionIcon } from '../core/assets.js';
 import { UI, $, droppable } from './ui.js';
@@ -619,9 +620,10 @@ export const HUD = {
     if (this.sheetT <= 0) { this.sheetT = 0.5; this.sheet = heroDamage(p); }
     const set = (key, v, fn) => { if (this.last[key] !== v) { this.last[key] = v; fn(v); } };
     set('hsl', c.level, (v) => { $('#hs-lvl').textContent = v; });
-    set('hsa', fmt(this.sheet.atk), (v) => { $('#hs-atk').textContent = v; });
-    set('hsd', fmt(this.sheet.dps), (v) => { $('#hs-dps').textContent = v; });
-    set('hsv', fmt(Meter.avg()), (v) => { $('#hs-avg').textContent = v; });
+    const dl = heroDmgLevel(c);
+    set('hsa', fmtDmg(shownDmg(this.sheet.atk, dl)), (v) => { $('#hs-atk').textContent = v; });
+    set('hsd', fmtDmg(shownDmg(this.sheet.dps, dl)), (v) => { $('#hs-dps').textContent = v; });
+    set('hsv', fmtDmg(Meter.avg()), (v) => { $('#hs-avg').textContent = v; });
     set('hsk', fmtInt(c.kills || 0), (v) => { $('#hs-kills').textContent = v; });
     set('hsx', fmtInt(c.deaths || 0), (v) => { $('#hs-deaths').textContent = v; });
     // a bar per second for the last 30 s, with the average as a gold line

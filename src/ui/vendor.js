@@ -14,6 +14,8 @@ import { CLASSES } from '../data/classes.js';
 import { potionIcon } from '../core/assets.js';
 import { VENDORS } from '../world/town.js';
 import { depthLevel } from '../data/depth.js';
+import { sheetItem } from '../data/items.js';
+import { SHEET_PRICE } from '../data/tabs.js';
 
 const VBY = Object.fromEntries(VENDORS.map((v) => [v.id, v]));
 
@@ -152,7 +154,7 @@ export const Vendor = {
       if (UI.selected && UI.selected.where === 'bag' && UI.selected.idx === ref.idx && !c.bag[ref.idx]) UI.selected = null;
       changed();
     };
-    if (it.type === 'gear' && it.rarity >= 3) UI.confirm('Sell item?', `Sell <span style="color:${itemColor(it)}">${escapeHtml(itemName(it))}</span> for ${fmtInt(price)} gold?`, sellIt, 'Sell');
+    if ((it.type === 'gear' && it.rarity >= 3) || (it.type === 'sheet' && it.inked)) UI.confirm('Sell item?', `Sell <span style="color:${itemColor(it)}">${escapeHtml(itemName(it))}</span> for ${fmtInt(price)} gold?`, sellIt, 'Sell');
     else sellIt();
     return true;
   },
@@ -299,6 +301,29 @@ export const Vendor = {
       grid.appendChild(b);
     }
     body.appendChild(grid);
+    if (c.classId === 'bard') this.sheetBox(body);
+  },
+
+  /** Fortunato's paper: blank Music Sheets for a Bard to write songs on (data/tabs.js, ui/sheets.js). */
+  sheetBox(body) {
+    const c = G.char, row = el('div', 'service-box row');
+    const ic = el('div', 'bslot r0');
+    Object.assign(ic.style, { width: '40px', height: '40px', flex: 'none' });
+    ic.appendChild(itemCell(sheetItem()));
+    row.appendChild(ic);
+    row.appendChild(el('div', '', `<b>Blank Music Sheet</b> <span class="dim">· every bard needs paper!</span><div class="dim" style="font-size:12px">Paste tablature onto it, lock it, and load it into one of your five Tabs: your skills play the song note by note.</div>`));
+    for (const n of [1, 5]) {
+      const b = el('button', 'btn small', `Buy ${n} (${fmtInt(SHEET_PRICE * n)}g)`);
+      b.disabled = c.gold < SHEET_PRICE * n || c.bag.filter((x) => !x).length < n;
+      b.onclick = () => {
+        for (let i = 0; i < n; i++) addToBag(c, sheetItem());
+        c.gold -= SHEET_PRICE * n; sfx('gold');
+        UI.log(`Bought ${n} blank music sheet${n > 1 ? 's' : ''}. Right-click one in your bag to write on it.`);
+        changed();
+      };
+      row.appendChild(b);
+    }
+    body.appendChild(row);
   },
 };
 

@@ -944,7 +944,7 @@ class Raid {
       case 'charge3': case 'charge': {
         if (k === 'charge3') this.follow.unshift('charge', 'charge');
         const len = Math.min(12, d + 2);
-        tele({ kind: 'line', x: m.x, y: m.y, ang, len, w: 1.6, dur: 0.6 });
+        tele({ kind: 'line', x: m.x, y: m.y, ang, len, w: 1.6, reach: m.r + 0.4, dur: 0.6 }); // reach: the body's hit, for auto-play
         m.startAction('charge', 0.6, { ang, len });
         this.say(k === 'charge3' ? 'charge3' : null);
         return true;

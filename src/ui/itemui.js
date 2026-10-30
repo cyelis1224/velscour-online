@@ -1,14 +1,22 @@
 // Item cells and tooltip HTML.
 import { G } from '../state.js';
-import { el, escapeHtml, fmtInt } from '../core/util.js';
+import { el, escapeHtml, fmtInt, fmtDmg } from '../core/util.js';
+import { shownDmg, heroDmgLevel } from '../data/depth.js';
 import { itemName, itemBaseLine, itemColor, itemStats, itemDmg, itemArmor, statLabel, RARITY, GEMS, gemStats, gemName, LEGENDARY, legendaryDesc, powerLevel, SLOT_NAMES, POTION_INFO, MAX_GEM_TIER, augTarget } from '../data/items.js';
 import { AUGMENTS } from '../data/rings.js';
 import { elem } from '../gfx/vfx.js';
 import { CLASSES } from '../data/classes.js';
 import { itemIconURL } from './icons.js';
 import { finishOf, gearFxOf } from '../core/gearart.js';
+import { readSheet, sheetTempo } from '../data/tabs.js';
+import { keyName } from '../data/melodies.js';
 import { RELIC_COLORS, RELIC_NAMES, SIGILS, SIGIL_MAX, sigilStats, sigilCap } from '../data/items.js';
 import { HEIRLOOM_BY_ID, COVENANT_BY_ID, PIECE_BY_ID, POWERS, GLYPHWORDS, glyphOf, wornSets, powerText, lineValue, TUNE } from '../data/relics.js';
+
+// power figures (weapon damage, flat damage, thorns) on the shown scale of the hero's depth (data/depth.js)
+const shown = (v) => fmtDmg(shownDmg(v, heroDmgLevel(G.char)));
+const POWER = { flatDmg: 1, thorns: 1 };
+const label = (s, v, trees) => statLabel(s, POWER[s] ? shown(v) : v, trees);
 
 export function itemCell(item) {
   const d = el('div', 'itemicon');
@@ -50,17 +58,23 @@ export function itemTooltip(item, opts = {}) {
   if (item.type === 'gem' && GEMS[item.gem].sigil) {
     const r = item.tier, S = SIGILS[r];
     h += `<div class="tt-base">Sigil Stone · Rank ${r + 1} of ${SIGIL_MAX + 1} · drops from Depth ${r * 24 || 1}${item.count > 1 ? ` · Stack of ${item.count}` : ''}</div><div class="tt-sep"></div>`;
-    for (const [where, slot] of [['Weapon', 'weapon'], ['Armor, helm, shield', 'body'], ['Ring', 'ring']]) for (const [s, v] of sigilStats(r, slot)) h += `<div class="tt-gem">${where}: ${escapeHtml(statLabel(s, v, trees))}</div>`;
+    for (const [where, slot] of [['Weapon', 'weapon'], ['Armor, helm, shield', 'body'], ['Ring', 'ring']]) for (const [s, v] of sigilStats(r, slot)) h += `<div class="tt-gem">${where}: ${escapeHtml(label(s, v, trees))}</div>`;
     const uses = GLYPHWORDS.filter((w) => w.sig.includes(r)).map((w) => w.name);
     h += `<div class="tt-sep"></div><div class="dim">Socket it like a gem. Set Sigils in the right order in a plain (white) item with exactly that many sockets to write a Glyphword${uses.length ? ` (${uses.slice(0, 4).map(escapeHtml).join(', ')}${uses.length > 4 ? '…' : ''})` : ''}.${r < SIGIL_MAX ? ` Fuse 3 at the Gem Forge for one ${SIGILS[r + 1].name}.` : ''}</div>`;
     void S;
   } else if (item.type === 'gem') {
     const g = GEMS[item.gem];
     h += `<div class="tt-base">${g.special ? 'Rare Pattern Gem' : 'Gem'} · Grade ${item.tier + 1}/${MAX_GEM_TIER + 1}${item.count > 1 ? ` · Stack of ${item.count}` : ''}</div>`;
-    for (const [s, v] of gemStats(item.gem, item.tier)) h += `<div class="tt-gem">${escapeHtml(statLabel(s, v, trees))}</div>`;
+    for (const [s, v] of gemStats(item.gem, item.tier)) h += `<div class="tt-gem">${escapeHtml(label(s, v, trees))}</div>`;
     h += `<div class="tt-sep"></div><div class="dim">Drag onto gear with a free socket to insert.${item.tier < MAX_GEM_TIER ? ' Fuse 3 (or refine 1) at the Gem Forge (Gem Merchant) for the next grade.' : ''}</div>`;
   } else if (item.type === 'potion') {
     h += `<div class="dim">${POTION_INFO[item.kind]}</div>`;
+  } else if (item.type === 'sheet') {
+    const r = item.text.trim() ? readSheet(item.text) : null;
+    h += `<div class="tt-base">Music Sheet · ${item.inked ? 'Locked' : r ? 'Draft' : 'Blank'}</div>`;
+    if (r && r.ev) h += `<div>${fmtInt(r.ev.length)} notes · ${keyName(r.key)} · ${sheetTempo(item, r)} BPM</div>`;
+    else if (r) h += `<div style="color:#ff8080">${escapeHtml(r.err)}</div>`;
+    h += `<div class="tt-sep"></div><div class="dim">${item.inked ? "A Bard loads it into one of his five Tabs: every note his skills write takes the song's next note, whichever skill wrote it." : "Paste tablature or note names onto it, then lock it to keep the song. Only locked sheets go in a Bard's Tabs."}</div>`;
   } else if (item.sealed) {
     h += `<div class="tt-base">Epic or better · Item Level ${item.ilvl}</div><div style="color:${col}">What lies inside is anyone's guess until the seal is broken.</div><div class="tt-sep"></div><div class="dim">${G.touch ? 'Tap' : 'Click'} <b>Break the Seal</b>, or the SEALED button on the HUD. It can't be sold or worn sealed.</div>`;
   } else {
@@ -72,13 +86,13 @@ export function itemTooltip(item, opts = {}) {
       h += `<div class="tt-base">${escapeHtml(itemBaseLine(item))} · ${kind ? `<b style="color:${RELIC_COLORS[kind]}">${RELIC_NAMES[kind]}</b>` : RARITY[item.rarity].name} ${SLOT_NAMES[item.slot]} · iLvl ${item.ilvl} · <span title="Item level + the rarity's worth in levels: what the item's numbers are rolled at">Power ${powerLevel(item.ilvl, item.rarity)}</span></div>`;
       const fin = finishOf(item), gfx = gearFxOf(item);
       if (fin || gfx) h += `<div class="dim" style="font-style:italic">${fin ? escapeHtml(fin.name) + ' finish' : ''}${fin && gfx ? ' · ' : ''}${gfx ? 'Aura: ' + escapeHtml(gfx.name) : ''}</div>`;
-      if (item.dmg) { const [a, b] = itemDmg(item); h += `<div>Damage: <b>${a}–${b}</b>${cmp(opts.compare, item, 'dmg')}</div>`; }
+      if (item.dmg) { const [a, b] = itemDmg(item); h += `<div>Damage: <b>${shown(a)}–${shown(b)}</b>${cmp(opts.compare, item, 'dmg')}</div>`; }
       if (item.armor) h += `<div>Armor: <b>${itemArmor(item)}</b>${cmp(opts.compare, item, 'armor')}</div>`;
       if (item.upg) h += `<div style="color:#ffd34a">Upgraded +${item.upg}</div>`;
       const req = item.req || 1;
       h += `<div style="color:${p && p.char.level < req ? '#ff5050' : '#a8977c'}">Requires Level ${req}</div>`;
       h += '<div class="tt-sep"></div>';
-      for (const a of item.affixes) h += `<div class="tt-line" style="color:${a.implicit ? '#d8d0c0' : a.perk ? '#d8c078' : '#8fb4ff'}">${escapeHtml(statLabel(a.s, a.v, trees))}</div>`;
+      for (const a of item.affixes) h += `<div class="tt-line" style="color:${a.implicit ? '#d8d0c0' : a.perk ? '#d8c078' : '#8fb4ff'}">${escapeHtml(label(a.s, a.v, trees))}</div>`;
       if (item.aug) for (const a of item.aug) {
         const A = AUGMENTS[a.id], col = elem(A.el).glow, has = !a.sk || (p && p.char.skills[a.sk]);
         h += `<div class="tt-aug" style="border-left:3px solid ${col};padding-left:6px;margin:4px 0"><b style="color:${col}">${A.name}</b> <span class="dim">· ${escapeHtml(augTarget(a))}${has ? '' : ' (not learned)'}</span><div style="color:#e8d8b8;font-size:12px">${escapeHtml(A.desc(a.pow))}</div></div>`;
@@ -92,7 +106,7 @@ export function itemTooltip(item, opts = {}) {
         h += `<div class="tt-sep"></div><div class="dim">Sockets: ${item.sockets}/${item.maxSockets}</div>`;
         for (let i = 0; i < item.sockets; i++) {
           const g = item.gems[i];
-          if (g) h += `<div class="tt-gem">◆ ${escapeHtml(gemName(g.gem, g.tier))}: ${gemStats(g.gem, g.tier, item.slot).map(([s, v]) => escapeHtml(statLabel(s, v, trees))).join(', ')}</div>`;
+          if (g) h += `<div class="tt-gem">◆ ${escapeHtml(gemName(g.gem, g.tier))}: ${gemStats(g.gem, g.tier, item.slot).map(([s, v]) => escapeHtml(label(s, v, trees))).join(', ')}</div>`;
           else h += '<div class="dim">◇ Empty socket</div>';
         }
       }
@@ -107,8 +121,8 @@ function cmp(other, item, kind) {
   if (!other || other === item) return '';
   if (kind === 'dmg' && other.dmg) {
     const a = itemDmg(item), b = itemDmg(other);
-    const d = Math.round((a[0] + a[1]) / 2 - (b[0] + b[1]) / 2);
-    return d ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${d})</span>` : '';
+    const d = (a[0] + a[1]) / 2 - (b[0] + b[1]) / 2;
+    return Math.abs(shownDmg(d, heroDmgLevel(G.char))) >= 0.005 ? ` <span class="${d > 0 ? 'cmp-up' : 'cmp-down'}">(${d > 0 ? '+' : ''}${shown(d)})</span>` : '';
   }
   if (kind === 'armor' && other.armor !== undefined) {
     const d = itemArmor(item) - itemArmor(other);
@@ -140,7 +154,7 @@ function relicLines(item, trees) {
     for (const p of C.pieces) h += worn.has(p.id) ? `<div style="color:${col}">✔ ${escapeHtml(p.name)}</div>` : `<div class="dim">✗ ${escapeHtml(p.name)}</div>`;
     h += '<div class="tt-sep"></div>';
     const lvl = w.n ? w.ilvl : item.ilvl;
-    C.bonus.forEach(([s, k], i) => { const on = w.n >= i + 2; h += `<div style="color:${on ? col : '#7a7060'}">(${i + 2}) ${escapeHtml(statLabel(s, lineValue(s, lvl, k * TUNE.set), trees))}</div>`; });
+    C.bonus.forEach(([s, k], i) => { const on = w.n >= i + 2; h += `<div style="color:${on ? col : '#7a7060'}">(${i + 2}) ${escapeHtml(label(s, lineValue(s, lvl, k * TUNE.set), trees))}</div>`; });
     const P = POWERS[C.power];
     h += `<div style="color:${w.n >= 5 ? col : '#7a7060'}">(5) <b>${P.name}:</b> ${escapeHtml(powerText(P, powerLevel(lvl, 3)))}</div>`;
     h += '<div class="dim" style="font-size:12px">Set bonuses follow the lowest item level among the pieces you wear.</div>';
@@ -149,8 +163,8 @@ function relicLines(item, trees) {
     if (!gw) return '';
     const col = RELIC_COLORS.glyph;
     h += `<div class="tt-sep"></div><div style="color:${col};font-family:var(--font-head)">Glyphword: ${escapeHtml(gw.name)}</div>`;
-    for (const s of gw.lines) h += `<div class="tt-line" style="color:${col}">${escapeHtml(statLabel(s, lineValue(s, item.ilvl, gw.k * TUNE.glyph), trees))}</div>`;
-    for (const [s, v] of gw.extra || []) h += `<div class="tt-line" style="color:${col}">${escapeHtml(statLabel(s, v, trees))}</div>`;
+    for (const s of gw.lines) h += `<div class="tt-line" style="color:${col}">${escapeHtml(label(s, lineValue(s, item.ilvl, gw.k * TUNE.glyph), trees))}</div>`;
+    for (const [s, v] of gw.extra || []) h += `<div class="tt-line" style="color:${col}">${escapeHtml(label(s, v, trees))}</div>`;
     if (gw.power) { const P = POWERS[gw.power]; h += `<div class="tt-leg" style="color:${col}"><b>${P.name}:</b> ${escapeHtml(powerText(P, pl))}</div>`; }
   }
   return h;

@@ -6,6 +6,7 @@
 //  - arrangement: the two-handed performance: the written bar in the right hand over the style's left hand, then the
 //    finishing bar (runs, a second voice, a trill, the tonic arrival) from a compatible melody.
 //  - pickFinish: a finishing bar that has never been heard after this spell bar.
+//  - songArrangement: a bar written from a Music Sheet (data/tabs.js): its notes as written, landing on the song's next.
 import { NOTES, MEASURE, REGISTERS, artFor, NOTE_OF_TICKS, REST_OF_TICKS } from '../data/notation.js';
 import { melodies, finishes, TPB, degNote, altOf, chordAt, chordPcs, inChord } from '../data/melodies.js';
 
@@ -228,4 +229,29 @@ export function pickFinish(a, heard, recent = [], rand = Math.random) {
   const all = finishes(a), fresh = all.filter((b) => !heard.has(`${a}:${b}`) && !recent.includes(b));
   const pool = fresh.length ? fresh : all.filter((b) => !recent.includes(b)).length ? all.filter((b) => !recent.includes(b)) : all;
   return pool[Math.floor(rand() * pool.length)];
+}
+
+// ---------------------------------------------------------------- Music Sheets
+/** How long a sheet's landing note rings, in beats (the performance ends with it). */
+export const SONG_LAND = 1.5;
+/**
+ * A bar written from a Music Sheet as sequencer events: every head as the song has it in its skill's touch (the chord
+ * under it in the left hand), then the song's next note lands on beat `land` with its octave below (louder in the bass
+ * clef, where the whole bar sits an octave lower). No melody harmony or finishing bar is added: the song goes on.
+ */
+export function songArrangement(notes, clef = 'treble', land = MEASURE, landEv = null) {
+  const ev = [], oct = clef === 'bass' ? -12 : 0, add = (hand, midi, beat, beats, vel, art, legato = 0.96) => ev.push({ midi, beat, beats, vel, art, legato, tag: { hand, part: 'A' } });
+  for (const n of notes) {
+    if (!n.heads || !n.heads.length) continue;
+    const sound = (n.sound || T(NOTES[n.g].beats)) / TPB, art = artFor(n.reg, sound);
+    for (const h of n.heads) {
+      add('rh', h.midi, h.at, sound, 0.82, art);
+      for (const m of h.ch || []) add('lh', m, h.at, sound, 0.4, art);
+    }
+  }
+  if (landEv && landEv.length) {
+    landEv.forEach((m, i) => add(i ? 'lh' : 'rh', m + oct, land, SONG_LAND, i ? 0.42 : 0.9, 'normal_held', 1));
+    add('lh', landEv[landEv.length - 1] + oct - 12, land, SONG_LAND, oct ? 0.8 : 0.5, 'normal_held', 1);
+  }
+  return ev;
 }

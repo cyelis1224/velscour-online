@@ -3,6 +3,7 @@ import { CLASSES } from '../data/classes.js';
 import { rollItem, HOLLOW } from '../data/items.js';
 import { drawBiome } from '../data/biomes.js';
 import { migrateBar, BAR_SIZE } from '../data/bar.js';
+import { TAB_SLOTS } from '../data/tabs.js';
 import { stashRaw, listRaw } from './herobackup.js';
 
 const KEY = 'velscour_saves_v1';
@@ -133,6 +134,7 @@ export function newCharData(classId, name) {
     mastery: {}, rage: 0, townSeed: (Math.random() * 1e9) | 0,
     bag: Array(60).fill(null),
     stash: Array(300).fill(null),
+    tabs: Array(TAB_SLOTS).fill(null), tabAt: 0, // the Bard's Tabs: locked Music Sheets he plays (data/tabs.js)
     gold: 150, potions: { hp: 6, mp: 4, rejuv: 1, fury: 1 },
     depth: 1, deepest: 0, nextBiome: null, biomeBag: [], cleared: {}, overworldMisses: 0, overworldLastVisit: null, seaOfSandRuns: {}, darkForestRuns: {}, breach: { best: 0, cleared: {} },
     heresy: { on: [] }, rifts: { open: 1, best: 0, cleared: {}, bestTime: {}, runs: 0, fails: 0, deaths: 0 }, keys: 0, unbound: { wins: 0, best: 0 }, // the Endgame (docs/ENDGAME.md)
@@ -183,6 +185,9 @@ export function migrate(c) {
   while (c.bag.length < 60) c.bag.push(null);
   if (!Array.isArray(c.stash)) c.stash = [];
   while (c.stash.length < 300) c.stash.push(null);
+  if (!Array.isArray(c.tabs)) c.tabs = [];
+  while (c.tabs.length < TAB_SLOTS) c.tabs.push(null);
+  if (!Number.isInteger(c.tabAt) || c.tabAt < 0 || c.tabAt >= TAB_SLOTS) c.tabAt = 0;
   // body armor and helmets of the first Paladin art pack: their look now comes from the gear art
   for (const it of [...Object.values(c.equip), ...c.bag]) if (it && it.art && (it.slot === 'body' || it.slot === 'head')) { delete it.art; delete it.artCls; }
   // the generated biome natives (bn_) are gone: a nemesis wearing one takes a look from its next level

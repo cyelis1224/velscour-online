@@ -2,6 +2,7 @@
 import { rand, randi, pick, weighted, clamp, chance } from '../core/util.js';
 import { rollAugments, RING_NAMES, AUGMENTS, KIND_NAMES } from './rings.js';
 import { SKILLS } from './skills.js';
+import { SHEET_PRICE } from './tabs.js';
 import { CLASS_FOCUS } from './held.js';
 
 // lv: the rarity's power bonus in item levels. Every number on an item (base damage, armor, affix values, ring
@@ -494,6 +495,7 @@ export function itemName(item) {
   if (gw) return gw.name + (item.upg ? ` +${item.upg}` : '');
   if (item.type === 'gem') return gemName(item.gem, item.tier);
   if (item.type === 'potion') return item.name;
+  if (item.type === 'sheet') return sheetName(item);
   if (item.rname) return item.rname + (item.upg ? ` +${item.upg}` : '');
   if (item.uname) return item.uname + (item.upg ? ` +${item.upg}` : '');
   const base = `${MATERIALS[item.tier]?.name || ''} ${item.baseName || item.base || 'Item'}`.trim();
@@ -512,6 +514,7 @@ export function itemColor(item) {
   if (item.sealed) return SEALED_COLOR;
   if (item.type === 'gem') return GEMS[item.gem].sigil ? '#ffd88a' : GEMS[item.gem].special ? '#ff9a2a' : '#c8f0ff';
   if (item.type === 'potion') return '#ffffff';
+  if (item.type === 'sheet') return item.inked ? '#ffd88a' : '#e8dcc0';
   if (item.relic) return RELIC_COLORS[item.relic];
   if (item.type === 'gear' && RELIC_HOOK.glyph && RELIC_HOOK.glyph(item)) return RELIC_COLORS.glyph;
   return RARITY[item.rarity].color;
@@ -538,6 +541,7 @@ export function itemDmg(item) {
 export function itemArmor(item) { return Math.round((item.armor || 0) * upgMult(item)); }
 
 export function itemValue(item) {
+  if (item.type === 'sheet') return SHEET_PRICE;
   if (item.type === 'gem') return GEMS[item.gem].sigil ? Math.round(goldPile(depthLevelOf(item.tier * 24 + 12)) * 8) : Math.round((GEMS[item.gem].special ? 400 : 60) * Math.pow(2.6, item.tier));
   const base = 12 * Math.pow(1.06, item.ilvl) * [1, 2.5, 6, 15, 40, 100, 250][item.rarity] * (item.relic ? { heir: 2.5, cov: 2 }[item.relic] : RELIC_HOOK.glyph && RELIC_HOOK.glyph(item) ? 60 : 1);
   return Math.round(base * (1 + item.affixes.length * 0.15) * (1 + item.sockets * 0.2) * (1 + (item.upg || 0) * 0.3));
@@ -591,6 +595,15 @@ export function potionItem(kind) {
     rejuv: { name: 'Rejuvenation Potion', color: 'purple' }, fury: { name: 'Elixir of Fury', color: 'orange' },
   }[kind];
   return { uid: newUid(), type: 'potion', kind, name: P.name, color: P.color };
+}
+/**
+ * A blank Music Sheet (Fortunato sells them): write tablature on it, lock it, and a Bard plays it from his Tabs.
+ * `inked` is the sheet's lock (its song is kept as it is); `locked` stays the general keep-it lock.
+ */
+export function sheetItem() { return { uid: newUid(), type: 'sheet', text: '', title: '', bpm: 0, inked: false }; }
+export function sheetName(item) {
+  if (item.inked) return `“${item.title || 'Untitled Song'}”`;
+  return item.text.trim() ? `Music Sheet: ${item.title || 'Draft'}` : 'Blank Music Sheet';
 }
 export const POTION_PRICE = { hp: 25, mp: 25, rejuv: 120, fury: 200 };
 export const POTION_INFO = {

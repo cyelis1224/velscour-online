@@ -8,6 +8,12 @@
 // own way for each kind of skill he casts (SWINGS) and fights on its own with five sword skills (PET: Runic Lunge,
 // Reaping Arc, Grave Plunge, Blade Waltz, Wheel of Rime). It twirls when it takes a rune, and the same model, scaled up, makes the Obliteration swing. Its
 // skin changes every 10 levels and its palette every 50 (runebladeLook), announced as the blade is reforged.
+// The flying sword is his equipped sword when it has whole art (src/gfx/heldart.js heldFree: the design baked upright
+// beside its held sprite, in the item's finish and element, with its gems and enchantment effects): a flat 2D object
+// by default, or the same design's live three.js model (src/gfx/heldmodel3d.js) with G.settings.dkBlade 'model'; the
+// Runeblade with 'runeblade' or when he holds no such sword. Out of a fight (REST_AFTER s without striking, casting or
+// the sword fighting) and always in town it rests across his back (bladeOnBack, drawn behind him by
+// Player.drawArtLayer), and it flies off when the fighting starts. While it flies he does not hold it too (heldart.js).
 const look = (p) => runebladeLook((p === G.player && G.char ? G.char.level : p.level) || 1);
 import { G, stat, power, sigO, crowd, toughest, foesNear, glow, rand, TAU } from './common.js';
 import { isoX, isoY, camera, HW, HH } from '../../core/view.js';
@@ -17,6 +23,10 @@ import { hit, aoe } from '../combat.js';
 import { coneTargets, lineTargets } from '../hazards.js';
 import { angleDiff } from '../../core/util.js';
 import { drawRuneblade3D, runeblade3DReady, runebladeLook, preloadRuneblade, RUNEBLADE_LEN } from '../../gfx/runeblade3d.js';
+import { heldFree, drawHeldFree } from '../../gfx/heldart.js';
+import { drawHeldModel3D, heldModel3DReady } from '../../gfx/heldmodel3d.js';
+import { drawHeldFx, fxColor } from '../../gfx/heldfx.js';
+import { gearMeta } from '../../core/gearart.js';
 
 const RUNES = 6;
 const RC = { frost: '#7ad0ff', unholy: '#70e050', blood: '#ff2a30' };
@@ -49,8 +59,40 @@ function blade(ctx, x, y, a, len, runes, t, scale = 1) {
   ctx.restore();
 }
 
-/** The Runeblade: the 3D model with its lit runes, or the flat blade above until the model can draw. */
-function sword(ctx, p, x, y, a, len, runes, t, scale, spin, tilt) {
+const hex = (c) => '#' + c.map((v) => (v | 0).toString(16).padStart(2, '0')).join('');
+/** Lit runes down a drawn blade's line (rune slots at sixths of it), faded edge-on. */
+function runeMarks(ctx, line, runes, face, k, ga) {
+  const f = Math.min(1, face * 1.6), s = Math.max(1, 1.6 * k);
+  for (let i = 0; i < runes.length && i < RUNES; i++) {
+    const u = (i + 0.5) / RUNES, rx = line[0][0] + (line[1][0] - line[0][0]) * u, ry = line[0][1] + (line[1][1] - line[0][1]) * u, r = runes[i];
+    glow(ctx, RC[r], rx, ry, Math.max(4.5, 9 * k), 0.9 * f * ga);
+    ctx.globalAlpha = f * ga; ctx.fillStyle = '#ffffff'; ctx.fillRect(rx - s * 0.7, ry - s * 0.7, s * 1.4, s * 1.4);
+    ctx.fillStyle = RC[r]; ctx.fillRect(rx - s * 0.35, ry - s * 1.6, s * 0.7, s * 3.2); ctx.globalAlpha = ga;
+  }
+}
+/** His equipped sword whole: the 2D sprite or the live 3D model, with its runes, gems and enchantments (false: none). */
+function equipped(ctx, p, x, y, a, len, runes, t, spin, tilt) {
+  const it = p.char?.equip?.weapon, mode = G.settings.dkBlade || 'sprite';
+  if (!it || mode === 'runeblade') return false;
+  const f = heldFree(it, p.classId), m3 = mode === 'model' && heldModel3DReady(it, p.classId);
+  if (!f && !m3) return false;
+  const el = f?.element || 'cold', col = runes.length ? RC[runes[runes.length - 1]] : hex(fxColor(el)), ga = ctx.globalAlpha;
+  glow(ctx, col, x + Math.cos(a) * len * 0.5, y + Math.sin(a) * len * 0.5, len * 0.6, (0.18 + runes.length * 0.06 + (f?.rarity || 0) * 0.02) * ga);
+  ctx.globalAlpha = ga;
+  const v = m3 ? drawHeldModel3D(ctx, it, p.classId, x, y, a, len, { spin, tilt }) : drawHeldFree(ctx, f, x, y, a, len, spin);
+  if (!v) return false;
+  const s = m3 ? v.k : v.k * 2; // screen px per held-sprite px (the whole sprite is baked at 2 px per unit)
+  if (v.pts.line) runeMarks(ctx, v.pts.line, runes, v.face, s, ga);
+  if (f) drawHeldFx(ctx, { rarity: f.rarity, element: f.element, gems: m3 ? [] : f.gems, pts: v.pts }, t, (px, py) => [px, py], s,
+    { fx: G.settings.heldFx !== false, seed: 11, size: 1.3, quality: G.lowFx ? 0.5 : 1 });
+  ctx.globalAlpha = ga;
+  return true;
+}
+
+/** The flying sword: his equipped sword whole, or the Runeblade (the 3D model with its lit runes, or the flat blade
+ *  above until the model can draw). */
+export function sword(ctx, p, x, y, a, len, runes, t, scale, spin, tilt) {
+  if (equipped(ctx, p, x, y, a, len, runes, t, spin, tilt)) return;
   const L = look(p);
   if (!runeblade3DReady(L.skin)) return blade(ctx, x, y, a, len, runes, t, scale);
   const col = runes.length ? RC[runes[runes.length - 1]] : L.glow, ga = ctx.globalAlpha;  // glow() resets the alpha
@@ -372,13 +414,19 @@ function drawTrail(ctx, F, col) {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawFam(ctx, p, s, t) {
-  const F = s.fam;
-  if (!F || s.swing > 0) return;
-  const col = s.runes.length ? tint(s) : look(p).glow, [hx, hy, L] = hiltOf(F);
-  drawTrail(ctx, F, col);
-  if (s.flash > 0 && s.runes.length) glow(ctx, tint(s), hx + Math.cos(F.a) * L * 0.45, hy + Math.sin(F.a) * L * 0.45, 18, s.flash);
+  const F = s.fam, rest = s.rest || 0;
+  if (!F || s.swing > 0 || rest >= 1) return; // swinging, or resting on his back (bladeOnBack)
+  const col = s.runes.length ? tint(s) : look(p).glow;
+  let [hx, hy, L] = hiltOf(F), a = F.a, spin = F.spin, tilt = F.tilt;
+  const B = p._bladeBack;
+  if (rest > 0 && B && B.at === G.time) { // flying between the familiar's pose and his back: an arc, turning over once
+    const e = ease(rest);
+    hx = lerp(hx, B.x, e); hy = lerp(hy, B.y, e) - Math.sin(e * Math.PI) * 18; a = lerpA(a, B.a, e); L = lerp(L, B.len, e);
+    spin = lerp(spin, B.spin, e) + e * TAU; tilt = lerp(tilt, B.tilt, e);
+  } else drawTrail(ctx, F, col);
+  if (s.flash > 0 && s.runes.length) glow(ctx, tint(s), hx + Math.cos(a) * L * 0.45, hy + Math.sin(a) * L * 0.45, 18, s.flash);
   const u = s.flash > 0 ? 1 - s.flash / 0.5 : 1;  // a full twirl as it takes a rune
-  sword(ctx, p, hx, hy, F.a, L, s.runes, t, (G.touch ? 0.85 : 1) * F.len, F.spin + TAU * (1 - (1 - u) ** 3), F.tilt);
+  sword(ctx, p, hx, hy, a, L, s.runes, t, (G.touch ? 0.85 : 1) * F.len, spin + TAU * (1 - (1 - u) ** 3), tilt);
 }
 /** Behind him when it is further from the camera than he is (drawn before him), else on top. */
 const behind = (p, s) => s.fam && s.fam.x + s.fam.y < p.x + p.y - 0.05;
@@ -386,13 +434,15 @@ const behind = (p, s) => s.fam && s.fam.x + s.fam.y < p.x + p.y - 0.05;
 export default {
   id: 'death_knight', name: 'Runeblade', color: '#7ad0ff',
   desc: 'A spectral greatsword flies round him like a familiar, swinging with his skills and fighting on its own. It takes a rune for every blow: frost, unholy or blood by its nature. Six runes and RUNIC OBLITERATION, one colossal cleave; the runes decide whether it freezes, spreads plague or drinks life.',
-  init: () => ({ runes: [], gap: 0, flash: 0, swing: 0, fam: null }),
+  init: () => ({ runes: [], gap: 0, flash: 0, swing: 0, fam: null, idle: 99, rest: 1 }),
   enter(p, s) { s.fam = null; },
   cast(p, s, sk, L, tx, ty) {
     const th = tx != null && (tx !== p.x || ty !== p.y) ? Math.atan2(ty - p.y, tx - p.x) : p.facing || 0;
+    s.idle = 0;
     startSwing(p, s, swingFor(sk), th, tx != null ? Math.hypot(tx - p.x, ty - p.y) : 2);
   },
   hit(p, s, tgt, dmg, el, o) {
+    s.idle = 0;
     if (s.gap > 0 || s.runes.length >= RUNES || s.swing > 0) return;
     s.gap = 0.5; s.flash = 0.5;
     const r = el === 'cold' ? 'frost' : el === 'shadow' || el === 'poison' ? 'unholy' : el === 'blood' ? 'blood' : TREE[Number(String(o.sk || '').split('.')[1]) || 0];
@@ -407,6 +457,9 @@ export default {
     }
     if (!p.isRemotePlayer && s.runes.length >= RUNES && s.swing <= 0 && (s.wait = (s.wait || 0) - dt) <= 0) { s.wait = 0.2; if (crowd(p, 4.5)) this.fire(p, s); }
     famUpdate(p, s, dt);
+    // to his back out of a fight, off it when the fighting starts (he strikes or casts, or the sword fights on its own)
+    if (s.fam?.act || s.swing > 0) s.idle = 0;
+    s.idle += dt; s.rest = clamp01((s.rest ?? 1) + (s.idle > REST_AFTER ? dt : -dt) / REST_FLY);
   },
   fill: (s) => s.runes.length / RUNES,
   fire(p, s) {
@@ -426,7 +479,7 @@ export default {
   back(ctx, p, s, t) { if (behind(p, s)) drawFam(ctx, p, s, t); },
   ground(ctx, p, s) { // its shadow on the floor, fainter the higher it flies
     const F = s.fam;
-    if (!F || s.swing > 0) return;
+    if (!F || s.swing > 0 || s.rest > 0.5) return;
     const [hx, , L] = hiltOf(F), cx = hx + Math.cos(F.a) * L * 0.5, k = clamp01(1 - (F.z - (p.z || 0)) / 160);
     ctx.globalAlpha = 0.28 * k; ctx.fillStyle = '#000';
     ctx.beginPath(); ctx.ellipse(cx, isoY(F.x, F.y), 4 + Math.abs(Math.cos(F.a)) * L * 0.4, 3, 0, 0, TAU); ctx.fill();
@@ -442,3 +495,21 @@ export default {
   },
   swingNow(p, s, name, th = p.facing || 0, d = 2) { if (!s.fam) s.fam = famInit(p); s.fam.act = null; startSwing(p, s, name, th, d); },
 };
+
+const REST_AFTER = 3, REST_FLY = 0.45; // seconds out of a fight before it goes to his back; seconds the flight takes
+/**
+ * The sword across his back, drawn just before the hero image (Player.drawArtLayer 'back', `where` as Creature.drawArt
+ * gives it) so his body covers the middle: the hilt over his rear shoulder, the point past the other hip. In town it
+ * always rests there; elsewhere while it is resting (out of a fight). Notes the pose for the flight to and from it.
+ */
+export function bladeOnBack(ctx, p, where, base) {
+  const S = p.sig?.cls === 'death_knight' ? p.sig.s : null;
+  if (!S || G.settings.signatures === false || p.dead) return;
+  const HD = (base?.width || 512) / 128, sgn = where.flip ? -1 : 1, k = HD * where.k, top = gearMeta(p.classId)?.headTop ?? 75;
+  const ax = 44, ay = top - 2, aa = 0.92; // the guard (art px, by his ear: the grip and pommel stand over his shoulder) and the blade's angle
+  const B = { x: where.x + sgn * (where.dx + ax * k), y: where.y + where.dy + ay * k * (where.sq || 1), a: where.flip ? Math.PI - aa : aa,
+    len: 74 * k, spin: 0.35, tilt: -0.12, at: G.time };
+  p._bladeBack = B;
+  if (S.swing > 0 || (p.world?.kind !== 'town' && (S.rest ?? 1) < 1)) return;
+  sword(ctx, p, B.x, B.y, B.a, B.len, S.runes, G.time || 0, 1, B.spin, B.tilt);
+}

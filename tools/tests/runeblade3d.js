@@ -90,7 +90,8 @@ const { openGame, report, OUT_DIR } = require('./harness');
       const { G, game } = window.VELSCOUR, p = G.player;
       if (level) G.char.level = level;
       for (let i = 0; i < n; i++) G.world.update(1 / 30);
-      if (p.sig) { p.sig.s.runes = runes.slice(); p.sig.s.flash = flash; p.sig.s.wait = 99; }
+      G.settings.dkBlade = 'runeblade'; // (the default flies his equipped sword: tools/tests/dkblade.js)
+      if (p.sig) { p.sig.s.runes = runes.slice(); p.sig.s.flash = flash; p.sig.s.wait = 99; p.sig.s.idle = 0; p.sig.s.rest = 0; }
       game.render();
       return !!p.sig;
     }, { n, runes, flash, level });

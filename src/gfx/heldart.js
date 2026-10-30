@@ -4,6 +4,7 @@
 // image at the fist of the worn armor (the hero canvas mirrors with facing, so the gear turns with him); its metal, trim
 // and grip take the item's palette finish (PALETTES) and its glowing parts the item's element. Icons for the bag and
 // the ground come from the same designs. Effects (gem dots, rarity particles: src/gfx/heldfx.js) are drawn per frame.
+// Sets baked with free sprites also have each design whole and upright (heldFree), for the Death Knight's flying sword.
 import { G } from '../state.js';
 import { makeCanvas, hexToRgb, randi, chance, pick, clamp } from '../core/util.js';
 import { HELD_PER, HELD_START, heldSetOf, heldElement } from '../data/held.js';
@@ -89,12 +90,13 @@ function recolor(d, m, pi, ec) {
   }
 }
 const sprites = new Map();
-/** A piece's held sprite or icon ('held' | 'icon'), recoloured, cached. */
+const RECT = { held: ['held', 'mask'], icon: ['icon', 'iconMask'], free: ['free', 'freeMask'] };
+/** A piece's held sprite, icon or whole upright sprite ('held' | 'icon' | 'free'), recoloured, cached. */
 function sprite(pc, kind) {
   const key = `${pc.set}|${pc.i}|${pc.finish}|${pc.element}|${kind}`;
   let c = sprites.get(key);
   if (c) return c;
-  const [x, y, w, h] = kind === 'held' ? pc.d.held : pc.d.icon, mr = kind === 'held' ? pc.d.mask : pc.d.iconMask;
+  const [x, y, w, h] = pc.d[RECT[kind][0]], mr = pc.d[RECT[kind][1]];
   c = makeCanvas(w, h);
   const cx = c.getContext('2d', { willReadFrequently: true });
   cx.drawImage(pc.S.img, x, y, w, h, 0, 0, w, h);
@@ -135,7 +137,43 @@ export function heldIcon(item, size = 48) {
   return c;
 }
 
+// ------------------------------------------------------------------ the whole piece
+/**
+ * A weapon whole and upright (sets baked with free sprites: the Death Knight's greatswords), for drawing it away from
+ * the hand: { img (recoloured, tip up), pts (sprite px: guard, grip, tip, line, head, slots, orbit), rarity, element,
+ * gems: [[r, g, b]], set, i, finish }. Null when it has none or its set is still loading.
+ */
+export function heldFree(item, cls) {
+  if (!index) { loadHeldIndex(); return null; }
+  if (!item || item.type !== 'gear' || item.slot !== 'weapon') return null;
+  const pc = pieceOf(item, 'weapon', cls);
+  if (!pc?.d.free) return null;
+  return { img: sprite(pc, 'free'), pts: pc.d.freePts, rarity: pc.rarity, element: pc.element, set: pc.set, i: pc.i, finish: pc.finish, name: pc.d.name,
+    gems: (item.gems || []).map((g) => hexToRgb(GEMS[g.gem]?.color || '#ffffff')) };
+}
+
+/**
+ * Draw a whole piece (heldFree) with its guard at (x, y), `len` from the guard to the point along screen angle a. A flat
+ * sprite: `spin` round its length narrows it edge-on and shows its mirror image from behind. Returns its effect points
+ * in ctx units { pts: { guard, tip, head, line, orbit, slots }, k: units per sprite px, face: 0..1 how square-on }.
+ */
+export function drawHeldFree(ctx, f, x, y, a, len, spin = 0) {
+  const P = f.pts, g = P.guard, k = len / Math.max(1, g[1] - (P.tip ? P.tip[1] : 0)), c = Math.cos(spin);
+  const sx = (c < 0 ? -1 : 1) * Math.max(0.1, Math.abs(c)) * k, r = a + Math.PI / 2, cr = Math.cos(r), sr = Math.sin(r);
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(r); ctx.scale(sx, k);
+  ctx.imageSmoothingEnabled = k < 1;
+  ctx.drawImage(f.img, -g[0], -g[1]);
+  ctx.restore();
+  const at = (p) => { const u = (p[0] - g[0]) * sx, v = (p[1] - g[1]) * k; return [x + cr * u - sr * v, y + sr * u + cr * v]; };
+  const pts = { guard: [x, y], tip: P.tip && at(P.tip), line: P.line && P.line.map(at), slots: P.slots.map(at),
+    head: P.head && [...at(P.head), P.head[2] * k], orbit: P.orbit && [...at(P.orbit), P.orbit[2] * k] };
+  return { pts, k, face: Math.abs(c) };
+}
+
 // ------------------------------------------------------------------ the hero
+/** True when a Death Knight's sword is his flying sword (src/game/sigs/deathknight.js), so it is not in his hand too. */
+const swordFlies = (cls, pc) => cls === 'death_knight' && !!pc.d.free && G.settings.signatures !== false && (G.settings.dkBlade || 'sprite') !== 'runeblade';
 /** The pieces `cls` holds from `equip`, placed at the worn armor's fists (art px). Null while any set still loads. */
 function heldPieces(cls, equip) {
   const fists = index?.fists?.[cls];
@@ -147,6 +185,7 @@ function heldPieces(cls, equip) {
     if (!it || it.type !== 'gear' || !heldSetOf(it.base, slot, cls)) continue;
     const pc = pieceOf(it, slot, cls);
     if (!pc) return null;
+    if (slot === 'weapon' && swordFlies(cls, pc)) continue; // the Death Knight's sword flies at his side or rests on his back
     if (out.some((o) => o.hand === pc.hand)) continue; // both pieces want the same hand: the main hand wins
     const f = F[pc.hand], pt = (p) => p && [f[0] + p[0], f[1] + p[1], p[2]];
     const P = pc.d.pts;

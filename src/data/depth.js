@@ -51,3 +51,16 @@ export const density = (d) => 1 + Math.min(d, 120) * 0.006;
 const OLD_DENSITY = (d) => 1.1 + Math.min(d, 120) * 0.013;
 /** XP multiplier for a monster level: the old pack density over the new one at the depth that level lives at. */
 export const densityXp = (lvl) => { const d = lvl <= 60 ? lvl : 60 + (lvl - 60) / 0.45; return OLD_DENSITY(d) / density(d); };
+/**
+ * The damage scale. Monster life and hero damage ("power") grow ~1.068 a level and more (toughness), hero life and
+ * monster hits about linearly, so deep heroes hit for billions against 30k life. Every power figure the player sees
+ * (damage numbers, the DPS plaque, weapon and skill damage) is shown divided by dmgScale(level of the monster hit, or
+ * heroDmgLevel): a normal monster's life (monsterBase hp) then reads about half a same-level hero's life, and as
+ * toughness sizes it to ~3 s of a hero's damage, a hero's damage runs ~15% of a hero's life a second. Display only:
+ * the game runs on the raw numbers, so nothing plays differently. Keep the hp term in step with monsterBase.
+ * A PvP hit would be shownDmg(raw, arena level) taken off the defender's life, after its armor and resistances.
+ */
+export const dmgScale = (lvl) => (30 * Math.pow(1.068, lvl - 1) * toughness(lvl)) / ((100 + lvl * 9.5) * fortitude(lvl));
+export const shownDmg = (raw, lvl) => raw / dmgScale(Math.max(1, lvl || 1));
+/** The level tooltips and the stats plaque measure against: the monsters of the hero's depth (as heroDamage does). */
+export const heroDmgLevel = (c) => depthLevel((c && c.depth) || 1);

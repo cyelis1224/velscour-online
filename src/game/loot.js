@@ -13,6 +13,7 @@ import { gearIcon } from '../core/gearart.js';
 import { heldIcon } from '../gfx/heldart.js';
 import { AUGMENTS } from '../data/rings.js';
 import { depthLevel } from '../data/depth.js';
+import { sheetIcon } from '../gfx/notation.js';
 import { filterPasses } from './lootfilter.js';
 import { rollSigil, SIGILS } from '../data/items.js';
 import { maybeRelic } from '../data/relics.js';
@@ -216,6 +217,7 @@ export function itemIcon(item, size = 48) {
   if (item.type === 'gem' && GEMS[item.gem].sigil) return sigilIcon(item.tier, size);
   if (item.type === 'gem') return gemIcon(item.gem, GEMS[item.gem].color, item.tier, size);
   if (item.type === 'potion') return potionIcon(item.color, size);
+  if (item.type === 'sheet') return sheetIcon(item, size);
   if (item.slot === 'ring') return ringIcon(MATERIALS[item.tier].color, elem((AUGMENTS[(item.aug && item.aug[0] || {}).id] || {}).el || 'arcane').glow, item.rarity, size);
   if (item.art) { const a = artIcon(item, size); if (a) return a; }
   { const g = gearIcon(item, size) || heldIcon(item, size); if (g) return g; } // body/head gear art, the held weapon designs

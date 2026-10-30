@@ -28,7 +28,7 @@ import { Vendor, fuseAll } from '../ui/vendor.js';
 import { Stash, addToStash } from '../ui/stash.js';
 import { activeFilter, filterPasses, filterKeeps } from './lootfilter.js';
 import { addToBag } from './player.js';
-import { Delayed, Area, Whirl } from './hazards.js';
+import { Delayed, Area, Whirl, Fissure } from './hazards.js';
 import { bountyGoal } from './wanderers.js';
 import { heroVisit } from './townlife.js';
 import { homunculusChat, isHomunculus } from './homunculus.js';
@@ -387,6 +387,13 @@ function segDist(px, py, x0, y0, x1, y1) {
   const t = clamp(((px - x0) * dx + (py - y0) * dy) / l2, 0, 1);
   return Math.hypot(px - (x0 + dx * t), py - (y0 + dy * t));
 }
+/** How far to the side a big foe's straight-line blow reaches (a charge or a quake), or 0 if it has none worth
+ *  backing out of a corridor for. */
+function lineReach(m) {
+  if (!m.rank || m.rank === 'normal' || m.summon) return 0;
+  if (m.ai === 'charger' || m.raid || (m.patterns && m.patterns.includes('charge'))) return m.r + 0.4;
+  return m.moves && m.moves.includes('quake') ? 0.85 : 0;
+}
 
 // ================================================================== the bot
 export const Auto = {
@@ -469,7 +476,7 @@ export const Auto = {
   reset() {
     this.world = null; this.nav = null; this.path = null; this.goal = null; this.thinkT = 0; this.navT = 0;
     this.town = null; this.sealWaiting = false; this.transitT = 0; this.stuck = { t: 0, x: 0, y: 0, n: 0 }; this.jiggle = null;
-    this.target = null; this.dodge = null; this.retreat = false; this.ignore = new WeakSet(); this.lastSig = '';
+    this.target = null; this.dodge = null; this.open = null; this.openSkip = 0; this.retreat = false; this.ignore = new WeakSet(); this.lastSig = '';
     this.screenT = 0; this.lastCast = {}; this.stall = null; this.banT = 0; this.shun = new WeakMap(); this.giveUp = new WeakSet();
     this.lootFor = null; this.lootT = 0; this.lootDry = 0; this.lootBusy = -99; this.lootSpent = new WeakMap(); this.stalls = new WeakMap(); this.hunts = new WeakMap(); this.edgeT = 0; this.dangerList = null;
     this.wantCache = new WeakMap(); this.hurt = 0; this.lastHp = -1; this.climbTo = null;
@@ -1409,12 +1416,21 @@ export const Auto = {
       if (h.team !== 'enemy' || h.dead) continue;
       if (h.danger) { h.danger(out); continue; } // raid hazards describe their own zones
       if (h instanceof Delayed) out.push({ x: h.x, y: h.y, r: h.r + 0.45 });
-      else if (h instanceof Area && h.dmg && h.dmg[1] > 0) out.push({ x: h.x, y: h.y, r: h.r + 0.3 });
+      else if (h instanceof Area && h.dmg && h.dmg[1] > 0) out.push({ x: h.x, y: h.y, r: h.r + 0.3, linger: true });
       else if (h.lob && h.exp && h.tx !== undefined) out.push({ x: h.tx, y: h.ty, r: h.exp + 0.4, minor: true });
+      else if (h instanceof Fissure) out.push({ line: true, x: h.x + Math.cos(h.ang) * h.d, y: h.y + Math.sin(h.ang) * h.d, x1: h.x + Math.cos(h.ang) * h.len, y1: h.y + Math.sin(h.ang) * h.len, r: h.w + G.player.r + 0.15 });
+    }
+    const pr = G.player.r;
+    // a charge outlasts its marker: the rush comes after the wind-up, so its lane stays dangerous until it stops
+    for (const c of w.creatures) {
+      const a = c.action;
+      if (c.dead || c.team !== 'enemy' || !a || a.kind !== 'charge' || !(a.len > 0) || (c.state !== 'act' && c.state !== 'windup')) continue;
+      out.push({ line: true, x: c.x, y: c.y, x1: c.x + Math.cos(a.ang) * a.len, y1: c.y + Math.sin(a.ang) * a.len, r: c.r + 0.4 + pr + 0.15 });
     }
     for (const e of effects) {
       if (!(e instanceof Telegraph) || e.color === '#40ff60' || e.t >= e.dur) continue;
-      if (e.kind === 'line') out.push({ line: true, x: e.x, y: e.y, x1: e.x + Math.cos(e.ang) * e.len, y1: e.y + Math.sin(e.ang) * e.len, r: e.w / 2 + 0.45 });
+      // reach: how far the blow really hits from the line (a charging body is wider than its marker)
+      if (e.kind === 'line') out.push({ line: true, x: e.x, y: e.y, x1: e.x + Math.cos(e.ang) * e.len, y1: e.y + Math.sin(e.ang) * e.len, r: Math.max(e.w / 2 + 0.45, (e.reach || 0) + pr + 0.15) });
       else if (e.kind === 'cone') out.push({ cone: true, x: e.x, y: e.y, ang: e.ang, half: e.half + 0.15, r: e.len + 0.5 });
       else out.push({ x: e.x, y: e.y, r: (e.r || 1.5) + 0.45 });
     }
@@ -1442,7 +1458,11 @@ export const Auto = {
     this.dangerList = list;
     if (this.dodge) {
       this.dodge.t -= dt;
-      if (this.dodge.t > 0 && this.inDanger(list, p.x, p.y)) { this.setStatus('Dodging!'); this.steer(this.dodge.x, this.dodge.y); return true; }
+      if (this.dodge.t > 0 && this.inDanger(list, p.x, p.y)) {
+        this.setStatus('Dodging!');
+        if (this.dodge.far) this.goTo(this.dodge.x, this.dodge.y, 0.2, dt); else this.steer(this.dodge.x, this.dodge.y);
+        return true;
+      }
       this.dodge = null;
     }
     if (!list.length || !this.inDanger(list, p.x, p.y)) return false;
@@ -1450,7 +1470,7 @@ export const Auto = {
     let best = null, bs = -Infinity;
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * TAU;
-      for (const r of [1.4, 2.3, 3.3]) {
+      for (const r of [1.4, 2.3, 3.3, 4.4]) {
         const x = p.x + Math.cos(a) * r, y = p.y + Math.sin(a) * r;
         if (!m.circleFree(x, y, 0.3) || !m.losWide(p.x, p.y, x, y) || this.inDanger(list, x, y)) continue;
         let s = -r;
@@ -1461,11 +1481,40 @@ export const Auto = {
         if (s > bs) { bs = s; best = [x, y]; }
       }
     }
-    if (!best) return false;
-    this.dodge = { x: best[0], y: best[1], t: 0.9 };
+    if (best) {
+      this.dodge = { x: best[0], y: best[1], t: 0.9 };
+      this.setStatus('Dodging!');
+      this.steer(best[0], best[1]);
+      return true;
+    }
+    // nothing safe in a side-step (a quake or charge down a corridor, a slam wider than the room): run for the
+    // nearest safe tile by path, round the corner or out past the end of the line. Only from a blow about to land:
+    // a lingering pool across a corridor is walked through, not fled back and forth
+    const strike = list.filter((d) => !d.linger);
+    const far = this.inDanger(strike, p.x, p.y) && this.escapeTile(list, foes);
+    if (!far) return false;
+    this.dodge = { x: far[0], y: far[1], t: 1.6, far: true };
     this.setStatus('Dodging!');
-    this.steer(best[0], best[1]);
+    this.goTo(far[0], far[1], 0.2, dt);
     return true;
+  },
+  /** The nearest safe tile by path (within 9 steps), a little further from the foes when it's a tie. */
+  escapeTile(list, foes) {
+    const p = G.player, m = G.world.map, d = this.nav && this.nav.d;
+    if (!d) return null;
+    const px = Math.floor(p.x), py = Math.floor(p.y);
+    let best = null, bs = Infinity;
+    for (let y = py - 9; y <= py + 9; y++) for (let x = px - 9; x <= px + 9; x++) {
+      if (!m.inb(x, y)) continue;
+      const v = d[y * m.w + x];
+      if (v < 0 || v > 9) continue;
+      const cx = x + 0.5, cy = y + 0.5;
+      if (!m.circleFree(cx, cy, 0.3) || this.inDanger(list, cx, cy)) continue;
+      let s = v;
+      for (const f of foes) s -= Math.min(3, dist(cx, cy, f.x, f.y)) * 0.1;
+      if (s < bs) { bs = s; best = [cx, cy]; }
+    }
+    return best;
   },
 
   // ---------------------------------------------------------------- potions
@@ -1599,6 +1648,7 @@ export const Auto = {
     const melee = this.meleeBuild();
     const R = this.rules;
     if (R && R.holdFire && t.rank === 'boss') { this.setStatus('Holding fire — riposte!'); if (!this.kite([t])) p.moveVec = [0, 0]; return; }
+    if (!fleeing && !R && this.openGround(t, d)) return;
     if (R && R.move && !fleeing && p.castLock <= 0 && Math.hypot(p.moveVec[0], p.moveVec[1]) < 0.1) {
       // static builds while standing: circle the target between casts
       const a = angleTo(t.x, t.y, p.x, p.y) + (this.strafe || (this.strafe = 1)) * 0.9, sx = t.x + Math.cos(a) * Math.max(2, d), sy = t.y + Math.sin(a) * Math.max(2, d);
@@ -1644,7 +1694,50 @@ export const Auto = {
       const closing = S.kiteNear >= 0 && foes.some((m) => (m.ai === 'melee' || m.ai === 'brute' || m.ai === 'charger' || m.ai === 'swarm' || m.ai === 'exploder') && dist(p.x, p.y, m.x, m.y) < m.r + p.r + (m.atkReach || 0.55) + S.kiteNear);
       if ((near >= S.kiteCrowd + Math.round(bold * 2) || (near >= 1 && hpK < S.kiteHp - 0.15 * bold) || (closing && t.rank !== 'boss')) && this.kite(foes)) return;
     } else if (near >= 1 && hpK < S.backoff && (p.potionCd > 0 || p.potionRegen.some((r) => r.hp > 0) || G.char.potions.hp + G.char.potions.rejuv === 0) && t.rank !== 'boss' && this.kite(foes)) return;
+    // backed out of a corridor (openGround): wait in the open for it to come out
+    if (this.open && this.open.held) { this.setStatus(`Waiting in the open for ${t.name || 'it'}`); p.moveVec = [0, 0]; return; }
     if (d > reach || !w.map.los(p.x, p.y, t.x, t.y)) this.goTo(t.x, t.y, Math.max(0.6, reach * 0.85));
+  },
+  /** A big foe that charges or quakes down a line, met where there's no room to step aside (a corridor): back out to
+   *  open ground first and let it come, so a dodge has somewhere to go. True while backing out; once there,
+   *  this.open.held keeps the hero waiting in the open (combat) until it's close or 6 s have gone. */
+  openGround(t, d) {
+    const p = G.player, w = G.world, m = w.map;
+    const reach = lineReach(t);
+    let o = this.open;
+    if (o && (o.m !== t || w.time > o.until || (o.held && d < 2.6))) {
+      if (w.time > o.until) this.openSkip = w.time + 12; // it won't come out: fight it where it stands for a while
+      o = this.open = null;
+    }
+    if (!reach || d > 10 || this.openSkip > w.time) { this.open = null; return false; }
+    const need = reach + p.r + 0.6;
+    const room = (x, y) => { const a = angleTo(t.x, t.y, x, y); return Math.max(m.rayLength(x, y, a + Math.PI / 2, need + 0.3), m.rayLength(x, y, a - Math.PI / 2, need + 0.3)); };
+    if (!o) {
+      if (room(p.x, p.y) >= need) return false;
+      const at = this.openTile(t, need, room);
+      if (!at) { this.openSkip = w.time + 5; return false; }
+      o = this.open = { m: t, x: at[0], y: at[1], until: w.time + 6 };
+    }
+    if (o.held) return false;
+    this.setStatus(`Backing out of the corridor from ${t.name || 'a monster'}`);
+    if (this.goTo(o.x, o.y, 0.4, 1 / 30)) o.held = true;
+    return !o.held;
+  },
+  /** The nearest tile by path, further from t than the hero is, with room to step out of its line. */
+  openTile(t, need, room) {
+    const p = G.player, m = G.world.map, d = this.nav && this.nav.d;
+    if (!d) return null;
+    const px = Math.floor(p.x), py = Math.floor(p.y), d0 = dist(p.x, p.y, t.x, t.y);
+    let best = null, bv = Infinity;
+    for (let y = py - 12; y <= py + 12; y++) for (let x = px - 12; x <= px + 12; x++) {
+      if (!m.inb(x, y)) continue;
+      const v = d[y * m.w + x];
+      if (v < 1 || v > 14 || v >= bv) continue;
+      const cx = x + 0.5, cy = y + 0.5;
+      if (dist(cx, cy, t.x, t.y) < Math.max(3, d0) || !m.circleFree(cx, cy, 0.4) || room(cx, cy) < need + 0.3) continue;
+      bv = v; best = [cx, cy];
+    }
+    return best;
   },
   /** Step away from the crowd (ranged builds). */
   kite(foes) {
@@ -1991,7 +2084,7 @@ export const Auto = {
     const steps = [];
     if (c.stash && c.stash.some((b) => b && (b.type === 'gem' || this.stashUpgrade(b)))) steps.push({ stash: true, label: 'Checking the storage chest', fn: () => this.unstash() });
     const gear = (k) => () => this.gearGain(Vendor.stock[k]);
-    steps.push({ vendor: 'weapons', label: 'Selling loot', want: () => c.bag.some((b) => b && b.type !== 'gem' && !b.sealed && !upgraded(b)) || this.gearGain(Vendor.stock.weapons), fn: () => { this.sellJunk(); if (this.buyGear(Vendor.stock.weapons)) this.sellJunk(); } }); // sell what the new piece replaced too: a nearly full bag has no slot for it
+    steps.push({ vendor: 'weapons', label: 'Selling loot', want: () => c.bag.some((b) => b && b.type !== 'gem' && b.type !== 'sheet' && !b.sealed && !upgraded(b)) || this.gearGain(Vendor.stock.weapons), fn: () => { this.sellJunk(); if (this.buyGear(Vendor.stock.weapons)) this.sellJunk(); } }); // sell what the new piece replaced too: a nearly full bag has no slot for it
     steps.push({ vendor: 'alchemist', label: 'Buying potions', want: () => this.potionsWanted(), fn: () => this.buyPotions() });
     steps.push({ vendor: 'armor', label: 'Browsing armor', want: gear('armor'), fn: () => { if (this.buyGear(Vendor.stock.armor)) this.sellJunk(); } });
     if (c.bag.some((b) => b && b.type === 'gem') || c.gold > 2000) steps.push({ vendor: 'gems', label: 'Visiting the gem merchant', fn: () => this.gemShop() });
@@ -2073,7 +2166,7 @@ export const Auto = {
     let gold = 0, n = 0;
     const future = {};
     c.bag.forEach((it, i) => {
-      if (!it || it.sealed || it.locked || filterKeeps(it) || upgraded(it)) return; // only the player breaks a seal or sells what's locked; keepers and +N gear go to the chest
+      if (!it || it.sealed || it.locked || it.type === 'sheet' || filterKeeps(it) || upgraded(it)) return; // only the player breaks a seal or sells what's locked; keepers and +N gear go to the chest
       if (it.type === 'gem') {
         const top = Math.max(0, ...SLOTS.flatMap((s) => (c.equip[s] ? c.equip[s].gems.map((g) => g.tier) : [])), ...c.bag.filter((b) => b && b.type === 'gem').map((b) => b.tier));
         if (bagFree(c) > 15 || GEMS[it.gem].special || GEMS[it.gem].sigil || it.tier >= top - 1) return;

@@ -523,6 +523,7 @@ export function settingsDialog() {
     <label>Chat in side notifications</label><input type="checkbox" data-k="chatInSideLog" ${st.chatInSideLog !== false ? 'checked' : ''}>
     <label title="The hero holds his weapon and off-hand, each in its own look">Show weapons and off-hands</label><input type="checkbox" data-k="heldGear" ${st.heldGear !== false ? 'checked' : ''}>
     <label title="Glows, particles and gem sparks on held weapons, and sparkles on rare armor and helmets (with weapons shown)">Weapon and gear effects</label><input type="checkbox" data-k="heldFx" ${st.heldFx !== false ? 'checked' : ''}>
+    <label title="The Death Knight's flying sword: his equipped sword as a flat 2D object, the same sword as a live 3D model, or the old Runeblade">Death Knight's flying sword</label><select data-k="dkBlade" data-str="1">${[['sprite', 'Equipped sword (2D)'], ['model', 'Equipped sword (3D)'], ['runeblade', 'Runeblade']].map(([v, n]) => `<option value="${v}"${(st.dkBlade || 'sprite') === v ? ' selected' : ''}>${n}</option>`).join('')}</select>
     <label>Auto-pickup items</label><input type="checkbox" data-k="autoLoot" ${st.autoLoot ? 'checked' : ''}>
     <label>Loot filter (what auto-pickup and auto-play pick up)</label><button class="btn small" data-loot-filter>${lootFilter().on ? 'On' : 'Off'} · Set up</button>
     <label>Standard skill bar on mobile (landscape)</label><input type="checkbox" data-k="mobileSkillBar" ${st.mobileSkillBar !== false ? 'checked' : ''}>
@@ -590,7 +591,7 @@ export function settingsDialog() {
   d.box.querySelectorAll('[data-k]').forEach((inp) => {
     inp.oninput = inp.onchange = () => {
       const k = inp.dataset.k;
-      st[k] = inp.type === 'checkbox' ? inp.checked : inp.tagName === 'SELECT' ? Number(inp.value) : Number(inp.value);
+      st[k] = inp.type === 'checkbox' ? inp.checked : inp.dataset.str ? inp.value : Number(inp.value);
       if (k === 'mobileSkillBar' && UI.hud) UI.hud.layoutMobile();
       if ((k === 'showHeroStats' || k === 'showTargetBox' || k === 'showTargetSprite') && UI.hud) UI.hud.applyVisibilitySettings();
       applyVolumes();

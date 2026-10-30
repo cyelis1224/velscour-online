@@ -470,7 +470,7 @@ export class Monster extends Creature {
     if (d > 2.2 && d < 7 && los && this.cd <= 0 && chance(0.6)) {
       const ang = angleTo(this.x, this.y, t.x, t.y);
       this.startAction('charge', 0.55, { ang, len: Math.min(8, d + 1.5) });
-      addEffect(new Telegraph({ kind: 'line', x: this.x, y: this.y, ang, len: Math.min(8, d + 1.5), w: 0.7, dur: 0.55 }), 'ground');
+      addEffect(new Telegraph({ kind: 'line', x: this.x, y: this.y, ang, len: Math.min(8, d + 1.5), w: 0.7, reach: this.r + 0.4, dur: 0.55 }), 'ground');
       return;
     }
     this.aiMelee(dt, t, d);
@@ -833,7 +833,7 @@ export class Monster extends Creature {
         this.startAction('mv_combo', 0.2, { target: t, n: 3 });
         break;
       case 'quake':
-        tele({ kind: 'line', x: this.x, y: this.y, ang, len: 6.5, w: 1, dur: 0.6 });
+        tele({ kind: 'line', x: this.x, y: this.y, ang, len: 6.5, w: 1, reach: 0.85, dur: 0.6 }); // reach: the Fissure's hit, for auto-play
         this.startAction('mv_quake', 0.6, { ang });
         break;
       case 'hook': {
@@ -1175,7 +1175,7 @@ export class Monster extends Creature {
       case 'charge': {
         const ang = angleTo(this.x, this.y, t.x, t.y), len = Math.min(10, dist(this.x, this.y, t.x, t.y) + 2);
         this.startAction('charge', 0.8, { ang, len });
-        tele({ kind: 'line', x: this.x, y: this.y, ang, len, w: 1.2, dur: 0.8 });
+        tele({ kind: 'line', x: this.x, y: this.y, ang, len, w: 1.2, reach: this.r + 0.4, dur: 0.8 });
         break;
       }
       case 'summon':

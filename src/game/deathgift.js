@@ -29,7 +29,8 @@ function coreWish(C) {
     'resAll', 'reduce', 'cdr', 'lifeSteal', 'flatDmg', 'physPct', 'block', 'areaPct', 'life', 'armorPct', 'vit', 'manaRegen', 'lifeRegen'];
 }
 
-function bestItem(C, slot, base, ilvl, legend, gems) {
+/** The best item of a slot: Mythic, +10, a full enchant of the affixes worth having, every socket filled. */
+export function bestItem(C, slot, base, ilvl, legend, gems) {
   const it = rollItem(ilvl, { slot, rarity: MYTHIC, base });
   const letter = SLOT_LETTER[slot], pl = powerLevel(ilvl, MYTHIC);
   it.affixes = it.affixes.filter((a) => a.implicit);

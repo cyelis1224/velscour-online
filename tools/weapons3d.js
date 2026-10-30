@@ -9,6 +9,7 @@ import { holdWeapon, holdShield, setLook } from './handheld3d.js';
 import { POSE } from './handheld3d_kits.js';
 import { RARITY, PER, ELEMENTS, rng, hash, pick, chance, kitFor, nameOf } from './weapons3d_parts.js';
 import * as F from './weapons3d_families.js';
+import { greatsword } from './weapons3d_greatswords.js';
 
 const HOLY = { heater: 1.35, kite: 1.25, round: 1.5, buckler: 1.15, tower: 1.3, oval: 1.3, pavise: 1.3, spiked: 1.4, targe: 1.3 };
 const TOWER = { tower: 1.6, pavise: 1.6, kite: 1.5, oval: 1.5 };
@@ -25,7 +26,7 @@ export const SETS = {
   // main hands
   maces: { cls: 'paladin', slot: 'weapon', hand: 'R', element: 'holy', build: (r, R, M) => F.mace(r, R, M), pose: 'across', p: { scale: 1.07 } },
   slimemaces: { cls: 'slime_lord', slot: 'weapon', hand: 'R', element: 'acid', build: (r, R, M) => F.mace(r, R, M, { slime: true }), pose: 'across', p: { grip: 0, dome: 5.5, scale: 1.25 } },
-  greatswords: { cls: 'death_knight', slot: 'weapon', hand: 'R', element: 'cold', build: (r, R, M) => F.sword(r, R, M, { L: 52, W: 4.2 }), ...hang() },
+  greatswords: { cls: 'death_knight', slot: 'weapon', hand: 'R', element: 'cold', build: (r, R, M, d) => greatsword(r, R, M, d), ...hang(), free: true, models: true },
   swords: { cls: 'dragon_knight', slot: 'weapon', hand: 'R', element: 'fire', build: (r, R, M) => F.sword(r, R, M, { L: 44, W: 3.2 }), ...hang() },
   daggers: { cls: null, slot: 'weapon', hand: 'R', element: 'shadow', build: (r, R, M) => F.dagger(r, R, M), ...hang({ scale: 1.2 }) },
   greataxes: { cls: 'barbarian', slot: 'weapon', hand: 'R', element: 'blood', build: (r, R, M) => F.axe(r, R, M), pose: 'planted' },
@@ -86,7 +87,7 @@ export function designs(set) {
 export function buildDesign(d) {
   const r = rng(d.seed), M = kitFor(r, d.rarity, d.element);
   setLook(4);
-  const out = SETS[d.set].build(r, d.rarity, M);
+  const out = SETS[d.set].build(r, d.rarity, M, d);
   out.name = nameOf(rng(d.seed ^ 0x9e37), d.rarity, out.form);
   out.key = Object.entries({ heater: 'Heater', kite: 'Kite', round: 'Round', buckler: 'Buckler', tower: 'Tower', oval: 'Oval', pavise: 'Pavise', spiked: 'Spiked', targe: 'Targe' }).find(([, v]) => out.form?.startsWith(v))?.[0] || out.form;
   return out;

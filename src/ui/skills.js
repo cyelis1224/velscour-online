@@ -1,6 +1,7 @@
 // Skill tree (spend points) and Skill Book (equip skills to the bar).
 import { G } from '../state.js';
-import { el, escapeHtml } from '../core/util.js';
+import { el, escapeHtml, fmtDmg } from '../core/util.js';
+import { shownDmg, heroDmgLevel } from '../data/depth.js';
 import { sfx } from '../core/audio.js';
 import { UI, draggable } from './ui.js';
 import { skillIcon, skillIconURL } from './icons.js';
@@ -11,6 +12,9 @@ import { SLOT_LABELS, freeSlot } from '../data/bar.js';
 import { MAX_MASTERY, masteryNeed, masteryMul, masteryTier, TIER_NAMES } from '../game/augments.js';
 import { AUGMENTS } from '../data/rings.js';
 import { skillUp } from './skillup.js';
+
+/** A skill's damage range on the shown scale of the hero's depth (data/depth.js). */
+const skillDmg = (sk, L) => G.player.skillDamage(sk, L).map((v) => fmtDmg(shownDmg(v, heroDmgLevel(G.char))));
 
 /** A skill's mastery: level, tier, an XP bar, its damage multiplier, and the ring augments on it. */
 function masteryHtml(sk, compact) {
@@ -109,7 +113,7 @@ export function skillDetail(sk) {
   const L = effLevel(p, sk);
   const E = elem(sk.el);
   const showL = Math.max(1, L);
-  const dmg = p.skillDamage(sk, showL);
+  const dmg = skillDmg(sk, showL);
   const tags = [sk.kind, E.name, CLASSES[sk.classId].trees[sk.tree]].map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('');
   let h = `<h3>${escapeHtml(sk.name)}</h3><div>${tags}</div>`;
   h += `<div class="dim" style="margin:4px 0">Level ${base}${L > base ? ` <span style="color:#8fb4ff">(+${L - base})</span>` : ''} / ${MAX_SKILL_LEVEL} · Requires character level ${sk.reqLevel}${sk.prereq ? ` · Requires ${escapeHtml(SKILLS[sk.prereq].name)}` : ''}</div>`;
@@ -117,7 +121,7 @@ export function skillDetail(sk) {
   const mc = manaCost(sk, showL), rc = rageCost(sk), cd = cooldown(sk);
   h += `<div class="dim">${rc ? 'Rage' : 'Mana'}: <b style="color:${rc ? '#ff9933' : '#8fb4ff'}">${rc || mc || (sk.classId === 'barbarian' && sk.kind === 'whirl' ? '10 to start · 10/s' : 'Free')}</b>${cd ? ` · Cooldown: <b>${(cd * (1 - p.st.cdr / 100)).toFixed(1)}s</b>` : ''}</div>`;
   if (base < MAX_SKILL_LEVEL) {
-    const nd = p.skillDamage(sk, Math.max(1, L + 1));
+    const nd = skillDmg(sk, Math.max(1, L + 1));
     h += `<div class="dim" style="margin-top:4px;font-size:12px">Next level: ${nd[0]}–${nd[1]} damage, ${rageCost(sk) ? rageCost(sk) + ' Rage' : manaCost(sk, L + 1) + ' mana'}</div>`;
   }
   if (base) h += masteryHtml(sk);
@@ -207,7 +211,7 @@ export function renderTree(body) {
     if (M > 1) node.appendChild(el('span', 'mlvl', String(M)));
     node.title = sk.name;
     makeDrag(node, sk);
-    UI.tip(node, () => `<b style="color:#ffe2a0">${escapeHtml(sk.name)}</b><div class="dim">Level ${lv}/${MAX_SKILL_LEVEL} · Req. lvl ${sk.reqLevel}</div><div style="max-width:260px">${describe(sk, Math.max(1, effLevel(G.player, sk)), G.player.skillDamage(sk, Math.max(1, effLevel(G.player, sk))))}</div>`);
+    UI.tip(node, () => `<b style="color:#ffe2a0">${escapeHtml(sk.name)}</b><div class="dim">Level ${lv}/${MAX_SKILL_LEVEL} · Req. lvl ${sk.reqLevel}</div><div style="max-width:260px">${describe(sk, Math.max(1, effLevel(G.player, sk)), skillDmg(sk, Math.max(1, effLevel(G.player, sk))))}</div>`);
     grid.appendChild(node);
   }
   ROW_LEVELS.forEach((lv, r) => {
@@ -239,7 +243,7 @@ export function renderBook(body) {
     cv.getContext('2d').drawImage(skillIcon(sk, 64), 0, 0);
     it.appendChild(cv);
     const slot = c.bar.indexOf(sk.id);
-    const meta = el('div', 'meta', `<b>${escapeHtml(sk.name)}</b> <span class="dim">Lv ${L}${slot >= 0 ? ` · [${SLOT_LABELS[slot]}]` : ''}</span>${masteryHtml(sk, true)}<p>${describe(sk, L, p.skillDamage(sk, L))}</p>`);
+    const meta = el('div', 'meta', `<b>${escapeHtml(sk.name)}</b> <span class="dim">Lv ${L}${slot >= 0 ? ` · [${SLOT_LABELS[slot]}]` : ''}</span>${masteryHtml(sk, true)}<p>${describe(sk, L, skillDmg(sk, L))}</p>`);
     it.appendChild(meta);
     if (selected === sk.id) it.style.borderColor = '#ffe2a0';
     makeDrag(it, sk);

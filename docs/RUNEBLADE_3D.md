@@ -1,5 +1,12 @@
 # Death Knight Runeblade: 3D model
 
+> **The equipped sword flies first.** By default the Death Knight's flying sword (the familiar, its swings, its own sword
+> skills and the Obliteration) is his *equipped* greatsword, whole: a 2D sprite (`heldFree` in `src/gfx/heldart.js`) or,
+> with the setting `dkBlade: 'model'`, the same design's live three.js model (`src/gfx/heldmodel3d.js`, files in
+> `assets/models/held/greatswords/`). Out of a fight and in town it rests across his back. The Runeblade below shows when
+> he holds no sword with whole art, or with `dkBlade: 'runeblade'`. Compare the looks in `tools/dkblade.html`; test with
+> `tools/tests/dkblade.js`.
+
 The Death Knight's class signature sword (`src/game/sigs/deathknight.js`) is a real 3D model, drawn by
 `src/gfx/runeblade3d.js`. It covers both:
 

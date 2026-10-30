@@ -363,7 +363,7 @@ export function drawMeasure(ctx, o) {
 
 // ---------------------------------------------------------------- the measure over the Bard's head
 const HARM = ['#f2e6c4', '#7cd4ff', '#62ffa4', '#ffd84a', '#ff72d2', '#ffffff'];
-const melodyOf = (sc) => melodies()[sc && sc.mel >= 0 ? sc.mel : 0];
+const melodyOf = (sc) => (sc && sc.song) || melodies()[sc && sc.mel >= 0 ? sc.mel : 0];   // a Music Sheet's song, or the bar's melody
 /** Layout of the Bard's composing staff (world px): left x, top line y, width, line spacing. */
 export function scoreLayout(p) {
   const u = G.touch ? 4 : 5, w = G.touch ? 140 : 172;
@@ -443,6 +443,32 @@ export class ScoreFx {
     ctx.globalAlpha = 1;
   }
 }
+/** A Music Sheet's icon: a curled page of parchment with a staff; written ones carry notes, locked ones a wax seal. */
+const sheetIcons = new Map();
+export function sheetIcon(item, size = 48) {
+  const key = `${item.locked ? 1 : 0}${item.text && item.text.trim() ? 1 : 0}|${size}`;
+  let c = sheetIcons.get(key);
+  if (c) return c;
+  c = makeCanvas(size, size);
+  const x = c.getContext('2d'), k = size / 48;
+  x.save(); x.translate(size / 2, size / 2); x.rotate(-0.12); x.scale(k, k);
+  x.fillStyle = 'rgba(0,0,0,0.45)'; x.fillRect(-14, -17, 30, 38);
+  const g = x.createLinearGradient(-15, -19, 15, 19); g.addColorStop(0, '#f4e6c0'); g.addColorStop(1, '#c8aa72');
+  x.fillStyle = g; x.beginPath(); x.moveTo(-16, -19); x.lineTo(13, -19); x.quadraticCurveTo(17, -19, 15, -15); x.lineTo(15, 19); x.lineTo(-12, 19); x.quadraticCurveTo(-17, 19, -16, 15); x.closePath(); x.fill();
+  x.strokeStyle = '#6a4a26'; x.lineWidth = 1.2; x.stroke();
+  x.strokeStyle = 'rgba(60,40,24,0.75)'; x.lineWidth = 0.8;
+  for (const y0 of [-13, 2]) for (let l = 0; l < 5; l++) { x.beginPath(); x.moveTo(-12, y0 + l * 2.4); x.lineTo(12, y0 + l * 2.4); x.stroke(); }
+  if (item.text && item.text.trim()) { drawGlyph(x, 'e2', -4, -9, 0.75, '#2a1a0c'); drawGlyph(x, 'q', 6, -11, 0.75, '#2a1a0c'); drawGlyph(x, 's2', 0, 6, 0.75, '#2a1a0c'); }
+  if (item.locked) {
+    x.fillStyle = '#9a1a1a'; x.beginPath(); x.arc(9, 14, 6, 0, TAU); x.fill();
+    x.fillStyle = '#d84040'; x.beginPath(); x.arc(8, 13, 3.6, 0, TAU); x.fill();
+    drawGlyph(x, 'e', 8.5, 13.5, 0.4, '#ffd88a');
+  }
+  x.restore();
+  sheetIcons.set(key, c);
+  return c;
+}
+
 /** A ring of glyphs springing off the staff when a measure completes. */
 export function cadenceFx(p, tier, glyphs) {
   addEffect(new Ring(p.x, p.y, 0.2, 2.4, 0.5, TIERS[tier].glow, 4, { fill: true }));

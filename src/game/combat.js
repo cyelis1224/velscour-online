@@ -14,7 +14,7 @@ import { augHit } from './augments.js';
 import { classHitFx } from '../gfx/classfx.js';
 import { astroOnKill } from './astronomer.js';
 import { sigKill } from './signature.js';
-import { armorDiv } from '../data/depth.js';
+import { armorDiv, depthLevel, shownDmg } from '../data/depth.js';
 import { relicProc } from './relicprocs.js';
 import { commissionKill } from './commissions.js';
 import { riftKill } from './rifts.js';
@@ -111,7 +111,8 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
     if (!o.silent && el) hitSpark(tgt.x, tgt.y, 28, el);
     return;
   }
-  if (byHero) Meter.add(Math.min(dmg, Math.max(0, tgt.hp)));
+  const tLvl = tgt.level || depthLevel((world && world.depth) || 1); // what the hero sees is shownDmg (data/depth.js), not raw power
+  if (byHero) Meter.add(shownDmg(Math.min(dmg, Math.max(0, tgt.hp)), tLvl));
   if (byHero && src && src.isPlayer && !o.dot) G.lastHit = tgt; // the HUD's target window
   if (byHero && src && src.isPlayer && o.sk && !o.dot) classHitFx(src, tgt, o.sk, el); // the class's own splash (gfx/classfx.js)
   tgt.hp -= dmg;
@@ -133,7 +134,7 @@ export function hit(src, tgt, amount, el = 'phys', o = {}) {
       damageText(tgt.x, tgt.y, z, dmg, o.dot ? 'dot' : 'hurt', '#ff4030');
       if (!o.dot) { sfx('hurt'); G.hurtFlash = Math.min(0.5, (G.hurtFlash || 0) + dmg / tgt.maxHp * 2); camera.shake(Math.min(8, 2 + (dmg / tgt.maxHp) * 30)); }
     } else if (byHero) {
-      damageText(tgt.x, tgt.y, z, dmg, crit ? 'crit' : o.dot ? 'dot' : 'hit', elem(el).glow);
+      damageText(tgt.x, tgt.y, z, Math.max(1, shownDmg(dmg, tLvl)), crit ? 'crit' : o.dot ? 'dot' : 'hit', elem(el).glow);
     }
   }
   if (!o.dot || chance(0.15)) {

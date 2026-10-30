@@ -3025,6 +3025,26 @@ body.touch .reliquary-panel .codex-cell {
   cursor: pointer;
   padding: 0;
 }
+/* the Bard's Tabs (loaded Music Sheets) and the sheet editor (ui/sheets.js) */
+.tab-row { margin-top: 6px; padding: 4px 6px 6px; background: rgba(20,12,6,.6); border: 1px solid var(--line); border-radius: 4px; font-size: 12px; max-width: 290px; }
+.tab-row-lbl { margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-slots { display: grid; grid-template-columns: repeat(5, 48px); gap: 6px; }
+.tslot { width: 48px; height: 48px; }
+.tslot.playing { box-shadow: 0 0 8px #ffd88a, inset 0 0 6px rgba(255,216,138,.5); border-color: #ffd88a; }
+.sheet-dialog { width: min(760px, 94vw); max-width: min(760px, 94vw); text-align: left; }
+.sheet-dialog h2 { text-align: center; }
+.sheet-fields { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.sheet-fields label { display: flex; align-items: center; gap: 6px; color: var(--gold); }
+.sheet-fields input { background: #120c06; color: #f2e6c4; border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font: 14px Georgia, serif; }
+.sheet-fields .sh-title { width: 240px; }
+.sheet-fields .sh-bpm { width: 70px; }
+.sh-text { width: 100%; box-sizing: border-box; height: 42vh; min-height: 120px; resize: vertical; background: #f2e6c4; color: #1e1408; border: 2px solid #6a4a26; border-radius: 3px; padding: 6px 8px;
+  font: 13px/1.25 Consolas, 'Courier New', monospace; white-space: pre; overflow: auto; tab-size: 4; }
+.sh-text[readonly] { background: #e4d4a8; }
+.sh-status { margin-top: 4px; font-size: 13px; min-height: 18px; }
+.sh-help { margin-top: 4px; font-size: 12px; color: #c8b8a0; }
+.sh-help summary { cursor: pointer; color: var(--gold); }
+.sh-help code { background: rgba(0,0,0,.4); padding: 0 3px; border-radius: 2px; }
 
 /* tooltip */
 #tooltip {
@@ -4918,7 +4938,6 @@ body.touch.portrait .help-keys {
     max-width: 48vw;
   }
 }
-
 body.touch .stash-panel .stash-grid {
   grid-template-columns: repeat(6, 36px);
   max-height: 52vh;
@@ -4936,6 +4955,21 @@ body.touch .panel {
 body.touch .paperdoll {
   grid-template-columns: repeat(4, 52px);
   grid-template-rows: repeat(4, 52px);
+}
+
+body.touch .tab-slots {
+  grid-template-columns: repeat(5, 40px);
+  gap: 5px;
+}
+
+body.touch .tslot {
+  width: 40px;
+  height: 40px;
+}
+
+body.touch .sh-text {
+  height: 34vh;
+  font-size: 12px;
 }
 
 body.touch .tree {
@@ -4966,7 +5000,6 @@ body.touch .skill-detail {
   width: 230px;
   font-size: 12px;
 }
-
 @media (max-width: 900px) {
   .class-grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
