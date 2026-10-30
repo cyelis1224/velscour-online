@@ -271,21 +271,57 @@ export const HUD = {
         gaugeBox.style.bottom = `${bar.height - potionY + 6}px`;
       }
 
-      // Position #special-actions (Madness & Smite buttons) to the left of the HP orb
+      // Position #special-actions (Madness & Smite buttons): In portrait, Madness flanks HP orb on left, Smite flanks MP orb on right
+      const madnessBtn = $('#madness-btn');
+      const smiteBtn = $('#smite-btn');
       const spec = $('#special-actions');
-      if (spec) {
-        const hudBarRect = bar;
-        const lifeScreenLeft = hudBarRect.left + lifeFrameX;
-        const specW = portrait ? 96 : 112;
-        if (lifeScreenLeft > specW + 10) {
-          const leftPos = Math.max(8, lifeScreenLeft - specW - 8);
-          spec.style.left = `${leftPos}px`;
-          spec.style.bottom = `${hudBarRect.height - potionY - potionSize}px`;
-          spec.classList.remove('compact-portrait');
-        } else {
-          spec.style.left = '12px';
-          spec.style.bottom = `${hudBarRect.height + 8}px`;
-          spec.classList.add('compact-portrait');
+      if (portrait) {
+        const btnSize = 46;
+        const hudBarBottom = window.innerHeight - bar.bottom;
+        const btnBottom = hudBarBottom + (bar.height - frameY - frameH) + (frameH - btnSize) / 2;
+        if (madnessBtn) {
+          const mLeft = Math.max(4, lifeFrameX - btnSize - 6);
+          Object.assign(madnessBtn.style, {
+            position: 'absolute',
+            left: `${mLeft}px`,
+            right: 'auto',
+            bottom: `${btnBottom}px`,
+            top: 'auto',
+            width: `${btnSize}px`,
+            height: `${btnSize}px`,
+            zIndex: '6',
+          });
+        }
+        if (smiteBtn) {
+          const sLeft = Math.min(bar.width - btnSize - 4, manaFrameX + frameW + 6);
+          Object.assign(smiteBtn.style, {
+            position: 'absolute',
+            left: `${sLeft}px`,
+            right: 'auto',
+            bottom: `${btnBottom}px`,
+            top: 'auto',
+            width: `${btnSize}px`,
+            height: `${btnSize}px`,
+            zIndex: '6',
+          });
+        }
+      } else {
+        if (madnessBtn) madnessBtn.removeAttribute('style');
+        if (smiteBtn) smiteBtn.removeAttribute('style');
+        if (spec) {
+          const hudBarRect = bar;
+          const lifeScreenLeft = hudBarRect.left + lifeFrameX;
+          const specW = 112;
+          if (lifeScreenLeft > specW + 10) {
+            const leftPos = Math.max(8, lifeScreenLeft - specW - 8);
+            spec.style.left = `${leftPos}px`;
+            spec.style.bottom = `${hudBarRect.height - potionY - potionSize}px`;
+            spec.classList.remove('compact-portrait');
+          } else {
+            spec.style.left = '12px';
+            spec.style.bottom = `${hudBarRect.height + 8}px`;
+            spec.classList.add('compact-portrait');
+          }
         }
       }
 
@@ -337,6 +373,10 @@ export const HUD = {
       }
       const spec = $('#special-actions');
       if (spec) spec.removeAttribute('style');
+      const madnessBtn = $('#madness-btn');
+      if (madnessBtn) madnessBtn.removeAttribute('style');
+      const smiteBtn = $('#smite-btn');
+      if (smiteBtn) smiteBtn.removeAttribute('style');
 
       this.slots.forEach((s) => {
         const potion = typeof s.map === 'string';

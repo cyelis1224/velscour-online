@@ -7,6 +7,8 @@ import { el, escapeHtml } from '../core/util.js';
 import { sfx } from '../core/audio.js';
 import { net } from '../net/network.js';
 import { UI } from './ui.js';
+import { HUD } from './hud.js';
+import { TouchUI } from './touch.js';
 
 export const GameChat = {
   container: null,
@@ -381,7 +383,16 @@ export const GameChat = {
       }
     });
 
+    // In mobile portrait mode, default to minimized state
+    if (document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch)) {
+      this.isMinimized = true;
+      this.container.classList.add('minimized');
+      const toggleBtn = this.container.querySelector('#gc-btn-toggle');
+      if (toggleBtn) toggleBtn.innerHTML = '&#9650;';
+    }
+
     this.setupDragAndResize();
+    this.updatePortraitChatHeight();
   },
 
   setupDragAndResize() {
@@ -411,6 +422,8 @@ export const GameChat = {
     let initialTop = 0;
 
     const onHeaderPointerDown = (e) => {
+      // Don't drag if mobile portrait
+      if (document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch)) return;
       // Don't drag if clicked on button, tab, badge, input, etc.
       if (e.target.closest('button, input, select, textarea, a, .gc-badge')) return;
       if (e.button !== undefined && e.button !== 0) return; // primary click only
@@ -475,6 +488,7 @@ export const GameChat = {
     let initialHeight = 0;
 
     const onResizePointerDown = (e) => {
+      if (document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch)) return;
       if (e.button !== undefined && e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
@@ -534,8 +548,28 @@ export const GameChat = {
 
     // Keep within bounds on window resize
     window.addEventListener('resize', () => {
+      this.updatePortraitChatHeight();
       this.clampToViewport();
     });
+  },
+
+  updatePortraitChatHeight() {
+    const isPortrait = document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch);
+    if (!this.container) return;
+    if (isPortrait) {
+      const h = this.isMinimized ? 34 : Math.min(210, Math.round(window.innerHeight * 0.35));
+      document.documentElement.style.setProperty('--portrait-chat-h', `${h}px`);
+      const relayout = () => {
+        if (typeof HUD !== 'undefined') HUD.layoutMobile();
+        if (typeof TouchUI !== 'undefined') TouchUI.layout();
+      };
+      relayout();
+      setTimeout(relayout, 50);
+      setTimeout(relayout, 150);
+      setTimeout(relayout, 250);
+    } else {
+      document.documentElement.style.removeProperty('--portrait-chat-h');
+    }
   },
 
   clampToViewport() {
@@ -551,6 +585,7 @@ export const GameChat = {
 
   saveLayout() {
     if (!this.container) return;
+    if (document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch)) return;
     const rect = this.container.getBoundingClientRect();
     const layout = {
       left: Math.round(rect.left),
@@ -566,6 +601,7 @@ export const GameChat = {
 
   restoreLayout() {
     if (!this.container) return;
+    if (document.body.classList.contains('portrait') || (window.innerHeight > window.innerWidth && G.touch)) return;
     try {
       const raw = localStorage.getItem('velscour_chat_layout');
       if (!raw) return;
@@ -846,6 +882,7 @@ export const GameChat = {
     this.container.classList.toggle('minimized', this.isMinimized);
     const toggleBtn = this.container.querySelector('#gc-btn-toggle');
     if (toggleBtn) toggleBtn.innerHTML = this.isMinimized ? '&#9650;' : '&#9660;';
+    this.updatePortraitChatHeight();
   },
 
   cycleChannel() {

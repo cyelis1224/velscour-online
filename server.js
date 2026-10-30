@@ -55,7 +55,7 @@ function findBinary(dir, filterFn) {
       }
     }
     return best;
-  } catch (e) {}
+  } catch (e) { }
   return null;
 }
 

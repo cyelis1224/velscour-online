@@ -24,6 +24,8 @@ export const TouchUI = {
   init() {
     G.touchUI = this;
     const root = $('#touch-buttons');
+    root.innerHTML = '';
+    this.btns = [];
     for (let bar = 0; bar < 15; bar++) {
       const pos = POS[bar - 1] || [0, 0];
       const [ring, ang] = bar === 0 ? [0, 0] : pos;
@@ -88,13 +90,12 @@ export const TouchUI = {
     if (portrait) {
       const tile = Math.min(44, Math.max(32, (W - 40 - 24) / 7)), gap = 4;
       const trayH = tile * 2 + gap;
-      const safeBottom = parseFloat(getComputedStyle(document.body).getPropertyValue('--portrait-safe-bottom')) || 0;
-      // sit above the corner orb frames (hud.js layoutMobile sizes them the same way)
-      const orbTop = $('#hud-bar').getBoundingClientRect().bottom - Math.max(74, Math.min(98, W * .24)) * 296 / 270;
-      const trayTop = Math.max(H * .34, Math.min(H - trayH - safeBottom - 12, orbTop - trayH - 6));
-      const mainSize = Math.min(92, Math.max(72, W * .22));
+      const hudBarRect = $('#hud-bar').getBoundingClientRect();
+      const orbTop = hudBarRect.top + 6;
+      const trayTop = Math.max(H * .26, orbTop - trayH - 12);
+      const mainSize = Math.min(84, Math.max(72, W * .20));
       const logHeight = Math.min(H * .13, 100);
-      const logTop = Math.max(H * .34, trayTop - mainSize - logHeight - 32);
+      const logTop = Math.max(H * .20, trayTop - mainSize - logHeight - 24);
       Object.assign($('#log').style, { left: '8px', right: '8px', top: `${logTop}px`, bottom: 'auto', height: `${logHeight}px`, maxHeight: 'none' });
       const trayW = tile * 7 + gap * 6, x0 = (W - trayW) / 2;
       this.btns.forEach((t, i) => {
@@ -102,8 +103,11 @@ export const TouchUI = {
         t.bar = i; t.k.textContent = i === 0 ? 'ATK' : SLOT_LABELS[i];
         t.b.classList.remove('hidden');
         if (i === 0) {
-          const size = mainSize, x = W - size / 2 - 16, y = trayTop - size / 2 - 12;
-          Object.assign(t.b.style, { width: size + 'px', height: size + 'px', left: x - size / 2 + 'px', top: y - size / 2 + 'px' });
+          const size = mainSize;
+          // Position ATK button above skill slots 5 & 6 on the right side of the tray
+          const x = x0 + trayW - size - 4;
+          const y = trayTop - size - 12;
+          Object.assign(t.b.style, { width: size + 'px', height: size + 'px', left: x + 'px', top: y + 'px' });
         } else {
           const n = i - 1, col = n % 7, row = Math.floor(n / 7);
           Object.assign(t.b.style, { width: tile + 'px', height: tile + 'px', left: (x0 + col * (tile + gap)) + 'px', top: (trayTop + row * (tile + gap)) + 'px' });

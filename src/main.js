@@ -8,6 +8,7 @@ import { rand, TAU } from './core/util.js';
 import { UI, $ } from './ui/ui.js';
 import { HUD } from './ui/hud.js';
 import { TouchUI } from './ui/touch.js';
+import { GameChat } from './ui/chat.js';
 import { titleScreen } from './ui/screens.js';
 import { Cloud } from './game/cloud.js';
 import { Vendor } from './ui/vendor.js';
@@ -176,10 +177,19 @@ async function boot() {
   if (G.touch) { document.body.classList.add('touch'); G.settings.autoLoot = true; }
   G.input = input;
   G.controls = controls;
-  G.game = game;
-  resize();
-  window.addEventListener('resize', resize);
-  window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+  const onRotate = () => {
+    resize();
+    if (HUD.layoutMobile) HUD.layoutMobile();
+    if (TouchUI.layout) TouchUI.layout();
+    if (GameChat.updatePortraitChatHeight) GameChat.updatePortraitChatHeight();
+  };
+  onRotate();
+  window.addEventListener('resize', onRotate);
+  window.addEventListener('orientationchange', () => {
+    onRotate();
+    setTimeout(onRotate, 100);
+    setTimeout(onRotate, 250);
+  });
   initInput(G.canvas);
   initSpectate(); // taps that catch critters / aim SMITE without moving the hero (game/spectate.js)
   UI.init();
