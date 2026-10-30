@@ -21,7 +21,7 @@ function copyRecursive(src, dest) {
   }
 }
 
-const items = ['index.html', 'manifest.webmanifest', 'assets', 'css', 'src'];
+const items = ['index.html', 'manifest.webmanifest', 'assets', 'css', 'src', 'vendor', 'defense'];
 for (const item of items) {
   const src = path.join(root, item);
   const dest = path.join(out, item);

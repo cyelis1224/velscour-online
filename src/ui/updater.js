@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.1.9';
+export const CURRENT_BUILD_VERSION = '1.2.0';
 
 /**
  * Returns the effective client version.
@@ -191,13 +191,22 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.1.9' : currentVer,
+        serverVersion: forceTestUpdate ? '1.2.0' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.1.9' : currentVer,
+          version: forceTestUpdate ? '1.2.0' : currentVer,
           changelog: [
+            'Major expansion: Held 3D weapons & off-hands for all classes with 50 unique designs per weapon and elemental particle glows',
+            '10 Castle Overworld variants with custom layouts, stones, moats, and story dialogue',
+            '10 Sea of Sand Dune variants and massive 3D pyramids with deep burial chamber raid encounters',
+            'Integrated VELSCOUR DEFENSE tower defense card campaign behind the town Riftgate',
+            'Synchronized multiplayer world generation for Castle and Dune variants to ensure 100% party determinism',
+            'Host-authoritative wave triggers and spawn timers preventing multiplayer encounter desynchronization',
+            'Mobile pathfinding and typed array mask optimizations for smooth 60 FPS performance',
+            '3D bone gibs and gore physics overhaul',
+            'Vendored Three.js and custom canvas filter fallback for Safari/iOS compatibility',
             'Fixed multiplayer dungeon progression: exit portal now reliably unseals for all party members when the floor champion/guardian is slain, including remote and late-joining players',
             'Fine-tuned UI styling: experience bar placement, Velscour contact skull positioning, and inventory alignment',
             'Restored missing inventory stats grid, attribute allocation rows, and item rarity styles',

@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.1.9' };
+    return { version: '1.2.0' };
   }
 }
 
@@ -424,6 +424,15 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Major expansion: Held 3D weapons & off-hands for all classes with 50 unique designs per weapon and elemental particle glows",
+        "10 Castle Overworld variants with custom layouts, stones, moats, and story dialogue",
+        "10 Sea of Sand Dune variants and massive 3D pyramids with deep burial chamber raid encounters",
+        "Integrated VELSCOUR DEFENSE tower defense card campaign behind the town Riftgate",
+        "Synchronized multiplayer world generation for Castle and Dune variants to ensure 100% party determinism",
+        "Host-authoritative wave triggers and spawn timers preventing multiplayer encounter desynchronization",
+        "Mobile pathfinding and typed array mask optimizations for smooth 60 FPS performance",
+        "3D bone gibs and gore physics overhaul",
+        "Vendored Three.js and custom canvas filter fallback for Safari/iOS compatibility",
         "Fixed multiplayer dungeon progression: exit portal now reliably unseals for all party members when the floor champion/guardian is slain, including remote and late-joining players",
         "Fine-tuned UI styling: experience bar placement, Velscour contact skull positioning, and inventory alignment",
         "Restored missing inventory stats grid, attribute allocation rows, and item rarity styles",
@@ -457,8 +466,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.1.9'}`,
-          filename: `Velscour-${pkg.version || '1.1.9'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.2.0'}`,
+          filename: `Velscour-${pkg.version || '1.2.0'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -510,7 +519,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.1.9'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.2.0'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -827,7 +836,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.1.9';
+        const serverVer = getPackageInfo().version || '1.2.0';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -880,7 +889,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.1.9',
+          serverVersion: getPackageInfo().version || '1.2.0',
         }));
 
         if (reconnectedRoom) {

@@ -1,6 +1,6 @@
 {
   "name": "velscour",
-  "version": "1.1.9",
+  "version": "1.2.0",
   "description": "*A world built upon something that should have stayed dead.*",
   "main": "electron/main.js",
   "scripts": {
@@ -24,6 +24,8 @@
       "assets/**/*",
       "css/**/*",
       "src/**/*",
+      "vendor/**/*",
+      "defense/**/*",
       "index.html",
       "server.js",
       "manifest.webmanifest",
