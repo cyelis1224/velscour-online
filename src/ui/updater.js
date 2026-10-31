@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.2.4';
+export const CURRENT_BUILD_VERSION = '1.2.5';
 
 /**
  * Returns the effective client version.
@@ -191,13 +191,14 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.2.4' : currentVer,
+        serverVersion: forceTestUpdate ? '1.2.5' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.2.4' : currentVer,
+          version: forceTestUpdate ? '1.2.5' : currentVer,
           changelog: [
+            'Multiplayer Held Weapons & Off-Hands: remote party members now display equipped main-hand weapons, off-hand shields/focuses, elemental weapon glows, live equipment swaps, and Death Knight greatsword back-resting & combat flight',
             'Level Cap 3000 & Uncapped Infernal Marks: hero progression extended to level 3000 across Endless Torment depths up to D6600, with uncapped Infernal Marks',
             'Skill Macros (R E Y U O & Touch M1-M5): 5 customizable skill macro slots per hero with Keep up auto-recast and full online party synchronization',
             'Thorns Scaling & Weapon Base Display: endgame thorns scale with hero fortitude and attacker level; added Weapon Base to the Character Sheet',
