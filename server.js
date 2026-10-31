@@ -32,7 +32,7 @@ function getPackageInfo() {
   try {
     return JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   } catch (e) {
-    return { version: '1.2.3' };
+    return { version: '1.2.4' };
   }
 }
 
@@ -431,6 +431,11 @@ const server = http.createServer((req, res) => {
       serverTime: Date.now(),
       buildTime: latestBuild,
       changelog: [
+        "Level Cap 3000 & Uncapped Infernal Marks: hero progression extended to level 3000 across Endless Torment depths up to D6600, with uncapped Infernal Marks (Vitality life multiplier, Precision crit chance & crit damage, Fortune extra drops, Haste rift time)",
+        "Skill Macros (R E Y U O & Touch M1-M5): 5 customizable skill macro slots per hero with 'Keep up' automatic buff recast when enemies are nearby and full online party synchronization",
+        "Thorns Scaling & Weapon Base Display: endgame thorns scale with hero fortitude and attacker level; normalized weapon damage numbers and added Weapon Base to the Character Sheet",
+        "Compact Big-Number Notation & Gold Scaling: added Qa through Dc and scientific notation suffixes along with high-depth logarithmic gold scaling",
+        "Velscour Unbound & Sealed Treasure Updates: Unbound prioritizes uncollected Heirlooms + 3 Abyssal items + 20 Infernal Marks; ring augments display calculated hit damage; sealed items blocked from socketing/upgrading/enchanting until unsealed",
         "Mobile portrait mode redesign with upward-expanding bottom-docked chat, flank special action buttons, repositioned ATK button, enlarged 108px minimap, and Android fullSensor dynamic rotation",
         "Organized Settings dialog into 5 clean category tabs (General, Audio, Graphics, HUD & UI, Auto-Play) with instant responsive navigation across desktop and mobile",
         "Multiplayer Bard Music Synchronization: live melodic note playback, rhythm audio, cadences, staff notation, and custom sheet titles replicated to all party members",
@@ -484,8 +489,8 @@ const server = http.createServer((req, res) => {
       downloads: {
         android: {
           available: !!artifacts.android,
-          url: `/download/android?v=${pkg.version || '1.2.3'}`,
-          filename: `Velscour-${pkg.version || '1.2.3'}.apk`,
+          url: `/download/android?v=${pkg.version || '1.2.4'}`,
+          filename: `Velscour-${pkg.version || '1.2.4'}.apk`,
           size: artifacts.android ? artifacts.android.size : 0,
           sizeFormatted: artifacts.android ? formatBytes(artifacts.android.size) : null
         },
@@ -537,7 +542,7 @@ const server = http.createServer((req, res) => {
       res.end('Android APK not found on server.');
       return;
     }
-    const dlName = `Velscour-${pkg.version || '1.2.3'}.apk`;
+    const dlName = `Velscour-${pkg.version || '1.2.4'}.apk`;
     streamFile(req, res, artifacts.android.path, dlName, 'application/vnd.android.package-archive');
     return;
   }
@@ -854,7 +859,7 @@ wss.on('connection', (ws) => {
         if (msg.reconnectId) {
           clientData.id = msg.reconnectId;
         }
-        const serverVer = getPackageInfo().version || '1.2.3';
+        const serverVer = getPackageInfo().version || '1.2.4';
         if (msg.clientVersion && compareVersions(serverVer, msg.clientVersion) > 0) {
           ws.send(JSON.stringify({
             type: 'version_outdated',
@@ -907,7 +912,7 @@ wss.on('connection', (ws) => {
           channel: DEFAULT_CHANNEL,
           players: getChannelPlayers(DEFAULT_CHANNEL),
           rooms: getRoomList(),
-          serverVersion: getPackageInfo().version || '1.2.3',
+          serverVersion: getPackageInfo().version || '1.2.4',
         }));
 
         if (reconnectedRoom) {

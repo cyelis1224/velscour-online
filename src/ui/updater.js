@@ -2,7 +2,7 @@
 import { UI } from './ui.js';
 import { sfx } from '../core/audio.js';
 
-export const CURRENT_BUILD_VERSION = '1.2.3';
+export const CURRENT_BUILD_VERSION = '1.2.4';
 
 /**
  * Returns the effective client version.
@@ -191,13 +191,18 @@ export async function checkForUpdates({ force = false } = {}) {
       const currentVer = getClientVersion();
       const fallback = {
         hasUpdate: forceTestUpdate,
-        serverVersion: forceTestUpdate ? '1.2.3' : currentVer,
+        serverVersion: forceTestUpdate ? '1.2.4' : currentVer,
         clientVersion: currentVer,
         offline: true,
         baseUrl,
         data: {
-          version: forceTestUpdate ? '1.2.3' : currentVer,
+          version: forceTestUpdate ? '1.2.4' : currentVer,
           changelog: [
+            'Level Cap 3000 & Uncapped Infernal Marks: hero progression extended to level 3000 across Endless Torment depths up to D6600, with uncapped Infernal Marks',
+            'Skill Macros (R E Y U O & Touch M1-M5): 5 customizable skill macro slots per hero with Keep up auto-recast and full online party synchronization',
+            'Thorns Scaling & Weapon Base Display: endgame thorns scale with hero fortitude and attacker level; added Weapon Base to the Character Sheet',
+            'Compact Big-Number Notation & Gold Scaling: added Qa through Dc and scientific notation suffixes along with high-depth logarithmic gold scaling',
+            'Velscour Unbound & Sealed Treasure Updates: Unbound prioritizes uncollected Heirlooms + 3 Abyssal items + 20 Infernal Marks; ring augments show hit damage; sealed items blocked from socketing/upgrading/enchanting',
             'Bard Music Sheets: paste tablature or note names, lock sheets, and load them into 5 Tab slots under paper doll to play songs during combat',
             'Death Knight 3D Flying Greatsword: equipped two-handed blade flies beside hero and rests on back with 50 unique greatsword designs',
             'Fixed castle drawbridges across all maps so lowered bridges rest flush against the stone pier without floating',
