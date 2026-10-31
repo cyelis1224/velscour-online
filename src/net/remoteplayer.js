@@ -146,20 +146,24 @@ export class RemotePlayer extends Creature {
 
   gearFx() {
     if (G.settings.gearFx === false) return null;
-    const eq = this.gear || {};
-    const fx = gearFxOf(eq.body, this.classId) || gearFxOf(eq.head, this.classId);
-    if (!fx) return null;
-    const fin = (gearFxOf(eq.body, this.classId) ? finishOf(eq.body, this.classId) : finishOf(eq.head, this.classId)) || 'iron';
-    return { fx, col: fxColor(fx, fin) };
+    const b = this.gear?.body, fx = b && gearFxOf(b, this.classId);
+    return fx ? { fx, col: fxColor(fx, finishOf(b, this.classId), b.rarity || 0) } : null;
   }
 
   drawArtLayer(ctx, layer, art) {
-    if (art) {
+    if (!art || typeof art !== 'object') return;
+    try {
       const g = this.gearFx();
       if (g) drawGearFx(ctx, this, g.fx, g.col, layer, art);
-      if (layer === 'front' && this.heldArt) drawHeldLayer(ctx, this, this.heldArt.held, this.heldArt.base, 'front');
+      if (layer === 'front' && this.heldArt && G.settings.heldGear !== false) {
+        drawHeldLayer(ctx, this, this.heldArt.held, this.heldArt.base, art);
+      }
+      if (layer === 'back' && this.classId === 'death_knight') {
+        bladeOnBack(ctx, this, art, this.heldArt?.base);
+      }
+    } catch (e) {
+      console.warn('RemotePlayer drawArtLayer error:', e);
     }
-    if (layer === 'back' && this.classId === 'death_knight') bladeOnBack(ctx, this);
   }
 
   updateFromNetwork(state) {

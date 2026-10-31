@@ -259,12 +259,13 @@ function sparkleSpots(base, cls) {
   spots.set(base, s);
   return s;
 }
-const gearCol = (it) => { const f = finishOf(it); return hexToRgb(f?.glow || RARITY[it.rarity]?.color || '#ffffff'); };
+const gearCol = (it, cls) => { const f = finishOf(it, cls); return hexToRgb(f?.glow || RARITY[it?.rarity || 0]?.color || '#ffffff'); };
 /**
  * Draw the hero's gear effects over his image: gem dots and rarity particles on what he holds, sparkles on rare armor
  * and helmets. `where` is Creature.drawArt's { x, y, dx, dy, k, sq, flip }, `base` the hero image without the gear.
  */
 export function drawHeldLayer(ctx, p, held, base, where) {
+  if (!where || typeof where !== 'object') return;
   const fx = G.settings.heldFx !== false, sgn = where.flip ? -1 : 1, HD = (base?.width || 512) / W, sq = where.sq || 1;
   const map = (ax, ay) => [where.x + sgn * (where.dx + ax * HD * where.k), where.y + where.dy + ay * HD * where.k * sq];
   const s = HD * where.k, t = G.time || 0;
@@ -277,6 +278,6 @@ export function drawHeldLayer(ctx, p, held, base, where) {
   if (top >= 4) addLight(p.x, p.y, 1.4 + (top - 4) * 0.8, 0.3);
   const eq = (p.char?.equip && shownEquip(p.char)) || p.gear;
   if (base && eq && ((eq.body?.rarity | 0) >= 2 || (eq.head?.rarity | 0) >= 2)) {
-    drawGearSparkle(ctx, sparkleSpots(base, p.classId), { body: eq.body && { rarity: eq.body.rarity, col: gearCol(eq.body) }, head: eq.head && { rarity: eq.head.rarity, col: gearCol(eq.head) } }, t, map, s, { size: 1.3 });
+    drawGearSparkle(ctx, sparkleSpots(base, p.classId), { body: eq.body && { rarity: eq.body.rarity, col: gearCol(eq.body, p.classId) }, head: eq.head && { rarity: eq.head.rarity, col: gearCol(eq.head, p.classId) } }, t, map, s, { size: 1.3 });
   }
 }

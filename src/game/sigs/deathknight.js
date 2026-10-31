@@ -511,6 +511,7 @@ const REST_AFTER = 3, REST_FLY = 0.45; // seconds out of a fight before it goes 
  * always rests there; elsewhere while it is resting (out of a fight). Notes the pose for the flight to and from it.
  */
 export function bladeOnBack(ctx, p, where, base) {
+  if (!where || typeof where !== 'object') return;
   const S = p.sig?.cls === 'death_knight' ? p.sig.s : (p.classId === 'death_knight' ? { runes: [], swing: 0, rest: 1 } : null);
   if (!S || G.settings.signatures === false || p.dead) return;
   const HD = (base?.width || 512) / 128, sgn = where.flip ? -1 : 1, k = HD * where.k, top = gearMeta(p.classId)?.headTop ?? 75;
