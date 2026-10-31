@@ -180,7 +180,7 @@ const swordFlies = (cls, pc) => cls === 'death_knight' && !!pc.d.free && G.setti
 function heldPieces(cls, equip) {
   const fists = index?.fists?.[cls];
   if (!fists) return [];
-  const armor = clamp((equip.body && itemLook(equip.body)?.[0]) || 1, 1, fists.length), F = fists[armor - 1];
+  const armor = clamp((equip.body && itemLook(equip.body, cls)?.[0]) || 1, 1, fists.length), F = fists[armor - 1];
   const out = [];
   for (const slot of ['weapon', 'offhand']) {
     const it = equip[slot];
@@ -275,7 +275,7 @@ export function drawHeldLayer(ctx, p, held, base, where) {
   }
   if (!fx) return;
   if (top >= 4) addLight(p.x, p.y, 1.4 + (top - 4) * 0.8, 0.3);
-  const eq = p.char?.equip && shownEquip(p.char);
+  const eq = (p.char?.equip && shownEquip(p.char)) || p.gear;
   if (base && eq && ((eq.body?.rarity | 0) >= 2 || (eq.head?.rarity | 0) >= 2)) {
     drawGearSparkle(ctx, sparkleSpots(base, p.classId), { body: eq.body && { rarity: eq.body.rarity, col: gearCol(eq.body) }, head: eq.head && { rarity: eq.head.rarity, col: gearCol(eq.head) } }, t, map, s, { size: 1.3 });
   }

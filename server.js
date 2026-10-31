@@ -1274,9 +1274,26 @@ wss.on('connection', (ws) => {
 
       // ------------------------------------------------ In-Game State Relay
       case 'game_player_state': {
+        if (msg.gear) clientData.gear = msg.gear;
+        if (typeof msg.level === 'number') clientData.level = msg.level;
         if (!clientData.room) break;
         msg.id = clientData.id;
         broadcastToRoom(clientData.room, msg, ws);
+        break;
+      }
+
+      case 'update_gear': {
+        clientData.gear = msg.gear || null;
+        if (typeof msg.level === 'number') clientData.level = msg.level;
+        if (clientData.room) {
+          broadcastToRoom(clientData.room, {
+            type: 'game_player_gear',
+            id: clientData.id,
+            gear: clientData.gear,
+            level: clientData.level,
+          }, ws);
+        }
+        broadcastLobbyUpdate();
         break;
       }
 

@@ -85,22 +85,22 @@ async function loadClassGear(cls) {
 const classGearCache = new Map();
 
 /** Load a class's gear art. Resolves to its meta, or null if the class has none (it then keeps its old sprite). */
-export async function loadGearArt(cls) {
+export async function loadGearArt(cls, isPrimary = true) {
   if (classGearCache.has(cls)) {
     const data = classGearCache.get(cls);
-    if (!S.cls || S.cls === cls) Object.assign(S, data);
+    if (isPrimary || !S.cls || S.cls === cls) Object.assign(S, data);
     return data.meta;
   }
   try {
     if (!S.list) S.list = await fetch(BASE + 'classes.json' + V).then((r) => (r.ok ? r.json() : []));
     if (!S.list.includes(cls)) {
       classGearCache.set(cls, { cls, meta: null });
-      if (!S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
+      if (isPrimary || !S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
       return null;
     }
     const data = await loadClassGear(cls);
     classGearCache.set(cls, data);
-    if (!S.cls || S.cls === cls) {
+    if (isPrimary || !S.cls || S.cls === cls) {
       Object.assign(S, data);
       looks.clear(); icons.clear(); recolouredHelms.clear();
     }
@@ -108,10 +108,11 @@ export async function loadGearArt(cls) {
   } catch (e) {
     console.warn('gear art unavailable for', cls, e);
     classGearCache.set(cls, { cls, meta: null });
-    if (!S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
+    if (isPrimary || !S.cls || S.cls === cls) Object.assign(S, { cls, meta: null });
     return null;
   }
 }
+export const gearSrc = (cls) => (cls && classGearCache.get(cls)?.meta ? classGearCache.get(cls) : S);
 export const gearMeta = (cls) => (S.cls === cls && S.meta ? S.meta : classGearCache.get(cls)?.meta || null);
 
 // ------------------------------------------------------------------ looks of items
@@ -133,10 +134,14 @@ function fxFor(rarity) {
  * first use from the item's rarity and level and kept on the item (so saves keep it); null without gear art.
  */
 export function itemLook(item, src = S) {
-  if (!item || (item.slot !== 'body' && item.slot !== 'head') || !src.meta) return null;
+  if (!item || (item.slot !== 'body' && item.slot !== 'head')) return null;
+  if (typeof src === 'string') src = gearSrc(src);
+  if (!src || !src.meta) {
+    return Array.isArray(item.look) && item.look[3] === LOOK_GEN ? item.look : null;
+  }
   if (item.slot === 'head') {
     const designs = src.helmetHelms?.meta.designs;
-    if (!designs?.length) return null;
+    if (!designs?.length) return Array.isArray(item.look) && item.look[3] === LOOK_GEN ? item.look : null;
     if (!item.look || item.look[3] !== LOOK_GEN || item.look[0] > designs.length) {
       // a design of the helm's rarity (three sets each). Sets 02/03 have Mythic in Legendary's place, so a Legendary helm
       // also rolls those Mythics: three designs, while Mythic keeps its own two.
@@ -154,8 +159,8 @@ export function itemLook(item, src = S) {
   return item.look;
 }
 const helmetSet = () => 'helmet';
-export const finishOf = (item) => { const l = itemLook(item); return l && l[1] ? PALETTES[l[1]] : null; };
-export const gearFxOf = (item) => { const l = itemLook(item); return l && l[2] >= 0 ? GEAR_FX[l[2]] || null : null; };
+export const finishOf = (item, cls = null) => { const l = itemLook(item, cls || S); return l && l[1] ? PALETTES[l[1]] : null; };
+export const gearFxOf = (item, cls = null) => { const l = itemLook(item, cls || S); return l && l[2] >= 0 ? GEAR_FX[l[2]] || null : null; };
 
 // ------------------------------------------------------------------ palettes
 const lutCache = new Map();
@@ -311,7 +316,7 @@ export function heroLook(cls, body, head, src = null, outCache = looks) {
     x.scale(place.dw / actualSrc[set + 'Helms'].meta.frame[0], place.dh / actualSrc[set + 'Helms'].meta.frame[1]);
     x.drawImage(toCanvas(hp, ...actualSrc[set + 'Helms'].meta.frame), -cx, -cy); x.restore();
   }
-  if (outCache.size >= 16) outCache.delete(outCache.keys().next().value);
+  if (outCache.size >= 32) outCache.delete(outCache.keys().next().value);
   outCache.set(key, c);
   return c;
 }

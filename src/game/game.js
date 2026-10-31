@@ -90,7 +90,7 @@ import { loadVelscourThrone } from '../gfx/velscourthrone.js';
 import { offerCommissions, setupCommissions, commissionClear, wantedBiomes, LINE_BY_ID, commState } from './commissions.js';
 import { titleScreen, hide as hideScreen, deathScreen, victoryScreen, pauseMenu, helpDialog } from '../ui/screens.js';
 import { openLobby } from '../ui/lobby.js';
-import { net } from '../net/network.js';
+import { net, serializeShownGear, gearSignature } from '../net/network.js';
 import { RemotePlayer } from '../net/remoteplayer.js';
 import { updateAutomapPartyRoster } from '../ui/partyroster.js';
 import { GameChat } from '../ui/chat.js';
@@ -249,6 +249,7 @@ function attachNetListeners() {
       G.remotePlayers.set(p.id, rp);
       UI.log(`<b style="color:#7ab8ff">${escapeHtml(p.name)}</b> (Lv ${p.level} ${CLASSES[p.classId]?.name || ''}) joined the room.`, '#ffd860');
       sfx('portal');
+      this._lastSentGearKey = null;
       if (G.player && G.player.classId === 'bard' && G.char?.tabs) {
         net.sendBardTabs(G.char.tabs, G.char.tabAt);
       }
@@ -369,7 +370,16 @@ function attachNetListeners() {
       if (typeof state.maxHp === 'number') rp.maxHp = state.maxHp;
       if (typeof state.mana === 'number') rp.mana = state.mana;
       if (typeof state.maxMana === 'number') rp.maxMana = state.maxMana;
+      if (state.gear) rp.updateFromNetwork({ gear: state.gear, level: state.level, classId: state.classId });
       rp.dead = (rp.hp <= 0);
+    }
+  });
+
+  net.on('game_player_gear', (data) => {
+    if (!data || data.id === net.myId) return;
+    const rp = G.remotePlayers?.get(data.id);
+    if (rp && data.gear) {
+      rp.updateFromNetwork({ gear: data.gear, level: data.level });
     }
   });
 
@@ -2391,34 +2401,14 @@ export const game = {
               }
             }
           }
-          const shown = shownEquip(G.char);
-          const equipHead = shown?.head;
-          const equipBody = shown?.body;
-          const gearKey = (equipHead ? equipHead.base + (equipHead.look ? equipHead.look.join(',') : '') : '') + '|' +
-                          (equipBody ? equipBody.base + (equipBody.look ? equipBody.look.join(',') : '') : '');
+          const gearObj = serializeShownGear(G.char);
+          const gearKey = gearSignature(gearObj);
           const gearChanged = (!this._lastSentGearKey || this._lastSentGearKey !== gearKey || (this._gearHeartbeatT = (this._gearHeartbeatT || 0) + 0.05) > 3.0);
           if (gearChanged) {
             this._lastSentGearKey = gearKey;
             this._gearHeartbeatT = 0;
           }
-          const gearPayload = gearChanged ? {
-            head: equipHead ? {
-              slot: 'head',
-              type: 'gear',
-              base: equipHead.base,
-              rarity: equipHead.rarity ?? 0,
-              ilvl: equipHead.ilvl ?? 1,
-              look: Array.isArray(equipHead.look) ? [...equipHead.look] : null,
-            } : null,
-            body: equipBody ? {
-              slot: 'body',
-              type: 'gear',
-              base: equipBody.base,
-              rarity: equipBody.rarity ?? 0,
-              ilvl: equipBody.ilvl ?? 1,
-              look: Array.isArray(equipBody.look) ? [...equipBody.look] : null,
-            } : null,
-          } : null;
+          const gearPayload = gearChanged ? gearObj : null;
 
           net.sendPlayerState({
             name: G.char?.name || 'Hero',

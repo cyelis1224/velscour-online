@@ -73,7 +73,7 @@ function runeMarks(ctx, line, runes, face, k, ga) {
 }
 /** His equipped sword whole: the 2D sprite or the live 3D model, with its runes, gems and enchantments (false: none). */
 function equipped(ctx, p, x, y, a, len, runes, t, spin, tilt) {
-  const it = p.char?.equip?.weapon, mode = G.settings.dkBlade || 'sprite';
+  const it = p.char?.equip?.weapon || p.gear?.weapon, mode = G.settings.dkBlade || 'sprite';
   if (!it || mode === 'runeblade') return false;
   const f = heldFree(it, p.classId), m3 = mode === 'model' && heldModel3DReady(it, p.classId);
   if (!f && !m3) return false;
@@ -417,8 +417,8 @@ function drawTrail(ctx, F, col) {
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
 }
 function drawFam(ctx, p, s, t) {
-  const F = s.fam, rest = s.rest || 0;
-  if (!F || s.swing > 0 || rest >= 1) return; // swinging, or resting on his back (bladeOnBack)
+  const F = s.fam, rest = s.rest ?? 1;
+  if (!F || s.swing > 0 || rest >= 1 || p.world?.kind === 'town') return; // swinging, or resting on his back (bladeOnBack)
   const col = s.runes.length ? tint(s) : look(p).glow;
   let [hx, hy, L] = hiltOf(F), a = F.a, spin = F.spin, tilt = F.tilt;
   const B = p._bladeBack;
@@ -460,8 +460,13 @@ export default {
     }
     if (!p.isRemotePlayer && s.runes.length >= RUNES && s.swing <= 0 && (s.wait = (s.wait || 0) - dt) <= 0) { s.wait = 0.2; if (crowd(p, 4.5)) this.fire(p, s); }
     famUpdate(p, s, dt);
+    if (p.world?.kind === 'town') {
+      s.idle = 99;
+      s.rest = 1;
+      return;
+    }
     // to his back out of a fight, off it when the fighting starts (he strikes or casts, or the sword fights on its own)
-    if (s.fam?.act || s.swing > 0) s.idle = 0;
+    if (s.fam?.act || s.swing > 0 || (p.isRemotePlayer && foesNear(p, p.x, p.y, 5).length > 0)) s.idle = 0;
     s.idle += dt; s.rest = clamp01((s.rest ?? 1) + (s.idle > REST_AFTER ? dt : -dt) / REST_FLY);
   },
   fill: (s) => s.runes.length / RUNES,
@@ -506,7 +511,7 @@ const REST_AFTER = 3, REST_FLY = 0.45; // seconds out of a fight before it goes 
  * always rests there; elsewhere while it is resting (out of a fight). Notes the pose for the flight to and from it.
  */
 export function bladeOnBack(ctx, p, where, base) {
-  const S = p.sig?.cls === 'death_knight' ? p.sig.s : null;
+  const S = p.sig?.cls === 'death_knight' ? p.sig.s : (p.classId === 'death_knight' ? { runes: [], swing: 0, rest: 1 } : null);
   if (!S || G.settings.signatures === false || p.dead) return;
   const HD = (base?.width || 512) / 128, sgn = where.flip ? -1 : 1, k = HD * where.k, top = gearMeta(p.classId)?.headTop ?? 75;
   const ax = 44, ay = top - 2, aa = 0.92; // the guard (art px, by his ear: the grip and pommel stand over his shoulder) and the blade's angle

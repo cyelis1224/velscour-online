@@ -38,7 +38,13 @@ export function getItem(ref) {
 export function changed() {
   G.player.recompute();
   UI.refresh();
-  G.game && G.game.autosave();
+  if (G.game) {
+    G.game._lastSentGearKey = null;
+    G.game.autosave();
+  }
+  if (net && G.char) {
+    net.sendGearUpdate(G.char);
+  }
 }
 
 export function equipFromBag(idx, slot) {

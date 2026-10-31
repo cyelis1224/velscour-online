@@ -2,6 +2,60 @@ import { G } from '../state.js';
 import { getClientVersion } from '../ui/updater.js';
 import { sanitizeBardTabs } from '../data/tabs.js';
 import { shownEquip } from '../data/items.js';
+import { itemLook, gearSrc } from '../core/gearart.js';
+import { heldLook } from '../gfx/heldart.js';
+
+export function serializeGearItem(item, slot, classId = null) {
+  if (!item) return null;
+  const s = slot || item.slot;
+  if (!item.slot && s) item.slot = s;
+  if (!Array.isArray(item.look)) {
+    if (s === 'head' || s === 'body') {
+      itemLook(item, classId ? gearSrc(classId) : undefined);
+    } else if (s === 'weapon' || s === 'offhand') {
+      heldLook(item);
+    }
+  }
+  return {
+    type: 'gear',
+    slot: s,
+    base: item.base || null,
+    rarity: item.rarity ?? 0,
+    ilvl: item.ilvl ?? 1,
+    look: Array.isArray(item.look) ? [...item.look] : null,
+    legendary: item.legendary || null,
+    affixes: Array.isArray(item.affixes)
+      ? item.affixes.filter(a => a && a.s && a.s.endsWith('Pct')).map(a => ({ s: a.s, v: a.v }))
+      : undefined,
+    gems: Array.isArray(item.gems)
+      ? item.gems.filter(Boolean).map(g => ({ gem: g.gem, tier: g.tier }))
+      : undefined,
+  };
+}
+
+export function serializeShownGear(charData) {
+  if (!charData) return null;
+  const eq = shownEquip(charData) || {};
+  const cls = charData.classId || null;
+  return {
+    head: serializeGearItem(eq.head, 'head', cls),
+    body: serializeGearItem(eq.body, 'body', cls),
+    weapon: serializeGearItem(eq.weapon, 'weapon', cls),
+    offhand: serializeGearItem(eq.offhand, 'offhand', cls),
+  };
+}
+
+export function gearSignature(gear) {
+  if (!gear) return '';
+  const part = (it) => {
+    if (!it) return '';
+    const lk = Array.isArray(it.look) ? it.look.join(',') : '';
+    const gm = Array.isArray(it.gems) ? it.gems.map(g => g?.gem || '').join(',') : '';
+    const af = Array.isArray(it.affixes) ? it.affixes.map(a => `${a?.s || a?.id}:${a?.v}`).join(',') : '';
+    return `${it.base || ''}:${it.rarity ?? 0}:${it.legendary || ''}:${lk}:${gm}:${af}`;
+  };
+  return `${part(gear.head)}|${part(gear.body)}|${part(gear.weapon)}|${part(gear.offhand)}`;
+}
 
 class NetworkManager {
   constructor() {
@@ -139,18 +193,6 @@ class NetworkManager {
       return;
     }
 
-function serializeGearItem(item, slot) {
-  if (!item) return null;
-  return {
-    type: 'gear',
-    slot: slot || item.slot,
-    base: item.base || null,
-    rarity: item.rarity ?? 0,
-    ilvl: item.ilvl ?? 1,
-    look: Array.isArray(item.look) ? [...item.look] : null,
-  };
-}
-
     this.ws.onopen = () => {
       this.connected = true;
       this.simulated = false;
@@ -166,15 +208,7 @@ function serializeGearItem(item, slot) {
         reconnectId: this.myId,
         reconnectRoom: activeRoom || null,
         clientVersion: getClientVersion(),
-        gear: (() => {
-          const eq = shownEquip(this.charData);
-          return {
-            head: serializeGearItem(eq.head, 'head'),
-            body: serializeGearItem(eq.body, 'body'),
-            weapon: serializeGearItem(eq.weapon, 'weapon'),
-            offhand: serializeGearItem(eq.offhand, 'offhand'),
-          };
-        })(),
+        gear: serializeShownGear(this.charData),
       });
       this.emit('connected', { url, isReconnect });
     };
@@ -389,6 +423,10 @@ function serializeGearItem(item, slot) {
         this.emit('game_player_state', msg);
         break;
 
+      case 'game_player_gear':
+        this.emit('game_player_gear', msg);
+        break;
+
       case 'game_skill_cast':
         this.emit('game_skill_cast', msg);
         break;
@@ -516,17 +554,12 @@ function serializeGearItem(item, slot) {
       { id: 'b_8', name: 'Duke Teapot', classId: 'death_knight', level: 71, title: 'Duke' },
     ];
 
-    const myEq = shownEquip(this.charData);
     const myPlayer = {
       id: this.myId,
       name: this.charData?.name || 'Hero',
       classId: this.charData?.classId || 'paladin',
       level: this.charData?.level || 1,
-      gear: {
-        head: serializeGearItem(myEq.head, 'head'),
-        body: serializeGearItem(myEq.body, 'body'),
-        weapon: serializeGearItem(myEq.weapon, 'weapon'),
-      },
+      gear: serializeShownGear(this.charData),
       title: (this.charData?.level || 1) >= 50 ? 'Matriarch' : 'Hero',
     };
 
@@ -736,6 +769,17 @@ function serializeGearItem(item, slot) {
     this.send({
       type: 'game_player_state',
       ...state,
+    });
+  }
+
+  sendGearUpdate(charData = G.char) {
+    if (!charData) return;
+    this.charData = charData;
+    const gear = serializeShownGear(charData);
+    this.send({
+      type: 'update_gear',
+      gear,
+      level: charData.level || 1,
     });
   }
 

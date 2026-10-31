@@ -1,13 +1,18 @@
 import { Creature, RIM } from '../game/creature.js';
 import { CLASSES } from '../data/classes.js';
 import { isoX, isoY, camera } from '../core/view.js';
-import { classSprite } from '../core/assets.js';
+import { classSprite, A } from '../core/assets.js';
 import { sfx } from '../core/audio.js';
 import { floatText, sparkle, burst, addEffect, Ring } from '../gfx/vfx.js';
-import { loadGearArt, heroLook, heroFrame, savedGearPreview } from '../core/gearart.js';
+import { loadGearArt, heroLook, heroFrame, savedGearPreview, gearFxOf, finishOf } from '../core/gearart.js';
+import { heldHero, drawHeldLayer, loadHeld } from '../gfx/heldart.js';
+import { drawGearFx, updateGearFx } from '../gfx/gearfx.js';
+import { fxColor } from '../data/gear.js';
+import { gearSignature } from './network.js';
 import { RemoteSummon } from './remotesummon.js';
 import { G } from '../state.js';
 import { sigOf, sigUpdate, sigCast, SIGNATURES } from '../game/signature.js';
+import { bladeOnBack } from '../game/sigs/deathknight.js';
 import { effects } from '../gfx/vfx.js';
 import { castSkill } from '../game/skillrun.js';
 import { castArtFx } from '../gfx/artfx.js';
@@ -58,8 +63,10 @@ export class RemotePlayer extends Creature {
     };
     this.char = {
       level: this.level,
+      classId: this.classId,
       rage: 100,
       skills: {},
+      equip: this.gear || {},
       tabs: [],
       tabAt: 0,
     };
@@ -68,9 +75,7 @@ export class RemotePlayer extends Creature {
       this.setBardTabs(info.bardTabs.tabs, info.bardTabs.tabAt);
     }
 
-    if (this.gear) {
-      this.updateGear(this.gear);
-    }
+    this.updateGear(this.gear || {});
   }
 
   skillDamage(sk, L = 1) {
@@ -114,24 +119,47 @@ export class RemotePlayer extends Creature {
   }
 
   async updateGear(gear) {
-    if (!gear) return;
-    this.gear = gear;
+    this.gear = gear || {};
+    if (!this.char) this.char = {};
+    this.char.equip = this.gear;
+    this._gearKey = gearSignature(this.gear);
     try {
-      await loadGearArt(this.classId);
-      const img = heroLook(this.classId, gear.body, gear.head);
-      if (img) {
-        const f = heroFrame(this.classId, this.spriteH);
-        if (f) {
-          this.gearArt = { img, frame: 0, cw: img.width, ch: img.height, ax: f.ax, ay: f.ay, k: f.k };
-        }
-      }
+      await Promise.all([
+        loadGearArt(this.classId, false),
+        loadHeld(this.classId, { equip: this.gear }),
+      ]);
     } catch (e) {
       console.warn('RemotePlayer gear art failed:', e);
     }
   }
 
   artFrame() {
-    return this.gearArt || null;
+    const eq = this.gear || {};
+    const base = heroLook(this.classId, eq.body, eq.head);
+    if (!base) return null;
+    const held = G.settings.heldGear !== false ? heldHero(base, this.classId, eq) : null;
+    const img = held ? held.img : base;
+    this.heldArt = { held, base };
+    const f = heroFrame(this.classId, this.spriteH);
+    return f ? { img, frame: 0, cw: img.width, ch: img.height, ax: f.ax, ay: f.ay, k: f.k } : null;
+  }
+
+  gearFx() {
+    if (G.settings.gearFx === false) return null;
+    const eq = this.gear || {};
+    const fx = gearFxOf(eq.body, this.classId) || gearFxOf(eq.head, this.classId);
+    if (!fx) return null;
+    const fin = (gearFxOf(eq.body, this.classId) ? finishOf(eq.body, this.classId) : finishOf(eq.head, this.classId)) || 'iron';
+    return { fx, col: fxColor(fx, fin) };
+  }
+
+  drawArtLayer(ctx, layer, art) {
+    if (art) {
+      const g = this.gearFx();
+      if (g) drawGearFx(ctx, this, g.fx, g.col, layer, art);
+      if (layer === 'front' && this.heldArt) drawHeldLayer(ctx, this, this.heldArt.held, this.heldArt.base, 'front');
+    }
+    if (layer === 'back' && this.classId === 'death_knight') bladeOnBack(ctx, this);
   }
 
   updateFromNetwork(state) {
@@ -148,19 +176,13 @@ export class RemotePlayer extends Creature {
     if (typeof state.maxHp === 'number') this.maxHp = state.maxHp;
     if (typeof state.mana === 'number') this.mana = state.mana;
     if (typeof state.maxMana === 'number') this.maxMana = state.maxMana;
+    if (typeof state.level === 'number') {
+      this.level = state.level;
+      if (this.char) this.char.level = state.level;
+    }
     if (state.worldKind) this.worldKind = state.worldKind;
     if (typeof state.depth === 'number') this.depth = state.depth;
 
-    if (state.gear) {
-      const g = state.gear;
-      const bKey = g.body ? (g.body.base || '') + (g.body.look ? g.body.look.join(',') : '') : '';
-      const hKey = g.head ? (g.head.base || '') + (g.head.look ? g.head.look.join(',') : '') : '';
-      const key = bKey + '|' + hKey;
-      if (this._gearKey !== key) {
-        this._gearKey = key;
-        this.updateGear(g);
-      }
-    }
     if (state.classId && state.classId !== this.classId) {
       this.destroySig();
       if (this._scoreFx) {
@@ -170,9 +192,19 @@ export class RemotePlayer extends Creature {
       }
       this.score = null;
       this.classId = state.classId;
+      if (this.char) this.char.classId = state.classId;
       this.cls = CLASSES[this.classId] || CLASSES.paladin;
       this.sig = null;
       this._img = null;
+      this._gearKey = null;
+    }
+
+    if (state.gear) {
+      const key = gearSignature(state.gear);
+      if (this._gearKey !== key) {
+        this._gearKey = key;
+        this.updateGear(state.gear);
+      }
     }
   }
 
@@ -250,6 +282,8 @@ export class RemotePlayer extends Creature {
     if (this.world) {
       sigUpdate(this, dt);
     }
+    const gfx = this.gearFx();
+    if (gfx) updateGearFx(this, gfx.fx, gfx.col, dt);
   }
 
   spriteImage() {
@@ -356,15 +390,9 @@ export class RemotePlayer extends Creature {
     }
 
     // Play class signature cast
-    if (this.sig) {
-      try {
-        const cid = this.classId === 'deathknight' ? 'death_knight' : this.classId;
-        const M = SIGNATURES[cid] || SIGNATURES[this.classId];
-        if (M && M.cast) {
-          M.cast(this, this.sig.s, sk, level || 1, tx, ty);
-        }
-      } catch (e) {}
-    }
+    try {
+      sigCast(this, sk, level || 1, tx, ty);
+    } catch (e) {}
 
     // Bard notation & audio composition replication
     if (this.classId === 'bard') {
