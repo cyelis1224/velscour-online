@@ -78,9 +78,9 @@ button { font-family: var(--font-head); }
 .orb-text { position: absolute; z-index: 10; font: 700 clamp(9px, 1.3vw, 14px) var(--font-head); color: #fff; text-shadow: 0 0 3px #000, 0 0 4px #000, 0 0 2px #000; text-align: center; pointer-events: none; white-space: nowrap; }
 #hud-slots { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
 #hud-slots .slot { pointer-events: auto; }
-.slot { position: absolute; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.slot { position: absolute; cursor: pointer; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 2px; }
 .slot canvas, .slot img.icon { width: 100%; height: 100%; border-radius: 2px; image-rendering: auto; }
-.slot .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.72); pointer-events: none; }
+.slot .cd { position: absolute; left: 0; right: 0; bottom: 0; max-height: 100%; background: rgba(0,0,0,.72); pointer-events: none; }
 .slot .cdtext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 clamp(9px, 1.2vw, 14px) var(--font-head); color: #fff; text-shadow: 0 0 3px #000; pointer-events: none; }
 .slot .count { position: absolute; right: 2px; bottom: 0; font: 700 clamp(9px, 1.1vw, 13px) var(--font-body); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000; pointer-events: none; }
 .slot .nomana { position: absolute; inset: 0; background: rgba(20,40,160,.45); pointer-events: none; }
@@ -714,7 +714,7 @@ body.touch .reliquary-panel .codex-cell { width: 34px; height: 34px; }
 #touch-buttons { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; }
 .tbtn { position: absolute; pointer-events: auto; border-radius: 50%; border: 2px solid var(--gold-dim); background: rgba(10,6,4,.7); overflow: hidden; box-shadow: 0 0 8px #000; display: flex; align-items: center; justify-content: center; }
 .tbtn canvas { width: 100%; height: 100%; border-radius: 50%; }
-.tbtn .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.7); }
+.tbtn .cd { position: absolute; left: 0; right: 0; bottom: 0; max-height: 100%; background: rgba(0,0,0,.7); }
 .tbtn .k { position: absolute; top: 2px; left: 0; right: 0; text-align: center; font: 700 9px var(--font-body); color: var(--gold); text-shadow: 0 0 2px #000; }
 .tbtn.pressed { filter: brightness(1.6); border-color: var(--gold-bright); }
 .tbtn.main { border-width: 3px; border-color: var(--gold); }

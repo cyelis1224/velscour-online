@@ -6,6 +6,7 @@ import { skillIcon } from './icons.js';
 import { SKILLS, cooldown, manaCost, rageCost, effLevel } from '../data/skills.js';
 import { SLOT_LABELS, RMB } from '../data/bar.js';
 import { chooser } from './hud.js';
+import { skillMorphFor } from '../data/talents.js';
 import { Macros, MACRO_N } from '../game/macros.js';
 
 // Landscape uses the original radial skill cluster; portrait shows all 14 skill
@@ -229,8 +230,12 @@ export const TouchUI = {
       const sk = id && SKILLS[id];
       let k = 0;
       if (sk) {
-        const rem = p.cooldowns[id] || 0, tot = cooldown(sk) * (1 - p.st.cdr / 100);
-        if (rem > 0 && tot > 0) k = Math.round((rem / tot) * 100);
+        const rem = p.cooldowns[id] || 0;
+        const morph = skillMorphFor(p, sk);
+        const morphCdMul = morph && morph.cdPct ? 1 - morph.cdPct / 100 : 1;
+        const tot = cooldown(sk) * (1 - p.st.cdr / 100) * morphCdMul;
+        const maxTot = Math.max(tot, rem);
+        if (rem > 0 && maxTot > 0) k = Math.min(100, Math.max(0, Math.round((rem / maxTot) * 100)));
         const L = effLevel(p, sk);
         const nm = L > 0 && (p.mana < manaCost(sk, L) || p.rage < rageCost(sk) ||
           (sk.classId === 'barbarian' && sk.kind === 'whirl' && p.rage < 10));

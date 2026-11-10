@@ -25,6 +25,7 @@ import { STANCES, Auto } from '../game/autoplay.js';
 import { sealedCount, openNextSeal } from './sealed.js';
 import { defianceText } from '../game/defiance.js';
 import { capXp } from '../game/marks.js';
+import { skillMorphFor } from '../data/talents.js';
 
 const POTIONS = ['hp', 'mp', 'rejuv', 'fury'];
 // hud slot index -> bar index (skills) or potion kind: LMB, ` 1-9 0 - =, the potions, RMB
@@ -643,8 +644,14 @@ export const HUD = {
       let cdK = 0, cdTxt = '', nm = false;
       if (sk) {
         const rem = p.cooldowns[id] || 0;
-        const tot = cooldown(sk) * (1 - p.st.cdr / 100);
-        if (rem > 0 && tot > 0) { cdK = Math.round((rem / tot) * 100); cdTxt = rem >= 1 ? Math.ceil(rem) + '' : ''; }
+        const morph = skillMorphFor(p, sk);
+        const morphCdMul = morph && morph.cdPct ? 1 - morph.cdPct / 100 : 1;
+        const tot = cooldown(sk) * (1 - p.st.cdr / 100) * morphCdMul;
+        const maxTot = Math.max(tot, rem);
+        if (rem > 0 && maxTot > 0) {
+          cdK = clamp(Math.round((rem / maxTot) * 100), 0, 100);
+          cdTxt = rem >= 1 ? Math.ceil(rem) + '' : '';
+        }
         const L = effLevel(p, sk);
         nm = L > 0 && (p.mana < manaCost(sk, L) || p.rage < rageCost(sk) ||
           (sk.classId === 'barbarian' && sk.kind === 'whirl' && p.rage < 10));
