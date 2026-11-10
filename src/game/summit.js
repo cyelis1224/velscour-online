@@ -138,7 +138,7 @@ export function createSummitRun(world, gen, biome, depth, win) {
     if (e.kind === 'camp') {
       for (let k = 0; k < 6; k++) { const a = k * 1.05 + 0.3, [x, y] = spotNear(e.x + Math.cos(a) * 2.6, e.y + Math.sin(a) * 2.6, 0, 1.2, onPlateau(e)); if (x != null) dormant(e, foe(e, x, y, { how: null })); }
       const [x, y] = spotNear(e.x, e.y, 1, 2.2, onPlateau(e));
-      if (x != null) { const m = foe(e, x, y, { arch: pick(['knight', 'golem', 'cultist']), rank: 'unique', how: null }); m.name = `${m.name}, Chief of the Camp`; dormant(e, m); }
+      if (x != null) { const m = foe(e, x, y, { arch: pick(['knight', 'golem', 'cultist']), rank: 'unique', how: null }); if (m) { m.name = `${m.name}, Chief of the Camp`; dormant(e, m); } }
     } else if (e.kind === 'pack') {
       const [x, y] = spotNear(e.x, e.y, 0.5, 2, onPlateau(e));
       if (x != null) dormant(e, foe(e, x, y, { arch: pick(['hound', 'golem', 'gargoyle']), rank: 'unique', how: null }));
@@ -338,7 +338,7 @@ export function createSummitRun(world, gen, biome, depth, win) {
     const def = gen.bosses[G.summitBoss ?? (gen.seed >>> 4) % gen.bosses.length];   // G.summitBoss: a test's pick
     run.bossDef = def;
     const tpl0 = RAID_BOSSES.find((b) => b.id === def.tpl) || pick(RAID_BOSSES.filter((b) => !b.sigs));
-    const art = ART_BY_ID[def.art], name = art ? art.name : tpl0.name;
+    const art = ART_BY_ID[def.art], name = art ? art.name : (tpl0 ? tpl0.name : 'The Peak Guardian');
     const tpl = { ...tpl0, name, title: def.title, adds: ['hound', 'gargoyle', 'wraith', 'golem', 'skeleton', 'imp'], ...(def.el ? { el: def.el, fx: def.fx } : null) };
     const arena = { cx: peak.x, cy: peak.y, x: peak.x - peak.r, y: peak.y - peak.r, w: peak.r * 2, h: peak.r * 2, gate: { x: -40, y0: -40, y1: -39 } };
     const m = makeRaidBoss(world, arena, depth, lvl + 3, { tpl, art: art ? def.art : undefined });

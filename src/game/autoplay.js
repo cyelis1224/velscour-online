@@ -1412,7 +1412,7 @@ export const Auto = {
     }
     const goal = this.huntGoal(w);
     if (goal) {
-      this.setStatus(goal === w.boss ? `Hunting the guardian${w.boss.name ? ' — ' + w.boss.name : ''}` : 'Clearing the level');
+      this.setStatus(goal === w.boss ? `Hunting the guardian${w.boss?.name ? ' — ' + w.boss.name : ''}` : 'Clearing the level');
       // no ground gained on it in 8 s of hunting it (the path field reaches a spot the hero can't): leave it for 30 s
       const nd = this.navDist(goal.x, goal.y);
       let h = this.hunts.get(goal);

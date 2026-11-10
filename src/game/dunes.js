@@ -357,7 +357,7 @@ export function createDuneRun(world, gen, biome, onSuccess) {
       case 'ambush': case 'sealed': e.wave = 1; wave(e, 4 + Math.min(3, depth / 25 | 0), { how: e.kind === 'sealed' ? 'wall' : 'burrow' }); break;
       case 'raiders': {
         for (let k = 0; k < 6 + Math.min(4, depth / 20 | 0); k++) { const [x, y] = spotNear(e.x, e.y, 2, R); if (x != null) foe(e, x, y, { arch: pick(['skeleton', 'archer', 'knight', 'cultist']), how: 'teleport', delay: k * 0.15 }); }
-        const [x, y] = spotNear(e.x, e.y, 1, 3); if (x != null) { const cap = foe(e, x, y, { arch: 'knight', rank: 'unique', how: 'drop' }); cap.name = `${v.tint} Raider Captain`; cap.scale = 1.3; }
+        const [x, y] = spotNear(e.x, e.y, 1, 3); if (x != null) { const cap = foe(e, x, y, { arch: 'knight', rank: 'unique', how: 'drop' }); if (cap) { cap.name = `${v.tint} Raider Captain`; cap.scale = 1.3; } }
         break;
       }
       case 'obelisks': for (let k = 0; k < 3; k++) {
@@ -387,7 +387,7 @@ export function createDuneRun(world, gen, biome, onSuccess) {
         wave(e, 5, { arch: 'beetle', at: c, r1: R }); break;
       case 'duel': {
         const [x, y] = spotNear(e.x, e.y, 0.5, 2.5);
-        if (x != null) { const ch = foe(e, x, y, { arch: pick(['knight', 'golem', 'scorpion', 'hound']), rank: 'unique', how: 'drop', lv: lvl + 2 }); ch.scale = 1.45; ch.name = `${v.tint} Champion of ${e.name.replace(/^The /, '')}`; e.boss = ch; }
+        if (x != null) { const ch = foe(e, x, y, { arch: pick(['knight', 'golem', 'scorpion', 'hound']), rank: 'unique', how: 'drop', lv: lvl + 2 }); if (ch) { ch.scale = 1.45; ch.name = `${v.tint} Champion of ${e.name.replace(/^The /, '')}`; e.boss = ch; } }
         wave(e, 2, { rank: 'champion', at: c, r1: 4, how: 'teleport' }); break;
       }
       case 'oasis': e.got = 0; e.spawnT = 0; break;
@@ -450,7 +450,7 @@ export function createDuneRun(world, gen, biome, onSuccess) {
           if ((e.spawnT = (e.spawnT ?? 3) - dt) <= 0 && live.length < 9) { e.spawnT = 5; wave(e, 2, { how: 'drop', r0: 3, r1: 7 }); }
         } else if (!e.rider) {
           const [x, y] = spotNear(p.x, p.y, 3, 6);
-          if (x != null) { e.rider = foe(e, x, y, { arch: pick(['golem', 'wraith']), rank: 'unique', how: 'drop', lv: lvl + 1 }); e.rider.name = 'Storm-Rider'; e.rider.scale = 1.5; }
+          if (x != null) { const r = foe(e, x, y, { arch: pick(['golem', 'wraith']), rank: 'unique', how: 'drop', lv: lvl + 1 }); if (r) { e.rider = r; e.rider.name = 'Storm-Rider'; e.rider.scale = 1.5; } }
         } else if (e.rider.dead && !live.length) { e.storm.end = true; return finishEnc(e); }
         break;
       }
